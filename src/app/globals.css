@@ -1,0 +1,403 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Typography — next/font injects --font-fraunces / --font-manrope on <html>
+     via its .variable className; the static fallbacks here keep things rendering
+     if those vars are ever absent. */
+  --font-display:
+    var(--font-fraunces), "Fraunces", "Iowan Old Style", "Times New Roman",
+    serif;
+  --font-body: var(--font-manrope), "Manrope", "Segoe UI", sans-serif;
+
+  /* Project palette */
+  --bg-ivory: #f5f0e7;
+  --bg-cream: #fdf9f2;
+  --panel: rgba(255, 252, 246, 0.75);
+  --panel-strong: rgba(255, 251, 244, 0.9);
+  --ink: #31261d;
+  --muted-ink: #655346;
+  --line: rgba(120, 93, 63, 0.22);
+  --accent: #b3854c;
+  --accent-deep: #8e6330;
+  --focus-ring: rgba(179, 133, 76, 0.42);
+
+  /* Sticky navbar offset */
+  --navbar-h: 4.5625rem; /* 73px — mobile */
+
+  /* Listings page secondary nav strip (sits flush below --navbar-h on lg+).
+     Used by FilterBar's rail variant to offset its sticky `top` so the rail
+     pins right under the strip — and by the strip itself to keep its height
+     consistent with that offset. */
+  --listings-subnav-h: 3.75rem; /* 60px */
+
+  /* shadcn tokens — mapped to project palette so every shadcn component
+     renders in our exact theme without drift. */
+  --background: var(--bg-cream);
+  --foreground: var(--ink);
+  --card: var(--panel-strong);
+  --card-foreground: var(--ink);
+  --popover: var(--bg-cream);
+  --popover-foreground: var(--ink);
+  --primary: var(--accent-deep);
+  --primary-foreground: #ffffff;
+  --secondary: var(--panel);
+  --secondary-foreground: #5a4738;
+  --muted: var(--bg-ivory);
+  --muted-foreground: var(--muted-ink);
+  --accent-foreground: #ffffff;
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: rgb(217 201 182);
+  --input: rgb(217 201 182);
+  --ring: var(--focus-ring);
+  --radius: 1rem;
+
+  /* Charts / sidebar tokens kept neutral — unused in current UI but present
+     so future shadcn additions don't reference undefined vars. */
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: var(--bg-cream);
+  --sidebar-foreground: var(--ink);
+  --sidebar-primary: var(--accent-deep);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: var(--bg-ivory);
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: rgb(217 201 182);
+  --sidebar-ring: var(--focus-ring);
+}
+
+@media (min-width: 768px) {
+  :root {
+    --navbar-h: 4.8125rem; /* 77px — desktop */
+  }
+}
+
+@layer base {
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: auto;
+  }
+
+  body {
+    margin: 0;
+    /* `overflow-x: clip` lets sticky/secondary-nav children safely use the
+       100vw bleed trick (`-ml-[50vw] w-screen`) without triggering a stray
+       horizontal scrollbar on viewports where the page already has a vertical
+       one. Unlike `hidden`, clip does NOT create a scroll containing block,
+       so descendant `position: sticky` elements continue to anchor to the
+       viewport. */
+    overflow-x: clip;
+    font-family: var(--font-body);
+    color: var(--ink);
+    background:
+      radial-gradient(
+        circle at 16% 12%,
+        rgba(255, 255, 255, 0.8),
+        transparent 34%
+      ),
+      radial-gradient(
+        circle at 84% 20%,
+        rgba(216, 181, 134, 0.2),
+        transparent 30%
+      ),
+      linear-gradient(
+        150deg,
+        var(--bg-ivory) 0%,
+        var(--bg-cream) 48%,
+        #f2ece2 100%
+      );
+    min-height: 100vh;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.15;
+    background-image:
+      linear-gradient(0deg, rgba(255, 255, 255, 0.4) 0%, transparent 100%),
+      url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cg fill='none' stroke='rgba(120,93,63,0.18)' stroke-width='0.7'%3E%3Cpath d='M0 90h180'/%3E%3Cpath d='M90 0v180'/%3E%3Ccircle cx='90' cy='90' r='58'/%3E%3C/g%3E%3C/svg%3E");
+    background-size:
+      auto,
+      220px 220px;
+    mix-blend-mode: multiply;
+    z-index: -1;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    line-height: 1.08;
+  }
+
+  a,
+  button,
+  input,
+  select {
+    transition-duration: 220ms;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .font-display {
+    font-family: var(--font-display);
+  }
+
+  .font-body {
+    font-family: var(--font-body);
+  }
+
+  .surface-panel {
+    background: linear-gradient(
+      160deg,
+      var(--panel-strong) 0%,
+      var(--panel) 100%
+    );
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--line);
+    box-shadow:
+      0 22px 54px rgba(99, 72, 40, 0.14),
+      inset 0 1px 0 rgba(255, 255, 255, 0.74);
+  }
+
+  .hairline {
+    position: relative;
+  }
+
+  .hairline::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      130deg,
+      rgba(255, 255, 255, 0.75),
+      rgba(178, 142, 95, 0.36)
+    );
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+
+  .text-muted {
+    color: var(--muted-ink);
+  }
+
+  .luxury-accent {
+    color: var(--accent-deep);
+  }
+
+  .stagger-rise {
+    animation: riseIn 760ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  .hero-glow {
+    position: relative;
+  }
+
+  .hero-glow::before {
+    content: "";
+    position: absolute;
+    inset: -18% 22% 22% -8%;
+    background: radial-gradient(
+      circle,
+      rgba(255, 255, 255, 0.66),
+      rgba(255, 255, 255, 0)
+    );
+    pointer-events: none;
+  }
+
+  .soft-divider {
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(139, 108, 73, 0.46),
+      transparent
+    );
+  }
+
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+  }
+
+  .skip-link {
+    position: fixed;
+    top: -100%;
+    left: 1rem;
+    z-index: 9999;
+    padding: 0.5rem 1rem;
+    background: var(--color-white);
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--color-slate-800);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .skip-link:focus {
+    top: 1rem;
+  }
+
+  @keyframes riseIn {
+    from {
+      opacity: 0;
+      transform: translateY(20px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes shimmerWarm {
+    0% {
+      background-position: 100% center;
+    }
+    100% {
+      background-position: -100% center;
+    }
+  }
+
+  .skeleton-shimmer {
+    background: linear-gradient(
+      105deg,
+      #ede5d8 0%,
+      #ede5d8 35%,
+      rgba(255, 248, 235, 0.95) 50%,
+      #ede5d8 65%,
+      #ede5d8 100%
+    );
+    background-size: 300% 100%;
+    animation: shimmerWarm 2s ease-in-out infinite;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stagger-rise {
+    animation: none;
+  }
+}
+
+@theme inline {
+  /* Bridge our typography into Tailwind's font utilities so any shadcn
+     component using font-sans / font-serif inherits Manrope / Fraunces. */
+  --font-sans: var(--font-body);
+  --font-serif: var(--font-display);
+  --font-heading: var(--font-display);
+
+  /* Bridge our palette into shadcn's color tokens. */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.87 0 0);
+  --chart-2: oklch(0.556 0 0);
+  --chart-3: oklch(0.439 0 0);
+  --chart-4: oklch(0.371 0 0);
+  --chart-5: oklch(0.269 0 0);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
