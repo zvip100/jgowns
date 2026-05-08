@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { CircleDollarSign, Mail, Phone, X } from 'lucide-react';
@@ -130,6 +130,16 @@ export default function ListingForm({
     Promise.resolve(initial?.image_blur_data_url ?? null),
   );
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const previewRef = useRef(preview);
+  previewRef.current = preview;
+
+  useEffect(() => {
+    return () => {
+      if (previewRef.current?.startsWith('blob:'))
+        URL.revokeObjectURL(previewRef.current);
+    };
+  }, []);
 
   const set = (k: string, v: string | number) =>
     setForm((f) => ({ ...f, [k]: v }));
