@@ -10,6 +10,7 @@ export type Listing = {
   category: GownCategoryId | null;
   price: number;
   image_url: string | null;
+  image_blur_data_url: string | null;
   contact_email: string;
   contact_phone: string | null;
   status: 'active' | 'sold' | 'draft';

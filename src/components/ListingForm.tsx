@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { CircleDollarSign, Mail, Phone, X } from 'lucide-react';
@@ -126,7 +126,20 @@ export default function ListingForm({
     return { ...base, category };
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const blurDataUrlRef = useRef<Promise<string | null>>(
+    Promise.resolve(initial?.image_blur_data_url ?? null),
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const previewRef = useRef(preview);
+  previewRef.current = preview;
+
+  useEffect(() => {
+    return () => {
+      if (previewRef.current?.startsWith('blob:'))
+        URL.revokeObjectURL(previewRef.current);
+    };
+  }, []);
 
   const set = (k: string, v: string | number) =>
     setForm((f) => ({ ...f, [k]: v }));
@@ -134,13 +147,54 @@ export default function ListingForm({
   const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview);
     setImageFile(file);
     setPreview(URL.createObjectURL(file));
+    generateBlurDataUrl(file);
+  };
+
+  const generateBlurDataUrl = (file: File) => {
+    blurDataUrlRef.current = new Promise<string | null>((resolve) => {
+      try {
+        const img = new window.Image();
+        img.onload = () => {
+          try {
+            const maxDim = 32;
+            const ratio = img.width / img.height;
+            const w = ratio >= 1 ? maxDim : Math.round(maxDim * ratio);
+            const h = ratio >= 1 ? Math.round(maxDim / ratio) : maxDim;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = w;
+            canvas.height = h;
+
+            const ctx = canvas.getContext('2d');
+            if (!ctx) { resolve(null); return; }
+
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', 0.6));
+          } catch {
+            resolve(null);
+          } finally {
+            URL.revokeObjectURL(img.src);
+          }
+        };
+        img.onerror = () => {
+          URL.revokeObjectURL(img.src);
+          resolve(null);
+        };
+        img.src = URL.createObjectURL(file);
+      } catch {
+        resolve(null);
+      }
+    });
   };
 
   const clearImage = () => {
+    if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview);
     setImageFile(null);
     setPreview(null);
+    blurDataUrlRef.current = Promise.resolve(null);
     setForm((f) => ({ ...f, image_url: null }));
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
@@ -166,19 +220,24 @@ export default function ListingForm({
       ) {
         throw new Error('Please fill in all required fields.');
       }
+
       let image_url = form.image_url || null;
       if (imageFile) {
         const ext = imageFile.name.split('.').pop();
         const path = `${user.id}/${Date.now()}.${ext}`;
+
         const { error: uploadError } = await supabase.storage
           .from('gown-images')
           .upload(path, imageFile);
+
         if (uploadError) throw uploadError;
+
         const { data: urlData } = supabase.storage
           .from('gown-images')
           .getPublicUrl(path);
         image_url = urlData.publicUrl;
       }
+
       const payload = {
         title: form.title!.trim(),
         description: form.description?.trim() || null,
@@ -189,6 +248,9 @@ export default function ListingForm({
         category: form.category as GownCategoryId,
         price: form.price!,
         image_url,
+        image_blur_data_url: imageFile
+          ? await blurDataUrlRef.current
+          : (image_url ? await blurDataUrlRef.current : null),
         contact_email: form.contact_email!.trim(),
         contact_phone: form.contact_phone?.trim() || null,
         status: form.status ?? 'active',

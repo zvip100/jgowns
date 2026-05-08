@@ -28,6 +28,9 @@ export default function ListingRow({ listing }: { listing: Listing }) {
               fill
               sizes="(max-width: 640px) 96px, 112px"
               className="object-cover transition duration-500 group-hover:scale-105"
+              {...(listing.image_blur_data_url
+                ? { placeholder: 'blur' as const, blurDataURL: listing.image_blur_data_url }
+                : {})}
             />
           ) : (
             <div className="flex size-full items-center justify-center text-2xl">

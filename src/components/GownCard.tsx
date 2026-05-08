@@ -28,6 +28,9 @@ export default function GownCard({
               fill
               sizes='(max-width: 640px) 100vw, (max-width: 1024px) 56vw, 30vw'
               className='object-cover transition duration-500 group-hover:scale-[1.045]'
+              {...(listing.image_blur_data_url
+                ? { placeholder: 'blur' as const, blurDataURL: listing.image_blur_data_url }
+                : {})}
             />
           ) : (
             <div className='flex h-full w-full items-center justify-center text-5xl text-[#bca88f]'>
