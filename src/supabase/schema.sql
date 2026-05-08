@@ -21,6 +21,7 @@ create table listings (
   condition text not null check (condition in ('Brand New', 'Perfect Condition', 'Needs Alterations')),
   price numeric(10,2) not null,
   image_url text,
+  image_blur_data_url text,
   contact_email text not null,
   contact_phone text,
   status text default 'active' check (status in ('active', 'sold', 'draft')),

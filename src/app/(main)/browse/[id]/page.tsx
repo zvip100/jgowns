@@ -53,6 +53,9 @@ export default async function ListingPage({
               fill
               sizes='(max-width: 768px) 100vw, 56vw'
               className='object-cover'
+              {...(listing.image_blur_data_url
+                ? { placeholder: 'blur' as const, blurDataURL: listing.image_blur_data_url }
+                : {})}
             />
           ) : (
             <div className='flex h-full w-full items-center justify-center text-8xl text-[#bca88f]'>
