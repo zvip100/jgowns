@@ -4,7 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, SlidersHorizontal, X } from "lucide-react";
 
-import { canonicalBrowseQueryString } from "@/lib/browse-params";
+import {
+  BROWSE_FILTER_PARAMS,
+  BROWSE_NAV_PARAMS,
+  canonicalBrowseQueryString,
+} from "@/lib/browse-params";
 import { GOWN_COLORS, GOWN_SIZES, LOCATIONS } from "@/lib/types";
 import {
   Accordion,
@@ -109,14 +113,7 @@ export default function FilterBar({
     });
   }, [params]);
 
-  const hasFilters =
-    params.has("category") ||
-    params.has("size") ||
-    params.has("color") ||
-    params.has("location") ||
-    params.has("cond") ||
-    params.has("minPrice") ||
-    params.has("maxPrice");
+  const hasFilters = BROWSE_FILTER_PARAMS.some((k) => params.has(k));
 
   const pushURL = (key: string, value: string) => {
     const p = new URLSearchParams(paramsRef.current.toString());
@@ -166,7 +163,16 @@ export default function FilterBar({
     if (priceTimer.current) clearTimeout(priceTimer.current);
     if (isDrawer) setDrawerOpen(false);
     setOpenAccordions([]);
-    router.push("/browse", { scroll: false });
+    
+    // Preserve nav params (category) — the secondary navbar owns those.
+    const p = new URLSearchParams();
+
+    for (const k of BROWSE_NAV_PARAMS) {
+      const v = paramsRef.current.get(k);
+      if (v) p.set(k, v);
+    }
+    const qs = canonicalBrowseQueryString(p);
+    router.push(qs ? `/browse?${qs}` : "/browse", { scroll: false });
   };
 
   const currentMin = local.minPrice
@@ -233,12 +239,12 @@ export default function FilterBar({
         isDrawer
           ? "rounded-[1.75rem]"
           : // Rail variant: panel itself is NOT scrollable — it just takes
-            // its natural content height and grows/shrinks as accordions
-            // open and close. The OUTER sticky wrapper below owns the
-            // scroll. `[box-shadow:inset_…]!` keeps the surface clean of
-            // the soft drop shadow `.surface-panel` would otherwise paint,
-            // while preserving the 1px white inset highlight.
-            "rounded-b-[1.75rem] [box-shadow:inset_0_1px_0_rgba(255,255,255,0.74)]!",
+          // its natural content height and grows/shrinks as accordions
+          // open and close. The OUTER sticky wrapper below owns the
+          // scroll. `[box-shadow:inset_…]!` keeps the surface clean of
+          // the soft drop shadow `.surface-panel` would otherwise paint,
+          // while preserving the 1px white inset highlight.
+          "rounded-b-[1.75rem] [box-shadow:inset_0_1px_0_rgba(255,255,255,0.74)]!",
       )}
     >
       <div className='mb-3 flex items-center justify-between gap-2 px-1'>

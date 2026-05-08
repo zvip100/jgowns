@@ -1,4 +1,4 @@
--- Listing category for /browse?category=… (bride, bridesmaid, maternity, etc.)
+-- Listing category for /browse?category=… (bride, mother-of-the-bride, girls, women, maternity)
 -- Run once against your Supabase project after 001. Safe to re-run: IF NOT EXISTS / IF EXISTS guards.
 
 alter table listings
@@ -14,7 +14,6 @@ alter table listings
     or category in (
       'bride',
       'mother-of-the-bride',
-      'bridesmaid',
       'girls',
       'women',
       'maternity'

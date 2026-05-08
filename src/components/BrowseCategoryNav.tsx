@@ -53,7 +53,7 @@ export default function BrowseCategoryNav({
       <div
         className={cn(
           isMobile &&
-            "flex gap-2 overflow-x-auto overscroll-x-contain pb-1 [-ms-overflow-style:none] [scrollbar-width:none] snap-x snap-mandatory scroll-px-4 touch-pan-x [&::-webkit-scrollbar]:hidden",
+          "flex gap-2 overflow-x-auto overscroll-x-contain pb-1 [-ms-overflow-style:none] [scrollbar-width:none] snap-x snap-mandatory scroll-px-4 touch-pan-x [&::-webkit-scrollbar]:hidden",
           !isMobile && "flex flex-nowrap items-center justify-end gap-2",
         )}
       >
@@ -64,6 +64,7 @@ export default function BrowseCategoryNav({
         >
           All gowns
         </Link>
+
         {GOWN_CATEGORIES.map((cat) => {
           const active = current === cat.id;
           return (

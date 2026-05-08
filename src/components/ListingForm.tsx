@@ -1,6 +1,10 @@
 'use client';
-import { useState } from 'react';
+
+import { useRef, useState } from 'react';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
+import { CircleDollarSign, Mail, Phone, X } from 'lucide-react';
+
 import { createClient } from '@/lib/supabase/client';
 import {
   GOWN_CATEGORIES,
@@ -14,7 +18,86 @@ import {
 } from '@/lib/types';
 import { revalidateListings } from '@/lib/actions/listings';
 
-export default function ListingForm({ initial, listingId }: {
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldGroup,
+  FieldLabel,
+  FieldLegend,
+  FieldSet,
+} from '@/components/ui/field';
+import { Input } from '@/components/ui/input';
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from '@/components/ui/input-group';
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { Textarea } from '@/components/ui/textarea';
+
+const labelTone =
+  'text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-(--muted-ink)';
+
+type Option = { value: string; label: string };
+const toOpts = (xs: readonly string[]): Option[] =>
+  xs.map((x) => ({ value: x, label: x }));
+
+function SelectField({
+  id,
+  label,
+  placeholder,
+  options,
+  value,
+  onChange,
+  required,
+}: {
+  id: string;
+  label: string;
+  placeholder: string;
+  options: Option[];
+  value: string;
+  onChange: (v: string) => void;
+  required?: boolean;
+}) {
+  return (
+    <Field>
+      <FieldLabel htmlFor={id} className={labelTone}>
+        {label}
+        {required && ' *'}
+      </FieldLabel>
+      <Select value={value || undefined} onValueChange={onChange}>
+        <SelectTrigger id={id} className="h-10 w-full bg-card">
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            {options.map((o) => (
+              <SelectItem key={o.value} value={o.value}>
+                {o.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
+    </Field>
+  );
+}
+
+export default function ListingForm({
+  initial,
+  listingId,
+}: {
   initial?: Partial<ListingFormData>;
   listingId?: string;
 }) {
@@ -43,8 +126,10 @@ export default function ListingForm({ initial, listingId }: {
     return { ...base, category };
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const set = (k: string, v: string | number) => setForm(f => ({ ...f, [k]: v }));
+  const set = (k: string, v: string | number) =>
+    setForm((f) => ({ ...f, [k]: v }));
 
   const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -53,10 +138,20 @@ export default function ListingForm({ initial, listingId }: {
     setPreview(URL.createObjectURL(file));
   };
 
+  const clearImage = () => {
+    setImageFile(null);
+    setPreview(null);
+    setForm((f) => ({ ...f, image_url: null }));
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   const handleSubmit = async () => {
-    setLoading(true); setError('');
+    setLoading(true);
+    setError('');
     try {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
       if (
         !form.title?.trim() ||
@@ -75,12 +170,15 @@ export default function ListingForm({ initial, listingId }: {
       if (imageFile) {
         const ext = imageFile.name.split('.').pop();
         const path = `${user.id}/${Date.now()}.${ext}`;
-        const { error: uploadError } = await supabase.storage.from('gown-images').upload(path, imageFile);
+        const { error: uploadError } = await supabase.storage
+          .from('gown-images')
+          .upload(path, imageFile);
         if (uploadError) throw uploadError;
-        const { data: urlData } = supabase.storage.from('gown-images').getPublicUrl(path);
+        const { data: urlData } = supabase.storage
+          .from('gown-images')
+          .getPublicUrl(path);
         image_url = urlData.publicUrl;
       }
-      const category = form.category as GownCategoryId;
       const payload = {
         title: form.title!.trim(),
         description: form.description?.trim() || null,
@@ -88,7 +186,7 @@ export default function ListingForm({ initial, listingId }: {
         color: form.color || null,
         location: form.location!,
         condition: form.condition!,
-        category,
+        category: form.category as GownCategoryId,
         price: form.price!,
         image_url,
         contact_email: form.contact_email!.trim(),
@@ -96,13 +194,10 @@ export default function ListingForm({ initial, listingId }: {
         status: form.status ?? 'active',
         user_id: user.id,
       };
-      if (listingId) {
-        const { error } = await supabase.from('listings').update(payload).eq('id', listingId);
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from('listings').insert(payload);
-        if (error) throw error;
-      }
+      const { error: dbError } = listingId
+        ? await supabase.from('listings').update(payload).eq('id', listingId)
+        : await supabase.from('listings').insert(payload);
+      if (dbError) throw dbError;
       await revalidateListings();
       router.push('/dashboard');
     } catch (e: any) {
@@ -112,103 +207,221 @@ export default function ListingForm({ initial, listingId }: {
     }
   };
 
-  const inputClass = 'w-full rounded-2xl border border-[#d9c9b6] bg-white/70 px-4 py-3 text-sm font-medium text-[#5f4e3f] placeholder:text-[#b09d8c] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] focus:ring-2 focus:ring-(--focus-ring)';
-  const labelClass = 'block text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#8a7462] mb-1.5';
-
   return (
-    <div className='mx-auto max-w-2xl space-y-5 surface-panel hairline rounded-[1.7rem] p-7 sm:p-9'>
-      <div>
-        <label htmlFor='title' className={labelClass}>Gown Title *</label>
-        <input id='title' className={inputClass} placeholder='e.g. Vera Wang Ball Gown, Ivory' value={form.title} onChange={e => set('title', e.target.value)} />
-      </div>
-      <div>
-        <label htmlFor='description' className={labelClass}>Description</label>
-        <textarea id='description' className={inputClass} rows={3} placeholder='Tell buyers about the gown…' value={form.description || ''} onChange={e => set('description', e.target.value)} />
-      </div>
-      <div>
-        <label htmlFor='category' className={labelClass}>Category *</label>
-        <select
-          id='category'
-          className={inputClass}
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        handleSubmit();
+      }}
+      className="surface-panel hairline mx-auto max-w-2xl rounded-[1.7rem] p-7 sm:p-9"
+    >
+      <FieldGroup>
+        <Field>
+          <FieldLabel htmlFor="title" className={labelTone}>
+            Gown Title *
+          </FieldLabel>
+          <Input
+            id="title"
+            className="h-10 bg-card"
+            placeholder="e.g. Vera Wang Ball Gown, Ivory"
+            value={form.title || ''}
+            onChange={(e) => set('title', e.target.value)}
+          />
+        </Field>
+
+        <Field>
+          <FieldLabel htmlFor="description" className={labelTone}>
+            Description
+          </FieldLabel>
+          <Textarea
+            id="description"
+            rows={3}
+            className="bg-card"
+            placeholder="Tell buyers about the gown…"
+            value={form.description || ''}
+            onChange={(e) => set('description', e.target.value)}
+          />
+        </Field>
+
+        <SelectField
+          id="category"
+          label="Category"
+          placeholder="Select category"
+          required
           value={form.category ?? ''}
-          onChange={(e) => {
-            const v = e.target.value;
+          options={GOWN_CATEGORIES.map((c) => ({ value: c.id, label: c.label }))}
+          onChange={(v) =>
             setForm((f) => ({
               ...f,
-              category:
-                v && GOWN_CATEGORIES.some((c) => c.id === v)
-                  ? (v as GownCategoryId)
-                  : null,
-            }));
-          }}
+              category: GOWN_CATEGORIES.some((c) => c.id === v)
+                ? (v as GownCategoryId)
+                : null,
+            }))
+          }
+        />
+
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <SelectField
+            id="size"
+            label="Size"
+            placeholder="Select size"
+            required
+            value={form.size || ''}
+            options={toOpts(GOWN_SIZES)}
+            onChange={(v) => set('size', v)}
+          />
+          <SelectField
+            id="color"
+            label="Color"
+            placeholder="Select color"
+            value={form.color || ''}
+            options={toOpts(GOWN_COLORS)}
+            onChange={(v) => set('color', v)}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+          <SelectField
+            id="location"
+            label="Your Location"
+            placeholder="Select location"
+            required
+            value={form.location || ''}
+            options={toOpts(LOCATIONS)}
+            onChange={(v) => set('location', v)}
+          />
+          <Field>
+            <FieldLabel htmlFor="price" className={labelTone}>
+              Asking Price *
+            </FieldLabel>
+            <InputGroup className="h-10 bg-card">
+              <InputGroupAddon>
+                <InputGroupText className="font-semibold text-foreground">$</InputGroupText>
+              </InputGroupAddon>
+              <InputGroupInput
+                id="price"
+                type="number"
+                inputMode="decimal"
+                placeholder="500"
+                value={form.price ?? ''}
+                onChange={(e) => set('price', parseFloat(e.target.value))}
+              />
+            </InputGroup>
+          </Field>
+        </div>
+
+        <SelectField
+          id="condition"
+          label="Condition"
+          placeholder="Select condition"
+          required
+          value={form.condition || ''}
+          options={toOpts(GOWN_CONDITIONS)}
+          onChange={(v) => set('condition', v as GownCondition)}
+        />
+
+        <Field>
+          <FieldLabel htmlFor="photo" className={labelTone}>
+            Photo
+          </FieldLabel>
+          <Input
+            id="photo"
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handleImage}
+            className="h-auto max-w-xs cursor-pointer bg-card py-2 file:mr-3 file:cursor-pointer file:rounded-full file:border file:border-input file:bg-secondary file:px-3 file:py-1.5 file:text-xs file:font-semibold file:uppercase file:tracking-widest file:text-secondary-foreground"
+          />
+          {preview && (
+            <div className="mt-2">
+              <div className="relative w-48">
+                <Image
+                  src={preview}
+                  alt="Preview"
+                  width={192}
+                  height={256}
+                  sizes="192px"
+                  unoptimized
+                  className="h-64 w-48 rounded-2xl border border-border object-cover shadow-sm"
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="icon-sm"
+                  onClick={clearImage}
+                  aria-label="Remove image"
+                  className="absolute -right-2 -top-2 rounded-full border border-border bg-background text-foreground shadow-lg ring-1 ring-black/5 hover:bg-muted"
+                >
+                  <X />
+                </Button>
+              </div>
+            </div>
+          )}
+        </Field>
+
+        <FieldSet>
+          <FieldLegend variant="label" className={labelTone}>
+            Contact
+          </FieldLegend>
+          <FieldDescription>
+            How buyers will reach you about this listing.
+          </FieldDescription>
+          <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
+            <Field>
+              <FieldLabel htmlFor="contact_email" className={labelTone}>
+                Email *
+              </FieldLabel>
+              <InputGroup className="h-10 bg-card">
+                <InputGroupAddon>
+                  <Mail />
+                </InputGroupAddon>
+                <InputGroupInput
+                  id="contact_email"
+                  type="email"
+                  placeholder="you@email.com"
+                  value={form.contact_email || ''}
+                  onChange={(e) => set('contact_email', e.target.value)}
+                />
+              </InputGroup>
+            </Field>
+            <Field>
+              <FieldLabel htmlFor="contact_phone" className={labelTone}>
+                Phone
+              </FieldLabel>
+              <InputGroup className="h-10 bg-card">
+                <InputGroupAddon>
+                  <Phone />
+                </InputGroupAddon>
+                <InputGroupInput
+                  id="contact_phone"
+                  type="tel"
+                  placeholder="(555) 000-0000"
+                  value={form.contact_phone || ''}
+                  onChange={(e) => set('contact_phone', e.target.value)}
+                />
+              </InputGroup>
+            </Field>
+          </div>
+        </FieldSet>
+
+        <Alert className="border-(--line) bg-(--bg-cream)">
+          <CircleDollarSign className="text-(--accent-deep)" />
+          <AlertTitle className="font-semibold tracking-tight">
+            Listing fee — $9.99 per listing
+          </AlertTitle>
+          <AlertDescription>Payment integration coming soon.</AlertDescription>
+        </Alert>
+
+        {error && <FieldError>{error}</FieldError>}
+
+        <Button
+          type="submit"
+          disabled={loading}
+          className="h-12 w-full rounded-full border border-[#b58d5f]/70 bg-[linear-gradient(180deg,#c49a68,#a67841)] text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)] transition hover:-translate-y-0.5 hover:brightness-105 disabled:translate-y-0 disabled:opacity-50"
         >
-          <option value=''>Select category</option>
-          {GOWN_CATEGORIES.map((c) => (
-            <option key={c.id} value={c.id}>{c.label}</option>
-          ))}
-        </select>
-      </div>
-      <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
-        <div>
-          <label htmlFor='size' className={labelClass}>Size *</label>
-          <select id='size' className={inputClass} value={form.size} onChange={e => set('size', e.target.value)}>
-            <option value=''>Select size</option>
-            {GOWN_SIZES.map(s => <option key={s} value={s}>{s}</option>)}
-          </select>
-        </div>
-        <div>
-          <label htmlFor='color' className={labelClass}>Color</label>
-          <select id='color' className={inputClass} value={form.color || ''} onChange={e => set('color', e.target.value)}>
-            <option value=''>Select color</option>
-            {GOWN_COLORS.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </div>
-      </div>
-      <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
-        <div>
-          <label htmlFor='location' className={labelClass}>Your Location *</label>
-          <select id='location' className={inputClass} value={form.location || ''} onChange={e => set('location', e.target.value)}>
-            <option value=''>Select location</option>
-            {LOCATIONS.map(l => <option key={l} value={l}>{l}</option>)}
-          </select>
-        </div>
-        <div>
-          <label htmlFor='price' className={labelClass}>Asking Price ($) *</label>
-          <input id='price' className={inputClass} type='number' placeholder='500' value={form.price || ''} onChange={e => set('price', parseFloat(e.target.value))} />
-        </div>
-      </div>
-
-      <div>
-        <label htmlFor='condition' className={labelClass}>Condition *</label>
-        <select id='condition' className={inputClass} value={form.condition || ''} onChange={e => set('condition', e.target.value as GownCondition)}>
-          <option value=''>Select condition</option>
-          {GOWN_CONDITIONS.map(c => <option key={c} value={c}>{c}</option>)}
-        </select>
-      </div>
-
-      <div>
-        <label htmlFor='photo' className={labelClass}>Photo</label>
-        <input id='photo' type='file' accept='image/*' onChange={handleImage} className='text-sm text-[#7d6652] file:mr-4 file:cursor-pointer file:rounded-full file:border file:border-[#d4c2ad] file:bg-white/70 file:px-4 file:py-2 file:text-xs file:font-semibold file:uppercase file:tracking-widest file:text-[#5f4e3f] file:transition hover:file:bg-white' />
-        {preview && <img src={preview} alt='Preview' className='mt-3 h-64 w-48 rounded-2xl border border-[#d9c9b6] object-cover' />}
-      </div>
-      <div className='grid grid-cols-1 gap-4 sm:grid-cols-2'>
-        <div>
-          <label htmlFor='contact_email' className={labelClass}>Contact Email *</label>
-          <input id='contact_email' className={inputClass} type='email' placeholder='you@email.com' value={form.contact_email} onChange={e => set('contact_email', e.target.value)} />
-        </div>
-        <div>
-          <label htmlFor='contact_phone' className={labelClass}>Contact Phone</label>
-          <input id='contact_phone' className={inputClass} type='tel' placeholder='(555) 000-0000' value={form.contact_phone || ''} onChange={e => set('contact_phone', e.target.value)} />
-        </div>
-      </div>
-      <div className='rounded-2xl border border-[#d9c9b6] bg-[#fffaf3] px-4 py-3 text-sm text-[#7d6652]'>
-        💳 <strong className='text-[#5a4537]'>Listing fee:</strong> $9.99 per listing — payment integration coming soon.
-      </div>
-      {error && <p className='rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700' role='alert'>{error}</p>}
-      <button onClick={handleSubmit} disabled={loading}
-        className='w-full rounded-full border border-[#b58d5f]/70 bg-[linear-gradient(180deg,#c49a68,#a67841)] py-3 text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)] hover:-translate-y-0.5 hover:brightness-105 disabled:translate-y-0 disabled:opacity-50'>
-        {loading ? 'Saving…' : listingId ? 'Update Listing' : 'Publish Listing'}
-      </button>
-    </div>
+          {loading ? 'Saving…' : listingId ? 'Update Listing' : 'Publish Listing'}
+        </Button>
+      </FieldGroup>
+    </form>
   );
 }

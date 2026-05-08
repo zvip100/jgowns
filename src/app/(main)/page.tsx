@@ -1,17 +1,20 @@
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowDown } from "lucide-react";
+import { Search } from "lucide-react";
 
 import heroImage from "@/assets/jgowns-hero.png";
+import SellSection from "@/components/SellSection";
+import { Button } from "@/components/ui/button";
 
 export default function HomePage() {
   return (
+    <>
     <section className='hero-glow relative isolate mb-8 overflow-hidden rounded-[2.1rem] border border-[#d4c2ad] shadow-[0_35px_90px_rgba(109,82,47,0.17)] min-h-[58svh] sm:mb-12 sm:min-h-[62vh] lg:min-h-[66vh] 2xl:min-h-[58vh]'>
       <Image
         src={heroImage}
         alt='Softly lit bridal showroom with floral arrangements'
         fill
-        priority
+        preload
         sizes='(max-width: 768px) 100vw, 1280px'
         className='object-cover object-center'
       />
@@ -47,14 +50,19 @@ export default function HomePage() {
       </div>
 
       <div className='absolute inset-x-0 bottom-6 z-10 flex justify-center px-6'>
-        <Link
-          href='/browse'
-          className='inline-flex items-center gap-3 rounded-full border border-[#c9a57a]/70 bg-[rgba(255,251,245,0.82)] px-7 py-3.5 text-xs font-semibold uppercase tracking-[0.13em] text-[#5a4738] shadow-[0_18px_40px_rgba(98,72,40,0.17)] backdrop-blur-md transition-transform hover:-translate-y-0.5 hover:bg-white'
+        <Button
+          asChild
+          variant='secondary'
+          className='h-11 rounded-full border border-white/60 px-6 text-xs font-semibold uppercase tracking-[0.14em] shadow-[0_12px_28px_rgba(98,72,40,0.10)] backdrop-blur-md transition hover:-translate-y-0.5'
         >
-          Browse Gowns
-          <ArrowDown aria-hidden='true' className='size-4' />
-        </Link>
+          <Link href='/browse'>
+            <Search data-icon='inline-start' />
+            Browse Gowns
+          </Link>
+        </Button>
       </div>
     </section>
+    <SellSection />
+    </>
   );
 }

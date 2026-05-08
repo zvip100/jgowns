@@ -23,16 +23,19 @@
   --line: rgba(120, 93, 63, 0.22);
   --accent: #b3854c;
   --accent-deep: #8e6330;
+  --sold: #a02238;
   --focus-ring: rgba(179, 133, 76, 0.42);
 
   /* Sticky navbar offset */
-  --navbar-h: 4.5625rem; /* 73px — mobile */
+  --navbar-h: 4.5625rem;
+  /* 73px — mobile */
 
   /* Listings page secondary nav strip (sits flush below --navbar-h on lg+).
      Used by FilterBar's rail variant to offset its sticky `top` so the rail
      pins right under the strip — and by the strip itself to keep its height
      consistent with that offset. */
-  --listings-subnav-h: 3.75rem; /* 60px */
+  --listings-subnav-h: 3.75rem;
+  /* 60px */
 
   /* shadcn tokens — mapped to project palette so every shadcn component
      renders in our exact theme without drift. */
@@ -74,11 +77,13 @@
 
 @media (min-width: 768px) {
   :root {
-    --navbar-h: 4.8125rem; /* 77px — desktop */
+    --navbar-h: 4.8125rem;
+    /* 77px — desktop */
   }
 }
 
 @layer base {
+
   *,
   *::before,
   *::after {
@@ -87,6 +92,7 @@
 
   html {
     scroll-behavior: auto;
+    scrollbar-gutter: stable;
   }
 
   body {
@@ -101,22 +107,16 @@
     font-family: var(--font-body);
     color: var(--ink);
     background:
-      radial-gradient(
-        circle at 16% 12%,
+      radial-gradient(circle at 16% 12%,
         rgba(255, 255, 255, 0.8),
-        transparent 34%
-      ),
-      radial-gradient(
-        circle at 84% 20%,
+        transparent 34%),
+      radial-gradient(circle at 84% 20%,
         rgba(216, 181, 134, 0.2),
-        transparent 30%
-      ),
-      linear-gradient(
-        150deg,
+        transparent 30%),
+      linear-gradient(150deg,
         var(--bg-ivory) 0%,
         var(--bg-cream) 48%,
-        #f2ece2 100%
-      );
+        #f2ece2 100%);
     min-height: 100vh;
   }
 
@@ -171,11 +171,9 @@
   }
 
   .surface-panel {
-    background: linear-gradient(
-      160deg,
-      var(--panel-strong) 0%,
-      var(--panel) 100%
-    );
+    background: linear-gradient(160deg,
+        var(--panel-strong) 0%,
+        var(--panel) 100%);
     backdrop-filter: blur(10px);
     border: 1px solid var(--line);
     box-shadow:
@@ -193,11 +191,9 @@
     inset: 0;
     border-radius: inherit;
     padding: 1px;
-    background: linear-gradient(
-      130deg,
-      rgba(255, 255, 255, 0.75),
-      rgba(178, 142, 95, 0.36)
-    );
+    background: linear-gradient(130deg,
+        rgba(255, 255, 255, 0.75),
+        rgba(178, 142, 95, 0.36));
     -webkit-mask:
       linear-gradient(#fff 0 0) content-box,
       linear-gradient(#fff 0 0);
@@ -229,22 +225,18 @@
     content: "";
     position: absolute;
     inset: -18% 22% 22% -8%;
-    background: radial-gradient(
-      circle,
-      rgba(255, 255, 255, 0.66),
-      rgba(255, 255, 255, 0)
-    );
+    background: radial-gradient(circle,
+        rgba(255, 255, 255, 0.66),
+        rgba(255, 255, 255, 0));
     pointer-events: none;
   }
 
   .soft-divider {
     height: 1px;
-    background: linear-gradient(
-      90deg,
-      transparent,
-      rgba(139, 108, 73, 0.46),
-      transparent
-    );
+    background: linear-gradient(90deg,
+        transparent,
+        rgba(139, 108, 73, 0.46),
+        transparent);
   }
 
   .sr-only {
@@ -282,6 +274,7 @@
       opacity: 0;
       transform: translateY(20px);
     }
+
     to {
       opacity: 1;
       transform: translateY(0);
@@ -292,20 +285,19 @@
     0% {
       background-position: 100% center;
     }
+
     100% {
       background-position: -100% center;
     }
   }
 
   .skeleton-shimmer {
-    background: linear-gradient(
-      105deg,
-      #ede5d8 0%,
-      #ede5d8 35%,
-      rgba(255, 248, 235, 0.95) 50%,
-      #ede5d8 65%,
-      #ede5d8 100%
-    );
+    background: linear-gradient(105deg,
+        #ede5d8 0%,
+        #ede5d8 35%,
+        rgba(255, 248, 235, 0.95) 50%,
+        #ede5d8 65%,
+        #ede5d8 100%);
     background-size: 300% 100%;
     animation: shimmerWarm 2s ease-in-out infinite;
   }

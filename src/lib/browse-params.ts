@@ -1,16 +1,20 @@
-/** Stable ordering for /browse query strings (category rail + FilterBar). */
+/** Navigation params — driven by the secondary navbar (category rail).*/
+export const BROWSE_NAV_PARAMS = ["category"] as const;
+
+/** Filter params — driven by the FilterBar. */
+export const BROWSE_FILTER_PARAMS = [
+  "size", "color", "location", "cond", "minPrice", "maxPrice",
+] as const;
+
+/** Stable ordering for /browse query strings (nav first, then filters). */
 export const BROWSE_PARAM_ORDER = [
-  "category",
-  "size",
-  "color",
-  "location",
-  "cond",
-  "minPrice",
-  "maxPrice",
+  ...BROWSE_NAV_PARAMS,
+  ...BROWSE_FILTER_PARAMS,
 ] as const;
 
 export function canonicalBrowseQueryString(params: URLSearchParams): string {
   const canonical = new URLSearchParams();
+
   for (const key of BROWSE_PARAM_ORDER) {
     const value = params.get(key);
     if (value) canonical.set(key, value);

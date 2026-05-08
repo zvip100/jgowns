@@ -7,7 +7,7 @@ import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import FilterBar from "@/components/FilterBar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { BROWSE_PARAM_ORDER } from "@/lib/browse-params";
+import { BROWSE_FILTER_PARAMS } from "@/lib/browse-params";
 import { cn } from "@/lib/utils";
 
 type ListingsLayoutProps = {
@@ -38,7 +38,8 @@ export default function ListingsLayout({
   const mobileStickyRef = useRef<HTMLDivElement | null>(null);
   const mobileSentinelRef = useRef<HTMLDivElement | null>(null);
   const params = useSearchParams();
-  const activeFilterCount = BROWSE_PARAM_ORDER.filter((k) =>
+
+  const activeFilterCount = BROWSE_FILTER_PARAMS.filter((k) =>
     params.has(k),
   ).length;
 
@@ -97,8 +98,8 @@ export default function ListingsLayout({
           works on a normally-flowed element), and the INNER div uses
           `relative; left: 50%; -ml-[50vw]; w-screen` to escape <main>'s
           1440px max-width and bleed its cream BG to both viewport edges —
-          exactly like the global header. Inner content is then re-centered
-          to the same max-w-375 frame so the toggle button aligns with the
+          exactly like the global header.           Inner content is then re-centered
+          to the same max-w-375 frame so the category row aligns with the
           cards/rail beneath it.
 
           z-40 is one notch below the global navbar (z-50) and one above the
@@ -107,41 +108,38 @@ export default function ListingsLayout({
       <div className='sticky top-(--navbar-h) z-40 hidden lg:block'>
         <div className='relative left-1/2 -ml-[50vw] w-screen border-b border-[#d5c4b0] bg-[rgba(252,246,236,0.82)] shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] backdrop-blur-lg'>
           <div className='mx-auto flex h-(--listings-subnav-h) w-full max-w-375 min-w-0 items-center gap-4 px-4 sm:px-6 lg:px-10'>
-            {/* Width-locked to `w-72` (18rem) so this trigger spans exactly
-                the rail column beneath it (`lg:grid-cols-[18rem_…]`). The
-                sub-navbar's outer padding (`lg:px-10`) matches <main>'s, so
-                the button's left/right edges land on the rail's left/right
-                edges below — they read as one continuous "filter column". */}
-            <Button
-              type='button'
-              variant='outline'
-              onClick={() => setRailOpen((v) => !v)}
-              aria-expanded={railOpen}
-              aria-controls='listings-filter-rail'
-              className='group/sub-toggle h-auto w-72 shrink-0 justify-between rounded-full border-[#c9b39a] bg-white/85 px-4 py-2.5 text-[0.66rem] font-semibold uppercase tracking-[0.13em] text-[#6f5947] shadow-[0_10px_26px_rgba(97,71,42,0.14)] backdrop-blur-sm hover:bg-white'
-            >
-              <span className='inline-flex items-center gap-2'>
-                <SlidersHorizontal data-icon='inline-start' />
-                <span>{railOpen ? "Hide Filters" : "Show Filters"}</span>
-              </span>
-              <span className='inline-flex items-center gap-2'>
-                {activeFilterCount > 0 && (
-                  <Badge
-                    variant='outline'
-                    className='rounded-full border-0 bg-[linear-gradient(180deg,#c49a68,#a67841)] px-2 py-0 text-[0.6rem] font-semibold leading-5 text-white shadow-[0_4px_12px_rgba(166,120,65,0.35)]'
-                  >
-                    {activeFilterCount}
-                  </Badge>
-                )}
-                <ChevronDown
-                  data-icon='inline-end'
-                  className={cn(
-                    "transition-transform duration-500 ease-out",
-                    railOpen ? "rotate-180" : "rotate-0"
+            {/* Rail open by default; the panel has its own collapse control.
+                Only render this trigger when the rail is closed so users can
+                reopen it without redundant "Hide" next to the sidebar. */}
+            {!railOpen && (
+              <Button
+                type='button'
+                variant='outline'
+                onClick={() => setRailOpen(true)}
+                aria-expanded={false}
+                aria-controls='listings-filter-rail'
+                className='group/sub-toggle h-auto w-72 shrink-0 justify-between rounded-full border-[#c9b39a] bg-white/85 px-4 py-2.5 text-[0.66rem] font-semibold uppercase tracking-[0.13em] text-[#6f5947] shadow-[0_10px_26px_rgba(97,71,42,0.14)] backdrop-blur-sm hover:bg-white'
+              >
+                <span className='inline-flex items-center gap-2'>
+                  <SlidersHorizontal data-icon='inline-start' />
+                  <span>Show Filters</span>
+                </span>
+                <span className='inline-flex items-center gap-2'>
+                  {activeFilterCount > 0 && (
+                    <Badge
+                      variant='outline'
+                      className='rounded-full border-0 bg-[linear-gradient(180deg,#c49a68,#a67841)] px-2 py-0 text-[0.6rem] font-semibold leading-5 text-white shadow-[0_4px_12px_rgba(166,120,65,0.35)]'
+                    >
+                      {activeFilterCount}
+                    </Badge>
                   )}
-                />
-              </span>
-            </Button>
+                  <ChevronDown
+                    data-icon='inline-end'
+                    className='transition-transform duration-500 ease-out'
+                  />
+                </span>
+              </Button>
+            )}
             <div className='min-h-0 min-w-0 flex-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'>
               {categoryNavDesktop}
             </div>

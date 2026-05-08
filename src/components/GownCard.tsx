@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
@@ -21,10 +22,12 @@ export default function GownCard({
       <Card className='surface-panel hairline gap-0 overflow-hidden rounded-3xl bg-transparent p-0 py-0 text-card-foreground ring-0'>
         <div className='relative aspect-3/4 overflow-hidden bg-[#efe7dc]'>
           {listing.image_url ? (
-            <img
+            <Image
               src={listing.image_url}
               alt={listing.title}
-              className='h-full w-full object-cover transition duration-500 group-hover:scale-[1.045]'
+              fill
+              sizes='(max-width: 640px) 100vw, (max-width: 1024px) 56vw, 30vw'
+              className='object-cover transition duration-500 group-hover:scale-[1.045]'
             />
           ) : (
             <div className='flex h-full w-full items-center justify-center text-5xl text-[#bca88f]'>

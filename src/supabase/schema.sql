@@ -13,7 +13,6 @@ create table listings (
     or category in (
       'bride',
       'mother-of-the-bride',
-      'bridesmaid',
       'girls',
       'women',
       'maternity'
