@@ -21,22 +21,16 @@ export default function ListingRow({ listing }: { listing: Listing }) {
     <article className="surface-panel hairline group flex items-center gap-4 rounded-2xl p-3 transition hover:-translate-y-0.5 hover:shadow-[0_22px_44px_rgba(99,72,40,0.14)] sm:gap-5 sm:p-4">
       <Link href={href} className="shrink-0">
         <div className="relative aspect-4/5 w-20 overflow-hidden rounded-xl bg-(--bg-ivory) sm:w-24">
-          {listing.image_url ? (
-            <Image
-              src={listing.image_url}
-              alt={listing.title}
-              fill
-              sizes="(max-width: 640px) 96px, 112px"
-              className="object-cover transition duration-500 group-hover:scale-105"
-              {...(listing.image_blur_data_url
-                ? { placeholder: 'blur' as const, blurDataURL: listing.image_blur_data_url }
-                : {})}
-            />
-          ) : (
-            <div className="flex size-full items-center justify-center text-2xl">
-              👗
-            </div>
-          )}
+          <Image
+            src={listing.image_url}
+            alt={listing.title}
+            fill
+            sizes="(max-width: 640px) 96px, 112px"
+            className="object-cover transition duration-500 group-hover:scale-105"
+            {...(listing.image_blur_data_url
+              ? { placeholder: 'blur' as const, blurDataURL: listing.image_blur_data_url }
+              : {})}
+          />
         </div>
       </Link>
 

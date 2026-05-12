@@ -22,6 +22,17 @@ export type ListingsFilters = {
   maxPrice?: number;
 };
 
+function applyListingsCachePolicy() {
+  cacheLife({ stale: 60, revalidate: 3600, expire: 86400 });
+  cacheTag("listings");
+}
+
+function normalizeListingId(id: unknown): string | null {
+  if (typeof id !== "string") return null;
+  
+  const trimmed = id.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
 
 function firstParamValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -78,8 +89,7 @@ export async function fetchListings(
   filters: ListingsFilters,
 ): Promise<{ listings: Listing[] | null; error: { message: string } | null }> {
   "use cache";
-  cacheLife({ stale: 60, revalidate: 3600, expire: 86400 });
-  cacheTag("listings");
+  applyListingsCachePolicy();
 
   let query = anonClient
     .from("listings")
@@ -117,13 +127,45 @@ export async function fetchListings(
   return { listings, error };
 }
 
+export async function fetchListingById(
+  id: string,
+): Promise<{ listing: Listing | null; error: { message: string } | null }> {
+  "use cache";
+  const normalizedId = normalizeListingId(id);
+  if (!normalizedId) {
+    applyListingsCachePolicy();
+    return { listing: null, error: null };
+  }
+
+  applyListingsCachePolicy();
+  cacheTag(`listing:${normalizedId}`);
+
+  const { data: listing, error } = await anonClient
+    .from("listings")
+    .select("*")
+    .eq("id", normalizedId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[listings-data] Failed to load listing by id", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+      id: normalizedId,
+    });
+    return { listing: null, error: { message: error.message } };
+  }
+
+  return { listing: listing as Listing | null, error: null };
+}
+
 export async function fetchPriceBounds(): Promise<{
   minBound: number;
   maxBound: number;
 }> {
   "use cache";
-  cacheLife({ stale: 300, revalidate: 3600, expire: 86400 });
-  cacheTag("listings");
+  applyListingsCachePolicy();
 
   const { data } = await anonClient
     .from("listings")

@@ -1,10 +1,11 @@
-import { createClient } from "@/lib/supabase/server";
 import { browseHrefFromBackParam } from "@/lib/browse-params";
+import { fetchListingById } from "@/lib/listings-data";
 import { GOWN_CATEGORIES } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
 
 export default async function ListingPage({
   params,
@@ -19,13 +20,7 @@ export default async function ListingPage({
   const backHref = fromDashboard ? '/dashboard' : browseHrefFromBackParam(back);
   const backLabel = fromDashboard ? 'Back to dashboard' : 'Browse all gowns';
 
-  const supabase = await createClient();
-
-  const { data: listing } = await supabase
-    .from("listings")
-    .select("*")
-    .eq("id", id)
-    .single();
+  const { listing } = await fetchListingById(id);
   if (!listing) notFound();
 
   const categoryLabel =
@@ -39,29 +34,25 @@ export default async function ListingPage({
     <div className='mx-auto max-w-5xl'>
       <Link
         href={backHref}
+        prefetch={true}
         className='mb-6 inline-flex items-center gap-1.5 text-[0.78rem] font-semibold uppercase tracking-[0.14em] text-[#8a7462] hover:text-[#5a4537]'
       >
-        ← {backLabel}
+        <ChevronLeft data-icon='inline-start' />
+        {backLabel}
       </Link>
 
       <div className='grid grid-cols-1 gap-8 md:grid-cols-2 md:gap-12'>
         <div className='relative aspect-3/4 overflow-hidden rounded-[1.7rem] bg-[#efe7dc]'>
-          {listing.image_url ? (
-            <Image
-              src={listing.image_url}
-              alt={listing.title}
-              fill
-              sizes='(max-width: 768px) 100vw, 56vw'
-              className='object-cover'
-              {...(listing.image_blur_data_url
-                ? { placeholder: 'blur' as const, blurDataURL: listing.image_blur_data_url }
-                : {})}
-            />
-          ) : (
-            <div className='flex h-full w-full items-center justify-center text-8xl text-[#bca88f]'>
-              👗
-            </div>
-          )}
+          <Image
+            src={listing.image_url}
+            alt={listing.title}
+            fill
+            sizes='(max-width: 768px) 100vw, 56vw'
+            className='object-cover'
+            {...(listing.image_blur_data_url
+              ? { placeholder: 'blur' as const, blurDataURL: listing.image_blur_data_url }
+              : {})}
+          />
           {listing.status === 'sold' && (
             <>
               <div

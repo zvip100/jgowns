@@ -55,7 +55,7 @@ export default function HomePage() {
           variant='secondary'
           className='h-11 rounded-full border border-white/60 px-6 text-xs font-semibold uppercase tracking-[0.14em] shadow-[0_12px_28px_rgba(98,72,40,0.10)] backdrop-blur-md transition hover:-translate-y-0.5'
         >
-          <Link href='/browse'>
+          <Link href='/browse' prefetch={true}>
             <Search data-icon='inline-start' />
             Browse Gowns
           </Link>

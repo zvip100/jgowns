@@ -21,22 +21,16 @@ export default function GownCard({
     <Link href={href} className='group block'>
       <Card className='surface-panel hairline gap-0 overflow-hidden rounded-3xl bg-transparent p-0 py-0 text-card-foreground ring-0'>
         <div className='relative aspect-3/4 overflow-hidden bg-[#efe7dc]'>
-          {listing.image_url ? (
-            <Image
-              src={listing.image_url}
-              alt={listing.title}
-              fill
-              sizes='(max-width: 640px) 100vw, (max-width: 1024px) 56vw, 30vw'
-              className='object-cover transition duration-500 group-hover:scale-[1.045]'
-              {...(listing.image_blur_data_url
-                ? { placeholder: 'blur' as const, blurDataURL: listing.image_blur_data_url }
-                : {})}
-            />
-          ) : (
-            <div className='flex h-full w-full items-center justify-center text-5xl text-[#bca88f]'>
-              👗
-            </div>
-          )}
+          <Image
+            src={listing.image_url}
+            alt={listing.title}
+            fill
+            sizes='(max-width: 640px) 100vw, (max-width: 1024px) 56vw, 30vw'
+            className='object-cover transition duration-500 group-hover:scale-[1.045]'
+            {...(listing.image_blur_data_url
+              ? { placeholder: 'blur' as const, blurDataURL: listing.image_blur_data_url }
+              : {})}
+          />
           {listing.color && (
             <Badge
               variant='outline'

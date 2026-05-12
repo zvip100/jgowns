@@ -9,7 +9,7 @@ export type Listing = {
   condition: GownCondition;
   category: GownCategoryId | null;
   price: number;
-  image_url: string | null;
+  image_url: string;
   image_blur_data_url: string | null;
   contact_email: string;
   contact_phone: string | null;
