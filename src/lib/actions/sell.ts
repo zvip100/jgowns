@@ -156,6 +156,8 @@ export async function createListing(
   if (!auth.ok) return { error: auth.error };
   const { supabase, user } = auth;
 
+  let shouldRedirect = false;
+  
   try {
     const imageFile = fileOrNull(formData.get("image_file"));
 
@@ -180,10 +182,15 @@ export async function createListing(
     if (dbError) return { error: dbError.message };
 
     updateTag("listings");
-    redirect("/dashboard");
+    shouldRedirect = true;
   } catch (e) {
     return catchSellActionError(e);
   }
+
+  if (shouldRedirect) {
+    redirect("/dashboard");
+  }
+  return {};
 }
 
 export async function updateListing(
@@ -206,6 +213,8 @@ export async function updateListing(
   if (!existing) return { error: "Listing not found" };
   if (existing.user_id !== user.id) return { error: "Not authorized" };
 
+  let shouldRedirect = false;
+  
   try {
     const imageFile = fileOrNull(formData.get("image_file"));
 
@@ -231,8 +240,13 @@ export async function updateListing(
 
     updateTag(`listing:${id}`);
     updateTag("listings");
-    redirect("/dashboard");
+    shouldRedirect = true;
   } catch (e) {
     return catchSellActionError(e);
   }
+
+  if (shouldRedirect) {
+    redirect("/dashboard");
+  }
+  return {};
 }

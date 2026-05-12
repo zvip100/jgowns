@@ -207,6 +207,7 @@ export default function ListingForm({
   const handleSubmit = async () => {
     setLoading(true);
     setError('');
+
     try {
       if (
         !form.title?.trim() ||
@@ -253,8 +254,8 @@ export default function ListingForm({
         : await createListing(formData);
         
       if (result?.error) throw new Error(result.error);
-    } catch (e: any) {
-      setError(e.message || 'Something went wrong.');
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
       setLoading(false);
     }
