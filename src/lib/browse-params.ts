@@ -3,7 +3,12 @@ export const BROWSE_NAV_PARAMS = ["category"] as const;
 
 /** Filter params — driven by the FilterBar. */
 export const BROWSE_FILTER_PARAMS = [
-  "size", "color", "location", "cond", "minPrice", "maxPrice",
+  "size",
+  "color",
+  "location",
+  "cond",
+  "minPrice",
+  "maxPrice",
 ] as const;
 
 /** Stable ordering for /browse query strings (nav first, then filters). */
@@ -40,9 +45,11 @@ export function browseHrefFromBackParam(back: string | undefined): string {
   return safe ? `/browse?${safe}` : "/browse";
 }
 
+import type { PageSearchParams } from "@/lib/types";
+
 /** Rebuild URLSearchParams from a resolved /browse `searchParams` object. */
 export function browseParamsToURLSearchParams(
-  resolved: Record<string, string | string[] | undefined>,
+  resolved: PageSearchParams,
 ): URLSearchParams {
   const p = new URLSearchParams();
   for (const key of BROWSE_PARAM_ORDER) {

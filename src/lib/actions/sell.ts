@@ -1,10 +1,15 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { GOWN_CATEGORIES, type GownCategoryId } from "@/lib/types";
+import {
+  GOWN_CATEGORIES,
+  type GownCategoryId,
+  type ServerActionErrorResult,
+} from "@/lib/types";
 import { getAuthClient, type SupabaseServer } from "@/lib/actions/auth";
 
 const CATEGORY_IDS = GOWN_CATEGORIES.map((c) => c.id) as [
@@ -13,13 +18,16 @@ const CATEGORY_IDS = GOWN_CATEGORIES.map((c) => c.id) as [
 ];
 
 /** Optional phone: empty → undefined; otherwise digits only, 7–15 (E.164-style cap). */
-const contactPhoneField = z.preprocess((val) => {
-  if (val === undefined || val === null || val === "") return undefined;
-  if (typeof val !== "string") return val;
+const contactPhoneField = z.preprocess(
+  (val) => {
+    if (val === undefined || val === null || val === "") return undefined;
+    if (typeof val !== "string") return val;
 
-  const digits = val.replace(/\D/g, "");
-  return digits.length === 0 ? undefined : digits;
-}, z.union([z.undefined(), z.string().min(7).max(15)]));
+    const digits = val.replace(/\D/g, "");
+    return digits.length === 0 ? undefined : digits;
+  },
+  z.union([z.undefined(), z.string().min(7).max(15)]),
+);
 
 const listingInputSchema = z.object({
   title: z.string().trim().min(4),
@@ -101,17 +109,24 @@ function catchSellActionError(e: unknown): { error: string } {
   return { error: e instanceof Error ? e.message : "Something went wrong." };
 }
 
+const UPLOAD_EXT_BY_MIME: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/heic": "heic",
+  "image/heif": "heif",
+};
+
 async function uploadListingImage({
   supabase,
-  userId,
   file,
 }: {
   supabase: SupabaseServer;
-  userId: string;
   file: File;
 }): Promise<string> {
-  const ext = file.name.split(".").pop() || "jpg";
-  const path = `${userId}/${Date.now()}.${ext}`;
+  const ext = UPLOAD_EXT_BY_MIME[file.type] ?? "jpg";
+  const path = `${randomUUID()}-${Date.now()}.${ext}`;
 
   const { error: uploadError } = await supabase.storage
     .from("gown-images")
@@ -136,12 +151,11 @@ async function resolveUpdateListingImageUrl(
   if (imageFile) {
     const image_url = await uploadListingImage({
       supabase,
-      userId,
       file: imageFile,
     });
     return { image_url };
   }
-  
+
   const image_url = parsed.image_url;
   if (!image_url) {
     return { error: "Please add a gown photo." };
@@ -151,13 +165,13 @@ async function resolveUpdateListingImageUrl(
 
 export async function createListing(
   formData: FormData,
-): Promise<{ error?: string }> {
+): Promise<ServerActionErrorResult> {
   const auth = await getAuthClient();
   if (!auth.ok) return { error: auth.error };
   const { supabase, user } = auth;
 
   let shouldRedirect = false;
-  
+
   try {
     const imageFile = fileOrNull(formData.get("image_file"));
 
@@ -165,11 +179,12 @@ export async function createListing(
       return { error: "Please add a gown photo." };
     }
 
-    const parsed = listingInputSchema.parse(rawListingFieldsFromFormData(formData));
+    const parsed = listingInputSchema.parse(
+      rawListingFieldsFromFormData(formData),
+    );
 
     const image_url = await uploadListingImage({
       supabase,
-      userId: user.id,
       file: imageFile,
     });
 
@@ -196,7 +211,7 @@ export async function createListing(
 export async function updateListing(
   id: string,
   formData: FormData,
-): Promise<{ error?: string }> {
+): Promise<ServerActionErrorResult> {
   if (!id || typeof id !== "string") return { error: "Invalid listing id" };
 
   const auth = await getAuthClient();
@@ -214,11 +229,13 @@ export async function updateListing(
   if (existing.user_id !== user.id) return { error: "Not authorized" };
 
   let shouldRedirect = false;
-  
+
   try {
     const imageFile = fileOrNull(formData.get("image_file"));
 
-    const parsed = listingInputSchema.parse(rawListingFieldsFromFormData(formData));
+    const parsed = listingInputSchema.parse(
+      rawListingFieldsFromFormData(formData),
+    );
 
     const image = await resolveUpdateListingImageUrl(
       supabase,

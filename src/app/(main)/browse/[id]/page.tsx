@@ -1,5 +1,8 @@
 import { browseHrefFromBackParam } from "@/lib/browse-params";
-import { fetchListingById } from "@/lib/listings-data";
+import {
+  fetchListingById,
+  fetchListingByIdForSessionUser,
+} from "@/lib/listings-queries";
 import { GOWN_CATEGORIES } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { notFound } from "next/navigation";
@@ -20,7 +23,18 @@ export default async function ListingPage({
   const backHref = fromDashboard ? '/dashboard' : browseHrefFromBackParam(back);
   const backLabel = fromDashboard ? 'Back to dashboard' : 'Browse all gowns';
 
-  const { listing } = await fetchListingById(id);
+  const { listing: publicListing, error: publicError } =
+    await fetchListingById(id);
+  if (publicError) throw new Error(publicError.message);
+
+  let listing = publicListing;
+  if (!listing) {
+    const { listing: sessionListing, error: sessionError } =
+      await fetchListingByIdForSessionUser(id);
+    if (sessionError) throw new Error(sessionError.message);
+    listing = sessionListing;
+  }
+
   if (!listing) notFound();
 
   const categoryLabel =

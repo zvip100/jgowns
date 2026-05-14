@@ -31,7 +31,7 @@ export async function proxy(request: NextRequest) {
 
   // Protect dashboard routes — redirect to login if not authenticated
   if (request.nextUrl.pathname.startsWith("/dashboard") && !user) {
-    return NextResponse.redirect(new URL("/auth/login", request.url));
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   return supabaseResponse;

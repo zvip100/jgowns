@@ -11,12 +11,11 @@ import {
 } from "@/components/ui/empty";
 import {
   buildBrowseBackQuery,
-  fetchListings,
   hasActiveBrowseFilters,
   parseFilters,
-  type PageSearchParams,
 } from "@/lib/listings-data";
-import type { Listing } from "@/lib/types";
+import type { Listing, ListingsListResult, PageSearchParams } from "@/lib/types";
+import { fetchListings } from "@/lib/listings-queries";
 
 export default async function ListingsGrid({
   searchParams,
@@ -25,7 +24,7 @@ export default async function ListingsGrid({
 }) {
   const resolved = await searchParams;
   const filters = parseFilters(resolved);
-  const { listings, error } = await fetchListings(filters);
+  const { listings, error }: ListingsListResult = await fetchListings(filters);
 
   const backQueryRaw = hasActiveBrowseFilters(filters)
     ? buildBrowseBackQuery(filters)
