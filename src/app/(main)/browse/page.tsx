@@ -5,7 +5,8 @@ import ListingsCount from "@/components/ListingsCount";
 import ListingsGrid from "@/components/ListingsGrid";
 import ListingsLayout from "@/components/ListingsLayout";
 import ListingsSkeleton from "@/components/ListingsSkeleton";
-import { fetchPriceBounds, type PageSearchParams } from "@/lib/listings-data";
+import type { PageSearchParams } from "@/lib/types";
+import { fetchPriceBounds } from "@/lib/listings-queries";
 
 export default async function BrowsePage({
   searchParams,

@@ -4,7 +4,7 @@ import {
   browseParamsToURLSearchParams,
   canonicalBrowseQueryString,
 } from "@/lib/browse-params";
-import type { PageSearchParams } from "@/lib/listings-data";
+import type { PageSearchParams } from "@/lib/types";
 import { GOWN_CATEGORIES, type GownCategoryId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 

@@ -23,14 +23,19 @@ const supabasePattern = (() => {
 })();
 
 const nextConfig: NextConfig = {
-	cacheComponents: true,
-	images: {
-		qualities: [75],
-		remotePatterns: supabasePattern ? [supabasePattern] : [],
-	},
-	turbopack: {
-		root: projectRoot,
-	},
+  cacheComponents: true,
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "10mb",
+    },
+  },
+  images: {
+    qualities: [75],
+    remotePatterns: supabasePattern ? [supabasePattern] : [],
+  },
+  turbopack: {
+    root: projectRoot,
+  },
 };
 
 export default nextConfig;

@@ -2,10 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
 import { CircleDollarSign, Mail, Phone, X } from 'lucide-react';
 
-import { createClient } from '@/lib/supabase/client';
 import {
   GOWN_CATEGORIES,
   GOWN_COLORS,
@@ -16,7 +14,7 @@ import {
   type GownCondition,
   type ListingFormData,
 } from '@/lib/types';
-import { revalidateListings } from '@/lib/actions/listings';
+import { createListing, updateListing } from '@/lib/actions/sell';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -48,6 +46,11 @@ import { Textarea } from '@/components/ui/textarea';
 
 const labelTone =
   'text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-(--muted-ink)';
+
+function digitsOnlyPhone(value: string | null | undefined): string {
+  if (!value) return '';
+  return value.replace(/\D/g, '');
+}
 
 type Option = { value: string; label: string };
 const toOpts = (xs: readonly string[]): Option[] =>
@@ -101,8 +104,6 @@ export default function ListingForm({
   initial?: Partial<ListingFormData>;
   listingId?: string;
 }) {
-  const router = useRouter();
-  const supabase = createClient();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [preview, setPreview] = useState<string | null>(initial?.image_url || null);
@@ -123,7 +124,11 @@ export default function ListingForm({
     const raw = base.category;
     const category =
       raw && GOWN_CATEGORIES.some((c) => c.id === raw) ? raw : null;
-    return { ...base, category };
+    return {
+      ...base,
+      category,
+      contact_phone: digitsOnlyPhone(base.contact_phone),
+    };
   });
   const [imageFile, setImageFile] = useState<File | null>(null);
   const blurDataUrlRef = useRef<Promise<string | null>>(
@@ -195,18 +200,15 @@ export default function ListingForm({
     setImageFile(null);
     setPreview(null);
     blurDataUrlRef.current = Promise.resolve(null);
-    setForm((f) => ({ ...f, image_url: null }));
+    setForm((f) => ({ ...f, image_url: undefined }));
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const handleSubmit = async () => {
     setLoading(true);
     setError('');
+
     try {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (!user) throw new Error('Not authenticated');
       if (
         !form.title?.trim() ||
         !form.size ||
@@ -221,49 +223,39 @@ export default function ListingForm({
         throw new Error('Please fill in all required fields.');
       }
 
-      let image_url = form.image_url || null;
-      if (imageFile) {
-        const ext = imageFile.name.split('.').pop();
-        const path = `${user.id}/${Date.now()}.${ext}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from('gown-images')
-          .upload(path, imageFile);
-
-        if (uploadError) throw uploadError;
-
-        const { data: urlData } = supabase.storage
-          .from('gown-images')
-          .getPublicUrl(path);
-        image_url = urlData.publicUrl;
+      if (!listingId && !imageFile) {
+        throw new Error('Please add a gown photo.');
+      }
+      if (listingId && !imageFile && !form.image_url?.trim()) {
+        throw new Error('Please add a gown photo.');
       }
 
-      const payload = {
-        title: form.title!.trim(),
-        description: form.description?.trim() || null,
-        size: form.size!,
-        color: form.color || null,
-        location: form.location!,
-        condition: form.condition!,
-        category: form.category as GownCategoryId,
-        price: form.price!,
-        image_url,
-        image_blur_data_url: imageFile
-          ? await blurDataUrlRef.current
-          : (image_url ? await blurDataUrlRef.current : null),
-        contact_email: form.contact_email!.trim(),
-        contact_phone: form.contact_phone?.trim() || null,
-        status: form.status ?? 'active',
-        user_id: user.id,
-      };
-      const { error: dbError } = listingId
-        ? await supabase.from('listings').update(payload).eq('id', listingId)
-        : await supabase.from('listings').insert(payload);
-      if (dbError) throw dbError;
-      await revalidateListings();
-      router.push('/dashboard');
-    } catch (e: any) {
-      setError(e.message);
+      const blur = await blurDataUrlRef.current;
+
+      const formData = new FormData();
+
+      formData.set('title', form.title.trim());
+      formData.set('description', form.description?.trim() || '');
+      formData.set('size', String(form.size));
+      formData.set('color', form.color?.trim() || '');
+      formData.set('location', String(form.location));
+      formData.set('condition', String(form.condition));
+      formData.set('category', String(form.category));
+      formData.set('price', String(form.price));
+      formData.set('image_url', form.image_url || '');
+      formData.set('image_blur_data_url', blur || '');
+      formData.set('contact_email', form.contact_email.trim());
+      formData.set('contact_phone', form.contact_phone?.trim() || '');
+      formData.set('status', String(form.status ?? 'active'));
+      if (imageFile) formData.set('image_file', imageFile);
+
+      const result = listingId
+        ? await updateListing(listingId, formData)
+        : await createListing(formData);
+        
+      if (result?.error) throw new Error(result.error);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Something went wrong.');
     } finally {
       setLoading(false);
     }
@@ -384,7 +376,7 @@ export default function ListingForm({
 
         <Field>
           <FieldLabel htmlFor="photo" className={labelTone}>
-            Photo
+            Photo *
           </FieldLabel>
           <Input
             id="photo"
@@ -459,7 +451,9 @@ export default function ListingForm({
                   type="tel"
                   placeholder="(555) 000-0000"
                   value={form.contact_phone || ''}
-                  onChange={(e) => set('contact_phone', e.target.value)}
+                  onChange={(e) =>
+                    set('contact_phone', digitsOnlyPhone(e.target.value))
+                  }
                 />
               </InputGroup>
             </Field>

@@ -1,9 +1,7 @@
 import { Badge } from "@/components/ui/badge";
-import {
-  fetchListings,
-  parseFilters,
-  type PageSearchParams,
-} from "@/lib/listings-data";
+import { parseFilters } from "@/lib/listings-data";
+import type { PageSearchParams } from "@/lib/types";
+import { fetchListings } from "@/lib/listings-queries";
 
 export default async function ListingsCount({
   searchParams,

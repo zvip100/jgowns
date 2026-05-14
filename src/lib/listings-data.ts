@@ -1,27 +1,12 @@
-import { cacheLife, cacheTag } from "next/cache";
-
 import { canonicalBrowseQueryString } from "@/lib/browse-params";
-import { anonClient } from "@/lib/supabase/anon";
-import { GOWN_CATEGORIES, type GownCategoryId, type Listing } from "@/lib/types";
+import {
+  GOWN_CATEGORIES,
+  type GownCategoryId,
+  type ListingsFilters,
+  type PageSearchParams,
+} from "@/lib/types";
 
-export type PageSearchParams = {
-  [key: string]: string | string[] | undefined;
-};
-
-const ALLOWED_CATEGORY = new Set<string>(
-  GOWN_CATEGORIES.map((c) => c.id),
-);
-
-export type ListingsFilters = {
-  category?: GownCategoryId;
-  size?: string;
-  color?: string;
-  location?: string;
-  cond?: string;
-  minPrice?: number;
-  maxPrice?: number;
-};
-
+const ALLOWED_CATEGORY = new Set<string>(GOWN_CATEGORIES.map((c) => c.id));
 
 function firstParamValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
@@ -35,6 +20,7 @@ export function parseFilters(params: PageSearchParams): ListingsFilters {
     rawCategory && ALLOWED_CATEGORY.has(rawCategory)
       ? (rawCategory as GownCategoryId)
       : undefined;
+
   return {
     category,
     size: firstParamValue(params.size),
@@ -71,77 +57,6 @@ export function buildBrowseBackQuery(filters: ListingsFilters): string {
     filterParams.set("minPrice", String(filters.minPrice));
   if (Number.isFinite(filters.maxPrice))
     filterParams.set("maxPrice", String(filters.maxPrice));
+
   return canonicalBrowseQueryString(filterParams);
-}
-
-export async function fetchListings(
-  filters: ListingsFilters,
-): Promise<{ listings: Listing[] | null; error: { message: string } | null }> {
-  "use cache";
-  cacheLife({ stale: 60, revalidate: 3600, expire: 86400 });
-  cacheTag("listings");
-
-  let query = anonClient
-    .from("listings")
-    .select("*")
-    .eq("status", "active")
-    .order("created_at", { ascending: false });
-
-  if (filters.category)
-    query = query.eq("category", filters.category);
-  if (filters.size) query = query.eq("size", filters.size);
-  if (filters.color) query = query.eq("color", filters.color);
-  if (filters.location) query = query.eq("location", filters.location);
-  if (filters.cond === "no-alterations") {
-    query = query.in("condition", ["Brand New", "Perfect Condition"]);
-  } else if (filters.cond) {
-    query = query.eq("condition", filters.cond);
-  }
-  if (Number.isFinite(filters.minPrice))
-    query = query.gte("price", filters.minPrice);
-  if (Number.isFinite(filters.maxPrice))
-    query = query.lte("price", filters.maxPrice);
-
-  const { data: listings, error } = await query;
-
-  if (error) {
-    console.error("[listings-data] Failed to load listings", {
-      message: error.message,
-      details: error.details,
-      hint: error.hint,
-      code: error.code,
-      filters,
-    });
-  }
-
-  return { listings, error };
-}
-
-export async function fetchPriceBounds(): Promise<{
-  minBound: number;
-  maxBound: number;
-}> {
-  "use cache";
-  cacheLife({ stale: 300, revalidate: 3600, expire: 86400 });
-  cacheTag("listings");
-
-  const { data } = await anonClient
-    .from("listings")
-    .select("price")
-    .eq("status", "active")
-    .order("price", { ascending: true });
-
-  const prices = (data ?? [])
-    .map((row) => Number(row.price))
-    .filter((value) => Number.isFinite(value));
-
-  if (prices.length === 0) {
-    return { minBound: 0, maxBound: 10000 };
-  }
-
-  const min = Math.floor(Math.min(...prices));
-  const max = Math.ceil(Math.max(...prices));
-  const safeMax = max <= min ? min + 1000 : max;
-
-  return { minBound: Math.max(0, min), maxBound: safeMax };
 }
