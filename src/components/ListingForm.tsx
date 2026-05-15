@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import { CircleDollarSign, Mail, Phone, X } from 'lucide-react';
+import { CircleDollarSign, Loader2, Mail, Phone, X } from 'lucide-react';
 
 import {
   GOWN_CATEGORIES,
@@ -14,6 +14,7 @@ import {
   type GownCondition,
   type ListingFormData,
 } from '@/lib/types';
+import { optimizeListingPhoto } from '@/lib/actions/images';
 import { createListing, updateListing } from '@/lib/actions/sell';
 
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -50,6 +51,23 @@ const labelTone =
 function digitsOnlyPhone(value: string | null | undefined): string {
   if (!value) return '';
   return value.replace(/\D/g, '');
+}
+
+async function dataUrlToFile(dataUrl: string, filename: string): Promise<File> {
+  const res = await fetch(dataUrl);
+  const blob = await res.blob();
+  const base = filename.replace(/\.[^.]+$/, '') || 'photo';
+  const ext =
+    blob.type === 'image/png'
+      ? 'png'
+      : blob.type === 'image/webp'
+        ? 'webp'
+        : blob.type === 'image/avif'
+          ? 'avif'
+          : 'jpg';
+  return new File([blob], `${base}.${ext}`, {
+    type: blob.type || 'image/jpeg',
+  });
 }
 
 type Option = { value: string; label: string };
@@ -106,6 +124,9 @@ export default function ListingForm({
 }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [imageOptimizing, setImageOptimizing] = useState(false);
+  const [imageOptimizeError, setImageOptimizeError] = useState('');
+  const [optimizedDataUrl, setOptimizedDataUrl] = useState<string | null>(null);
   const [preview, setPreview] = useState<string | null>(initial?.image_url || null);
   const [form, setForm] = useState<Partial<ListingFormData>>(() => {
     const base: Partial<ListingFormData> = {
@@ -149,19 +170,47 @@ export default function ListingForm({
   const set = (k: string, v: string | number) =>
     setForm((f) => ({ ...f, [k]: v }));
 
-  const handleImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImage = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview);
+
+    const tempPreviewUrl = URL.createObjectURL(file);
+    setPreview(tempPreviewUrl);
     setImageFile(file);
-    setPreview(URL.createObjectURL(file));
+    setOptimizedDataUrl(null);
+    setImageOptimizeError('');
+    setImageOptimizing(true);
+
+    const optimizeForm = new FormData();
+    optimizeForm.set('image', file);
+    const result = await optimizeListingPhoto(optimizeForm);
+
+    setImageOptimizing(false);
+
+    if ('dataUrl' in result) {
+      URL.revokeObjectURL(tempPreviewUrl);
+      setPreview(result.dataUrl);
+      setOptimizedDataUrl(result.dataUrl);
+      setImageOptimizeError('');
+      generateBlurDataUrl(result.dataUrl);
+      return;
+    }
+
+    setImageOptimizeError(
+      'error' in result && result.error
+        ? `Failed to automatically optimize image. You can try uploading again. (${result.error.length > 140 ? `${result.error.slice(0, 137)}…` : result.error})`
+        : 'Failed to automatically optimize image. You can try uploading again.',
+    );
     generateBlurDataUrl(file);
   };
 
-  const generateBlurDataUrl = (file: File) => {
+  const generateBlurDataUrl = (source: File | string) => {
     blurDataUrlRef.current = new Promise<string | null>((resolve) => {
       try {
         const img = new window.Image();
+        const objectUrl = typeof source !== 'string' ? URL.createObjectURL(source) : null;
+        const src = typeof source === 'string' ? source : objectUrl!;
         img.onload = () => {
           try {
             const maxDim = 32;
@@ -181,14 +230,14 @@ export default function ListingForm({
           } catch {
             resolve(null);
           } finally {
-            URL.revokeObjectURL(img.src);
+            if (objectUrl) URL.revokeObjectURL(objectUrl);
           }
         };
         img.onerror = () => {
-          URL.revokeObjectURL(img.src);
+          if (objectUrl) URL.revokeObjectURL(objectUrl);
           resolve(null);
         };
-        img.src = URL.createObjectURL(file);
+        img.src = src;
       } catch {
         resolve(null);
       }
@@ -198,6 +247,8 @@ export default function ListingForm({
   const clearImage = () => {
     if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview);
     setImageFile(null);
+    setOptimizedDataUrl(null);
+    setImageOptimizeError('');
     setPreview(null);
     blurDataUrlRef.current = Promise.resolve(null);
     setForm((f) => ({ ...f, image_url: undefined }));
@@ -232,6 +283,16 @@ export default function ListingForm({
 
       const blur = await blurDataUrlRef.current;
 
+      let uploadFile: File | null = null;
+      if (optimizedDataUrl) {
+        uploadFile = await dataUrlToFile(
+          optimizedDataUrl,
+          imageFile?.name ?? 'photo.jpg',
+        );
+      } else if (imageFile) {
+        uploadFile = imageFile;
+      }
+
       const formData = new FormData();
 
       formData.set('title', form.title.trim());
@@ -247,12 +308,12 @@ export default function ListingForm({
       formData.set('contact_email', form.contact_email.trim());
       formData.set('contact_phone', form.contact_phone?.trim() || '');
       formData.set('status', String(form.status ?? 'active'));
-      if (imageFile) formData.set('image_file', imageFile);
+      if (uploadFile) formData.set('image_file', uploadFile);
 
       const result = listingId
         ? await updateListing(listingId, formData)
         : await createListing(formData);
-        
+
       if (result?.error) throw new Error(result.error);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Something went wrong.');
@@ -389,6 +450,17 @@ export default function ListingForm({
           {preview && (
             <div className="mt-2">
               <div className="relative w-48">
+                {imageOptimizing && (
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-2 rounded-2xl border border-border bg-background/80 px-3 text-center backdrop-blur-sm">
+                    <Loader2
+                      className="size-8 shrink-0 animate-spin text-(--accent-deep)"
+                      aria-hidden
+                    />
+                    <span className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      Optimizing image…
+                    </span>
+                  </div>
+                )}
                 <Image
                   src={preview}
                   alt="Preview"
@@ -409,6 +481,11 @@ export default function ListingForm({
                   <X />
                 </Button>
               </div>
+              {imageOptimizeError ? (
+                <FieldError className="mt-2 max-w-xs">
+                  {imageOptimizeError}
+                </FieldError>
+              ) : null}
             </div>
           )}
         </Field>
@@ -472,7 +549,7 @@ export default function ListingForm({
 
         <Button
           type="submit"
-          disabled={loading}
+          disabled={loading || imageOptimizing}
           className="h-12 w-full rounded-full border border-[#b58d5f]/70 bg-[linear-gradient(180deg,#c49a68,#a67841)] text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)] transition hover:-translate-y-0.5 hover:brightness-105 disabled:translate-y-0 disabled:opacity-50"
         >
           {loading ? 'Saving…' : listingId ? 'Update Listing' : 'Publish Listing'}
