@@ -16,7 +16,6 @@ const OUT_W = 1200;
 const OUT_H = 1600;
 const BLUR_PAD = 0.1;
 const BLUR_SIGMA = 18;
-const MAX_OPTIMIZE_INPUT_BYTES = 10 * 1024 * 1024;
 
 type Region = { left: number; top: number; width: number; height: number };
 
@@ -56,9 +55,6 @@ export async function optimizeListingPhoto(
   const file = formData.get("image");
   if (!(file instanceof File) || !file.type.startsWith("image/")) {
     return { error: "Please upload a valid image file." };
-  }
-  if (file.size === 0 || file.size > MAX_OPTIMIZE_INPUT_BYTES) {
-    return { error: "Image must be between 1 byte and 10 MiB." };
   }
 
   try {

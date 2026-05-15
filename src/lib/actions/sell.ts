@@ -256,7 +256,12 @@ export async function updateListing(
       .eq("id", id)
       .eq("user_id", user.id);
 
-    if (dbError) return { error: dbError.message };
+    if (dbError) {
+      if (imageFile && oldImageUrl !== image.image_url) {
+        await deleteListingImage(image.image_url);
+      }
+      return { error: dbError.message };
+    }
 
     updateTag(`listing:${id}`);
     updateTag("listings");
