@@ -57,7 +57,7 @@ export async function optimizeListingPhoto(
   if (!(file instanceof File) || !file.type.startsWith("image/")) {
     return { error: "Please upload a valid image file." };
   }
-  if (file.size <= 0 || file.size > MAX_OPTIMIZE_INPUT_BYTES) {
+  if (file.size === 0 || file.size > MAX_OPTIMIZE_INPUT_BYTES) {
     return { error: "Image must be between 1 byte and 10 MB." };
   }
 
