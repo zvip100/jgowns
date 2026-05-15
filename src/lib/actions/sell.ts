@@ -257,12 +257,17 @@ export async function updateListing(
       .eq("user_id", user.id);
 
     if (dbError) {
-      if (imageFile && oldImageUrl !== image.image_url) {
+      if (imageFile) {
         const cleanup = await deleteListingImage(image.image_url);
         if ("error" in cleanup) {
           console.warn(
             "Failed to clean up replacement image after listing update error:",
-            cleanup.error,
+            {
+              listingId: id,
+              oldImageUrl,
+              replacementImageUrl: image.image_url,
+              error: cleanup.error,
+            },
           );
         }
       }
