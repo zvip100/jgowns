@@ -26,12 +26,14 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   experimental: {
     serverActions: {
-      bodySizeLimit: "10mb",
+      bodySizeLimit: "30mb",
     },
+    proxyClientMaxBodySize: "30mb",
   },
   images: {
     qualities: [75],
     remotePatterns: supabasePattern ? [supabasePattern] : [],
+    minimumCacheTTL: 31_536_000, // 365 days
   },
   turbopack: {
     root: projectRoot,

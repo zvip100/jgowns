@@ -11,6 +11,7 @@ import {
   type ServerActionErrorResult,
 } from "@/lib/types";
 import { getAuthClient, type SupabaseServer } from "@/lib/actions/auth";
+import { deleteListingImage } from "@/lib/actions/images";
 
 const CATEGORY_IDS = GOWN_CATEGORIES.map((c) => c.id) as [
   GownCategoryId,
@@ -220,13 +221,15 @@ export async function updateListing(
 
   const { data: existing, error: existingError } = await supabase
     .from("listings")
-    .select("user_id")
+    .select("user_id, image_url")
     .eq("id", id)
     .maybeSingle();
 
   if (existingError) return { error: existingError.message };
   if (!existing) return { error: "Listing not found" };
   if (existing.user_id !== user.id) return { error: "Not authorized" };
+
+  const oldImageUrl: string | null = existing.image_url ?? null;
 
   let shouldRedirect = false;
 
@@ -253,10 +256,31 @@ export async function updateListing(
       .eq("id", id)
       .eq("user_id", user.id);
 
-    if (dbError) return { error: dbError.message };
+    if (dbError) {
+      if (imageFile) {
+        const cleanup = await deleteListingImage(image.image_url);
+        if ("error" in cleanup) {
+          console.warn(
+            "Failed to clean up replacement image after listing update error:",
+            {
+              listingId: id,
+              oldImageUrl,
+              replacementImageUrl: image.image_url,
+              error: cleanup.error,
+            },
+          );
+        }
+      }
+      return { error: dbError.message };
+    }
 
     updateTag(`listing:${id}`);
     updateTag("listings");
+
+    if (imageFile && oldImageUrl && oldImageUrl !== image.image_url) {
+      await deleteListingImage(oldImageUrl);
+    }
+
     shouldRedirect = true;
   } catch (e) {
     return catchSellActionError(e);
