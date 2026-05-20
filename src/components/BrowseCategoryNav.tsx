@@ -1,9 +1,7 @@
 import Link from "next/link";
 
-import {
-  browseParamsToURLSearchParams,
-  canonicalBrowseQueryString,
-} from "@/lib/browse-params";
+import { parseBrowseFilters } from "@/lib/browse-filters";
+import { browseHref } from "@/lib/browse-url";
 import type { PageSearchParams } from "@/lib/types";
 import { GOWN_CATEGORIES, type GownCategoryId } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -27,17 +25,14 @@ function hrefForCategory(
   resolved: PageSearchParams,
   categoryId: GownCategoryId | null,
 ) {
-  const p = browseParamsToURLSearchParams(resolved);
-  if (categoryId) p.set("category", categoryId);
-  else p.delete("category");
-  const qs = canonicalBrowseQueryString(p);
-  return qs ? `/browse?${qs}` : "/browse";
+  const filters = parseBrowseFilters(resolved);
+  if (categoryId) filters.category = categoryId;
+  else delete filters.category;
+  return browseHref(filters);
 }
 
 function categoryFromParams(resolved: PageSearchParams): string {
-  const raw = resolved.category;
-  if (raw === undefined) return "";
-  return Array.isArray(raw) ? (raw[0] ?? "") : raw;
+  return parseBrowseFilters(resolved).category ?? "";
 }
 
 export default function BrowseCategoryNav({

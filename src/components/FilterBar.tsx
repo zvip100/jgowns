@@ -8,6 +8,8 @@ import {
   BROWSE_FILTER_PARAMS,
   BROWSE_NAV_PARAMS,
   canonicalBrowseQueryString,
+  formatBrowseParamList,
+  parseBrowseParamList,
 } from "@/lib/browse-params";
 import { GOWN_COLORS, GOWN_SIZES, LOCATIONS } from "@/lib/types";
 import {
@@ -39,11 +41,6 @@ type FilterBarProps = {
   maxBound: number;
   /** Desktop rail only: parent removes the rail column so listings expand. */
   onCollapseRail?: () => void;
-};
-
-const CONDITION_LABEL: Record<string, string> = {
-  "no-alterations": "Ready to Wear",
-  "Brand New": "Brand New",
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -183,21 +180,63 @@ export default function FilterBar({
     : maxBound;
 
   const priceActive = !!(local.minPrice || local.maxPrice);
-  const priceBadgeText = priceActive
-    ? `$${currentMin.toLocaleString()} – $${currentMax.toLocaleString()}`
-    : "Any";
 
-  const renderTriggerBadge = (active: boolean, text: string) => (
+  const multiFilterCount = (key: "size" | "color" | "location") =>
+    parseBrowseParamList(local[key] || null).length;
+
+  const renderCountBadge = (count: number) => (
     <Badge
       variant='outline'
-      className={cn(active ? activeBadgeClass : idleBadgeClass)}
+      className={cn(count > 0 ? activeBadgeClass : idleBadgeClass)}
     >
-      {text || "All"}
+      {count > 0 ? count : "All"}
     </Badge>
   );
 
   const renderPillRow = (
-    key: keyof typeof local,
+    key: "size" | "color" | "location",
+    options: ReadonlyArray<{ value: string; label: string }>,
+    ariaLabel: string,
+  ) => {
+    const selected = parseBrowseParamList(local[key] || null);
+    const hasAny = selected.length > 0;
+    return (
+      <div role='group' aria-label={ariaLabel} className={pillRowClass}>
+        <button
+          type='button'
+          onClick={() => updateFilter(key, "")}
+          data-active={!hasAny}
+          aria-pressed={!hasAny}
+          className={pillClass}
+        >
+          All
+        </button>
+        {options.map((opt) => {
+          const active = selected.includes(opt.value);
+          return (
+            <button
+              key={opt.value}
+              type='button'
+              onClick={() => {
+                const next = active
+                  ? selected.filter((v) => v !== opt.value)
+                  : [...selected, opt.value];
+                updateFilter(key, formatBrowseParamList(next));
+              }}
+              data-active={active}
+              aria-pressed={active}
+              className={pillClass}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderSinglePillRow = (
+    key: "cond",
     options: ReadonlyArray<{ value: string; label: string }>,
     ariaLabel: string,
   ) => {
@@ -288,7 +327,7 @@ export default function FilterBar({
           <AccordionTrigger className={triggerClass}>
             <span className={triggerRowClass}>
               <span className={labelClass}>Size</span>
-              {renderTriggerBadge(!!local.size, local.size)}
+              {renderCountBadge(multiFilterCount("size"))}
             </span>
           </AccordionTrigger>
           <AccordionContent className='px-1 pb-3'>
@@ -304,7 +343,7 @@ export default function FilterBar({
           <AccordionTrigger className={triggerClass}>
             <span className={triggerRowClass}>
               <span className={labelClass}>Color</span>
-              {renderTriggerBadge(!!local.color, local.color)}
+              {renderCountBadge(multiFilterCount("color"))}
             </span>
           </AccordionTrigger>
           <AccordionContent className='px-1 pb-3'>
@@ -320,7 +359,7 @@ export default function FilterBar({
           <AccordionTrigger className={triggerClass}>
             <span className={triggerRowClass}>
               <span className={labelClass}>Location</span>
-              {renderTriggerBadge(!!local.location, local.location)}
+              {renderCountBadge(multiFilterCount("location"))}
             </span>
           </AccordionTrigger>
           <AccordionContent className='px-1 pb-3'>
@@ -336,14 +375,11 @@ export default function FilterBar({
           <AccordionTrigger className={triggerClass}>
             <span className={triggerRowClass}>
               <span className={labelClass}>Condition</span>
-              {renderTriggerBadge(
-                !!local.cond,
-                CONDITION_LABEL[local.cond] ?? local.cond
-              )}
+              {renderCountBadge(local.cond ? 1 : 0)}
             </span>
           </AccordionTrigger>
           <AccordionContent className='px-1 pb-3'>
-            {renderPillRow(
+            {renderSinglePillRow(
               "cond",
               [
                 { value: "no-alterations", label: "Ready to Wear" },
@@ -358,7 +394,7 @@ export default function FilterBar({
           <AccordionTrigger className={triggerClass}>
             <span className={triggerRowClass}>
               <span className={labelClass}>Price</span>
-              {renderTriggerBadge(priceActive, priceBadgeText)}
+              {renderCountBadge(priceActive ? 1 : 0)}
             </span>
           </AccordionTrigger>
           <AccordionContent className='px-1 pt-1 pb-3'>

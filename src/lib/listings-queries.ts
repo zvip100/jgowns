@@ -1,7 +1,7 @@
 import { cacheLife, cacheTag } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import type { ListingsFilters } from "@/lib/types";
+import type { BrowseFilters } from "@/lib/types";
 import { anonClient } from "@/lib/supabase/anon";
 import { createClient } from "@/lib/supabase/server";
 import type {
@@ -52,7 +52,7 @@ async function selectListingById(
 }
 
 export async function fetchListings(
-  filters: ListingsFilters,
+  filters: BrowseFilters,
 ): Promise<ListingsListResult> {
   "use cache";
   applyListingsCachePolicy();
@@ -63,12 +63,16 @@ export async function fetchListings(
     .eq("status", "active")
     .order("created_at", { ascending: false });
 
-  const eqColumns = ["category", "size", "color", "location"] as const;
+  if (filters.category) query = query.eq("category", filters.category);
 
-  for (const key of eqColumns) {
-    const value = filters[key];
-    if (value) query = query.eq(key, value);
+  const inColumns = ["size", "color", "location"] as const;
+  for (const key of inColumns) {
+    const values = filters[key];
+    if (!values?.length) continue;
+    if (values.length === 1) query = query.eq(key, values[0]);
+    else query = query.in(key, values);
   }
+
   if (filters.cond === "no-alterations") {
     query = query.in("condition", ["Brand New", "Perfect Condition"]);
   } else if (filters.cond) {
@@ -108,7 +112,7 @@ export async function fetchListingById(id: string): Promise<ListingByIdResult> {
   return selectListingById(anonClient, normalizedId, "anon");
 }
 
-/** Uncached: request cookies so RLS can return the row to the owning seller (e.g. sold/draft). */
+/** Uncached: request cookies so RLS can return the row to the owning seller (e.g. sold/removed). */
 export async function fetchListingByIdForSessionUser(
   id: string,
 ): Promise<ListingByIdResult> {

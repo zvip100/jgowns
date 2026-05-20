@@ -11,7 +11,7 @@ create table listings (
   category text check (
     category is null
     or category in (
-      'bride',
+      'bridal',
       'mother-of-the-bride',
       'girls',
       'women',
@@ -24,7 +24,7 @@ create table listings (
   image_blur_data_url text,
   contact_email text not null,
   contact_phone text,
-  status text default 'active' check (status in ('active', 'sold', 'draft')),
+  status text default 'active' check (status in ('active', 'sold', 'removed')),
   created_at timestamp with time zone default now()
 );
 

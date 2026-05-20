@@ -1,5 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import { parseFilters } from "@/lib/listings-data";
+import { parseBrowseFilters } from "@/lib/browse-filters";
 import type { PageSearchParams } from "@/lib/types";
 import { fetchListings } from "@/lib/listings-queries";
 
@@ -9,7 +9,7 @@ export default async function ListingsCount({
   searchParams: Promise<PageSearchParams>;
 }) {
   const resolved = await searchParams;
-  const { listings } = await fetchListings(parseFilters(resolved));
+  const { listings } = await fetchListings(parseBrowseFilters(resolved));
 
   return (
     <Badge

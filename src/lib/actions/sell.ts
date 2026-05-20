@@ -43,7 +43,7 @@ const listingInputSchema = z.object({
   image_blur_data_url: z.string().trim().optional(),
   contact_email: z.email(),
   contact_phone: contactPhoneField,
-  status: z.enum(["active", "sold", "draft"]).default("active"),
+  status: z.enum(["active", "sold", "removed"]).default("active"),
 });
 
 type ParsedListing = z.infer<typeof listingInputSchema>;

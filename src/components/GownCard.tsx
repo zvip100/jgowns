@@ -10,7 +10,7 @@ export default function GownCard({
   backQuery,
 }: {
   listing: Listing;
-  /** Filter query only (e.g. `category=bride`); omit when no filters. */
+  /** Filter query only (e.g. `category=bridal`); omit when no filters. */
   backQuery?: string;
 }) {
   const href = backQuery
