@@ -1,4 +1,4 @@
-import { browseHrefFromBackParam } from "@/lib/browse-params";
+import { browseHrefFromBack } from "@/lib/browse-url";
 import {
   fetchListingById,
   fetchListingByIdForSessionUser,
@@ -20,7 +20,7 @@ export default async function ListingPage({
   const [{ id }, { back, from }] = await Promise.all([params, searchParams]);
 
   const fromDashboard = from === 'dash';
-  const backHref = fromDashboard ? '/dashboard' : browseHrefFromBackParam(back);
+  const backHref = fromDashboard ? '/dashboard' : browseHrefFromBack(back);
   const backLabel = fromDashboard ? 'Back to dashboard' : 'Browse all gowns';
 
   const { listing: publicListing, error: publicError } =

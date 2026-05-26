@@ -187,6 +187,15 @@ Long files and repeated code are bugs. Before you write something, check if it a
 - Reuse what already exists in `src/components/` and `src/components/ui/` before inventing a new variant. Search first, build second.
 - Keep component APIs minimal: only the props that are actually needed. No "kitchen sink" props "just in case".
 
+### shadcn / `src/components/ui` (do not edit)
+
+Files under **`src/components/ui/`** are installed and updated by the **shadcn CLI** — they are upstream UI primitives, not project-owned code.
+
+- **Never modify** any file in `src/components/ui/` (no class tweaks, logic changes, or “small fixes” in accordion, button, select, etc.).
+- **Do** customize from app code: pass `className` / `classNames` on the shadcn component, wrap it in a component under `src/components/`, or add targeted rules in `src/app/globals.css`.
+- **Do** re-run `npx shadcn@latest add …` / `diff` when you need an intentional upstream update — then re-apply app-level overrides only outside `ui/`.
+- If you need a forked variant, copy to `src/components/<Name>.tsx` (or similar), **not** by editing the `ui/` original.
+
 ### General
 
 - No dead code, no commented-out blocks left behind, no `TODO` without a reason.
@@ -205,3 +214,4 @@ Long files and repeated code are bugs. Before you write something, check if it a
 - [ ] Did I extract repeated Tailwind class strings into a component or utility?
 - [ ] Did I extract repeated JSX shapes into a small reusable component?
 - [ ] Did I check `src/components/` and `src/components/ui/` before building something new?
+- [ ] Did I avoid editing any file under `src/components/ui/`? (override via `className`, wrappers, or globals only)

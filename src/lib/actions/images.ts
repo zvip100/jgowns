@@ -15,7 +15,7 @@ const LISTING_IMAGE_BUCKET = "gown-images";
 const OUT_W = 1200;
 const OUT_H = 1600;
 const BLUR_PAD = 0.1;
-const BLUR_SIGMA = 18;
+const BLUR_SIGMA = 32;
 
 type Region = { left: number; top: number; width: number; height: number };
 

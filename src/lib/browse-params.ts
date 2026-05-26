@@ -1,6 +1,7 @@
-/** Navigation params — driven by the secondary navbar (category rail).*/
-export const BROWSE_NAV_PARAMS = ["category"] as const;
+import type { PageSearchParams } from "@/lib/types";
 
+/** Navigation params — driven by the secondary navbar (category rail). */
+export const BROWSE_NAV_PARAMS = ["category"] as const;
 /** Filter params — driven by the FilterBar. */
 export const BROWSE_FILTER_PARAMS = [
   "size",
@@ -17,6 +18,22 @@ export const BROWSE_PARAM_ORDER = [
   ...BROWSE_FILTER_PARAMS,
 ] as const;
 
+/** Split a browse filter param into discrete values (comma-separated or repeated keys). */
+export function parseBrowseParamList(
+  value: string | string[] | null | undefined,
+): string[] {
+  if (value == null || value === "") return [];
+  const parts = Array.isArray(value)
+    ? value.flatMap((v) => v.split(","))
+    : value.split(",");
+  return [...new Set(parts.map((s) => s.trim()).filter(Boolean))];
+}
+
+/** Encode multiple filter values for a single query param. */
+export function formatBrowseParamList(values: string[]): string {
+  return [...new Set(values.map((s) => s.trim()).filter(Boolean))].join(",");
+}
+
 export function canonicalBrowseQueryString(params: URLSearchParams): string {
   const canonical = new URLSearchParams();
 
@@ -27,36 +44,15 @@ export function canonicalBrowseQueryString(params: URLSearchParams): string {
   return canonical.toString();
 }
 
-/**
- * Builds `/browse` or `/browse?…` from the listing detail `back` search param.
- * `back` is filter query only (e.g. `category=bride`); also accepts legacy
- * values that included `/browse?…`.
- */
-export function browseHrefFromBackParam(back: string | undefined): string {
-  if (!back?.trim()) return "/browse";
-  let trimmed = back.trim().replace(/^\?/, "");
-  if (trimmed.startsWith("/browse?")) {
-    trimmed = trimmed.slice("/browse?".length);
-  } else if (trimmed.startsWith("/browse")) {
-    trimmed = trimmed.slice("/browse".length).replace(/^\?/, "");
-  }
-  const incoming = new URLSearchParams(trimmed);
-  const safe = canonicalBrowseQueryString(incoming);
-  return safe ? `/browse?${safe}` : "/browse";
-}
-
-import type { PageSearchParams } from "@/lib/types";
-
-/** Rebuild URLSearchParams from a resolved /browse `searchParams` object. */
-export function browseParamsToURLSearchParams(
-  resolved: PageSearchParams,
-): URLSearchParams {
-  const p = new URLSearchParams();
+/** `URLSearchParams` → {@link PageSearchParams} for browse query keys. */
+export function toPageSearchParams(
+  params: URLSearchParams,
+): PageSearchParams {
+  const resolved: PageSearchParams = {};
   for (const key of BROWSE_PARAM_ORDER) {
-    const raw = resolved[key];
-    if (raw === undefined) continue;
-    const val = Array.isArray(raw) ? raw[0] : raw;
-    if (val) p.set(key, val);
+    const values = params.getAll(key);
+    if (values.length === 0) continue;
+    resolved[key] = values.length === 1 ? values[0] : values;
   }
-  return p;
+  return resolved;
 }

@@ -9,11 +9,8 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import {
-  buildBrowseBackQuery,
-  hasActiveBrowseFilters,
-  parseFilters,
-} from "@/lib/listings-data";
+import { hasBrowseFilters, parseBrowseFilters } from "@/lib/browse-filters";
+import { filtersToQuery } from "@/lib/browse-url";
 import type { Listing, ListingsListResult, PageSearchParams } from "@/lib/types";
 import { fetchListings } from "@/lib/listings-queries";
 
@@ -23,12 +20,10 @@ export default async function ListingsGrid({
   searchParams: Promise<PageSearchParams>;
 }) {
   const resolved = await searchParams;
-  const filters = parseFilters(resolved);
+  const filters = parseBrowseFilters(resolved);
   const { listings, error }: ListingsListResult = await fetchListings(filters);
 
-  const backQueryRaw = hasActiveBrowseFilters(filters)
-    ? buildBrowseBackQuery(filters)
-    : "";
+  const backQueryRaw = hasBrowseFilters(filters) ? filtersToQuery(filters) : "";
   const backQuery = backQueryRaw || undefined;
 
   if (error) {

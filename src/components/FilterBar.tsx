@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ChevronLeft, SlidersHorizontal, X } from "lucide-react";
 
@@ -8,8 +8,20 @@ import {
   BROWSE_FILTER_PARAMS,
   BROWSE_NAV_PARAMS,
   canonicalBrowseQueryString,
+  formatBrowseParamList,
+  parseBrowseParamList,
 } from "@/lib/browse-params";
-import { GOWN_COLORS, GOWN_SIZES, LOCATIONS } from "@/lib/types";
+import {
+  getBrowseAllowedSizes,
+  getSizeFilterOptions,
+  type SizeOption,
+} from "@/lib/gown-sizes";
+import {
+  GOWN_CATEGORIES,
+  GOWN_COLORS,
+  LOCATIONS,
+  type GownCategoryId,
+} from "@/lib/types";
 import {
   Accordion,
   AccordionContent,
@@ -39,11 +51,6 @@ type FilterBarProps = {
   maxBound: number;
   /** Desktop rail only: parent removes the rail column so listings expand. */
   onCollapseRail?: () => void;
-};
-
-const CONDITION_LABEL: Record<string, string> = {
-  "no-alterations": "Ready to Wear",
-  "Brand New": "Brand New",
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -101,17 +108,41 @@ export default function FilterBar({
 
   const priceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const categoryParam = params.get("category") ?? "";
+  const activeCategory = GOWN_CATEGORIES.some((c) => c.id === categoryParam)
+    ? (categoryParam as GownCategoryId)
+    : undefined;
+  const sizeFilterOptions = getSizeFilterOptions(activeCategory ?? null);
+  const allowedSizes = useMemo(
+    () => getBrowseAllowedSizes(activeCategory),
+    [activeCategory],
+  );
+  const allowedSizeSet = useMemo(() => new Set(allowedSizes), [allowedSizes]);
+
   // Sync local state when URL changes externally (clear-all, browser back/forward)
   useEffect(() => {
+    const rawSize = params.get("size") ?? "";
+    const selected = parseBrowseParamList(rawSize || null);
+    const valid = selected.filter((s) => allowedSizeSet.has(s));
+    const sizeValue = formatBrowseParamList(valid);
+
     setLocal({
-      size: params.get("size") ?? "",
+      size: sizeValue,
       color: params.get("color") ?? "",
       location: params.get("location") ?? "",
       cond: params.get("cond") ?? "",
       minPrice: params.get("minPrice") ?? "",
       maxPrice: params.get("maxPrice") ?? "",
     });
-  }, [params]);
+
+    if (sizeValue !== rawSize) {
+      const p = new URLSearchParams(params.toString());
+      if (sizeValue) p.set("size", sizeValue);
+      else p.delete("size");
+      const qs = canonicalBrowseQueryString(p);
+      router.replace(qs ? `/browse?${qs}` : "/browse", { scroll: false });
+    }
+  }, [params, allowedSizes, router]);
 
   const hasFilters = BROWSE_FILTER_PARAMS.some((k) => params.has(k));
 
@@ -183,21 +214,143 @@ export default function FilterBar({
     : maxBound;
 
   const priceActive = !!(local.minPrice || local.maxPrice);
-  const priceBadgeText = priceActive
-    ? `$${currentMin.toLocaleString()} – $${currentMax.toLocaleString()}`
-    : "Any";
 
-  const renderTriggerBadge = (active: boolean, text: string) => (
+  const multiFilterCount = (key: "size" | "color" | "location") =>
+    parseBrowseParamList(local[key] || null).length;
+
+  const renderCountBadge = (count: number) => (
     <Badge
       variant='outline'
-      className={cn(active ? activeBadgeClass : idleBadgeClass)}
+      className={cn(count > 0 ? activeBadgeClass : idleBadgeClass)}
     >
-      {text || "All"}
+      {count > 0 ? count : "All"}
     </Badge>
   );
 
+  const renderGroupedPillSections = (
+    key: "size",
+    options: ReadonlyArray<SizeOption>,
+    ariaLabel: string,
+  ) => {
+    const selected = parseBrowseParamList(local[key] || null);
+    const hasAny = selected.length > 0;
+    const hasGroups = options.some((o) => o.group);
+
+    const renderButtons = (opts: ReadonlyArray<SizeOption>) =>
+      opts.map((opt) => {
+        const active = selected.includes(opt.value);
+        return (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => {
+              const next = active
+                ? selected.filter((v) => v !== opt.value)
+                : [...selected, opt.value];
+              updateFilter(key, formatBrowseParamList(next));
+            }}
+            data-active={active}
+            aria-pressed={active}
+            className={pillClass}
+          >
+            {opt.label}
+          </button>
+        );
+      });
+
+    if (!hasGroups) {
+      return (
+        <div role='group' aria-label={ariaLabel} className={pillRowClass}>
+          <button
+            type="button"
+            onClick={() => updateFilter(key, "")}
+            data-active={!hasAny}
+            aria-pressed={!hasAny}
+            className={pillClass}
+          >
+            All
+          </button>
+          {renderButtons(options)}
+        </div>
+      );
+    }
+
+    const sections = new Map<string, SizeOption[]>();
+    for (const opt of options) {
+      const g = opt.group ?? "Other";
+      if (!sections.has(g)) sections.set(g, []);
+      sections.get(g)!.push(opt);
+    }
+
+    return (
+      <div className="flex flex-col gap-3" role="group" aria-label={ariaLabel}>
+        <div className={pillRowClass}>
+          <button
+            type="button"
+            onClick={() => updateFilter(key, "")}
+            data-active={!hasAny}
+            aria-pressed={!hasAny}
+            className={pillClass}
+          >
+            All
+          </button>
+        </div>
+        {[...sections.entries()].map(([group, opts]) => (
+          <div key={group}>
+            <p className="mb-1.5 px-1 text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-[#8a7462]">
+              {group}
+            </p>
+            <div className={pillRowClass}>{renderButtons(opts)}</div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
   const renderPillRow = (
-    key: keyof typeof local,
+    key: "size" | "color" | "location",
+    options: ReadonlyArray<{ value: string; label: string }>,
+    ariaLabel: string,
+  ) => {
+    const selected = parseBrowseParamList(local[key] || null);
+    const hasAny = selected.length > 0;
+    return (
+      <div role='group' aria-label={ariaLabel} className={pillRowClass}>
+        <button
+          type='button'
+          onClick={() => updateFilter(key, "")}
+          data-active={!hasAny}
+          aria-pressed={!hasAny}
+          className={pillClass}
+        >
+          All
+        </button>
+        {options.map((opt) => {
+          const active = selected.includes(opt.value);
+          return (
+            <button
+              key={opt.value}
+              type='button'
+              onClick={() => {
+                const next = active
+                  ? selected.filter((v) => v !== opt.value)
+                  : [...selected, opt.value];
+                updateFilter(key, formatBrowseParamList(next));
+              }}
+              data-active={active}
+              aria-pressed={active}
+              className={pillClass}
+            >
+              {opt.label}
+            </button>
+          );
+        })}
+      </div>
+    );
+  };
+
+  const renderSinglePillRow = (
+    key: "cond",
     options: ReadonlyArray<{ value: string; label: string }>,
     ariaLabel: string,
   ) => {
@@ -288,15 +441,11 @@ export default function FilterBar({
           <AccordionTrigger className={triggerClass}>
             <span className={triggerRowClass}>
               <span className={labelClass}>Size</span>
-              {renderTriggerBadge(!!local.size, local.size)}
+              {renderCountBadge(multiFilterCount("size"))}
             </span>
           </AccordionTrigger>
-          <AccordionContent className='px-1 pb-3'>
-            {renderPillRow(
-              "size",
-              GOWN_SIZES.map((s) => ({ value: s, label: s })),
-              "Size",
-            )}
+          <AccordionContent className='px-1 pb-3 h-auto'>
+            {renderGroupedPillSections("size", sizeFilterOptions, "Size")}
           </AccordionContent>
         </AccordionItem>
 
@@ -304,7 +453,7 @@ export default function FilterBar({
           <AccordionTrigger className={triggerClass}>
             <span className={triggerRowClass}>
               <span className={labelClass}>Color</span>
-              {renderTriggerBadge(!!local.color, local.color)}
+              {renderCountBadge(multiFilterCount("color"))}
             </span>
           </AccordionTrigger>
           <AccordionContent className='px-1 pb-3'>
@@ -320,7 +469,7 @@ export default function FilterBar({
           <AccordionTrigger className={triggerClass}>
             <span className={triggerRowClass}>
               <span className={labelClass}>Location</span>
-              {renderTriggerBadge(!!local.location, local.location)}
+              {renderCountBadge(multiFilterCount("location"))}
             </span>
           </AccordionTrigger>
           <AccordionContent className='px-1 pb-3'>
@@ -336,14 +485,11 @@ export default function FilterBar({
           <AccordionTrigger className={triggerClass}>
             <span className={triggerRowClass}>
               <span className={labelClass}>Condition</span>
-              {renderTriggerBadge(
-                !!local.cond,
-                CONDITION_LABEL[local.cond] ?? local.cond
-              )}
+              {renderCountBadge(local.cond ? 1 : 0)}
             </span>
           </AccordionTrigger>
           <AccordionContent className='px-1 pb-3'>
-            {renderPillRow(
+            {renderSinglePillRow(
               "cond",
               [
                 { value: "no-alterations", label: "Ready to Wear" },
@@ -358,7 +504,7 @@ export default function FilterBar({
           <AccordionTrigger className={triggerClass}>
             <span className={triggerRowClass}>
               <span className={labelClass}>Price</span>
-              {renderTriggerBadge(priceActive, priceBadgeText)}
+              {renderCountBadge(priceActive ? 1 : 0)}
             </span>
           </AccordionTrigger>
           <AccordionContent className='px-1 pt-1 pb-3'>

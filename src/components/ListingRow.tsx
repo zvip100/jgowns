@@ -10,7 +10,7 @@ import { GOWN_CATEGORIES, type Listing } from '@/lib/types';
 const statusStyles: Record<Listing['status'], string> = {
   active: 'bg-[#e8f4ec] text-[#2d7a4f]',
   sold: 'bg-(--sold) text-white',
-  draft: 'bg-[#fef4e0] text-[#8a6a30]',
+  removed: 'bg-[#fef4e0] text-[#8a6a30]',
 };
 
 export default function ListingRow({ listing }: { listing: Listing }) {

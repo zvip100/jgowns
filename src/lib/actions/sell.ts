@@ -5,6 +5,7 @@ import { updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
+import { isValidSizeForCategory } from "@/lib/gown-sizes";
 import {
   GOWN_CATEGORIES,
   type GownCategoryId,
@@ -30,21 +31,26 @@ const contactPhoneField = z.preprocess(
   z.union([z.undefined(), z.string().min(7).max(15)]),
 );
 
-const listingInputSchema = z.object({
-  title: z.string().trim().min(4),
-  description: z.string().trim().optional(),
-  size: z.string().trim().min(1),
-  color: z.string().trim().optional(),
-  location: z.string().trim().min(1),
-  condition: z.string().trim().min(1),
-  category: z.enum(CATEGORY_IDS),
-  price: z.coerce.number(),
-  image_url: z.url().optional(),
-  image_blur_data_url: z.string().trim().optional(),
-  contact_email: z.email(),
-  contact_phone: contactPhoneField,
-  status: z.enum(["active", "sold", "draft"]).default("active"),
-});
+const listingInputSchema = z
+  .object({
+    title: z.string().trim().min(4),
+    description: z.string().trim().optional(),
+    size: z.string().trim().min(1),
+    color: z.string().trim().optional(),
+    location: z.string().trim().min(1),
+    condition: z.string().trim().min(1),
+    category: z.enum(CATEGORY_IDS),
+    price: z.coerce.number(),
+    image_url: z.url().optional(),
+    image_blur_data_url: z.string().trim().optional(),
+    contact_email: z.email(),
+    contact_phone: contactPhoneField,
+    status: z.enum(["active", "sold", "removed"]).default("active"),
+  })
+  .refine((data) => isValidSizeForCategory(data.category, data.size), {
+    message: "Size is not valid for this category.",
+    path: ["size"],
+  });
 
 type ParsedListing = z.infer<typeof listingInputSchema>;
 
