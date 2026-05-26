@@ -2,13 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
-import { CircleDollarSign, Loader2, Mail, Phone, X } from 'lucide-react';
-
+import { ChevronDown, CircleDollarSign, Loader2, Mail, Phone, X } from 'lucide-react';
+import { getSizeSelectGroups, isValidSizeForCategory } from '@/lib/gown-sizes';
 import {
   GOWN_CATEGORIES,
   GOWN_COLORS,
   GOWN_CONDITIONS,
-  GOWN_SIZES,
   LOCATIONS,
   type GownCategoryId,
   type GownCondition,
@@ -16,7 +15,14 @@ import {
 } from '@/lib/types';
 import { optimizeListingPhoto } from '@/lib/actions/images';
 import { createListing, updateListing } from '@/lib/actions/sell';
+import { cn } from '@/lib/utils';
 
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -40,6 +46,7 @@ import {
   SelectContent,
   SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
@@ -82,6 +89,7 @@ function SelectField({
   value,
   onChange,
   required,
+  disabled,
 }: {
   id: string;
   label: string;
@@ -90,6 +98,7 @@ function SelectField({
   value: string;
   onChange: (v: string) => void;
   required?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <Field>
@@ -97,8 +106,12 @@ function SelectField({
         {label}
         {required && ' *'}
       </FieldLabel>
-      <Select value={value || undefined} onValueChange={onChange}>
-        <SelectTrigger id={id} className="h-10 w-full bg-card">
+      <Select
+        value={value || undefined}
+        onValueChange={onChange}
+        disabled={disabled}
+      >
+        <SelectTrigger id={id} className="h-8 w-full bg-card">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
@@ -111,6 +124,145 @@ function SelectField({
           </SelectGroup>
         </SelectContent>
       </Select>
+    </Field>
+  );
+}
+
+const sizePickerTriggerClass =
+  'flex h-8 w-full items-center justify-between gap-1.5 rounded-lg border border-input bg-card px-2.5 text-sm transition-colors outline-none select-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50';
+
+const sizePickerPanelClass =
+  'absolute z-50 mt-1 max-h-[min(18rem,55vh)] w-full overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-md';
+
+const sizeGroupTriggerClass =
+  'py-2 px-2.5 text-sm font-normal text-foreground hover:bg-muted/40 hover:no-underline [&[data-state=open]]:bg-muted/50';
+
+const sizeOptionClass =
+  'inline-flex min-w-[2.25rem] items-center justify-center rounded-md border border-input bg-background px-2 py-1 text-xs font-medium transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 data-[active=true]:border-primary data-[active=true]:bg-primary data-[active=true]:text-primary-foreground';
+
+function sizeGroupId(label: string, index: number) {
+  return label
+    ? label.toLowerCase().replace(/\s+/g, '-')
+    : `group-${index}`;
+}
+
+function CategorySizeSelect({
+  category,
+  value,
+  onChange,
+}: {
+  category: GownCategoryId | null;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const groups = category ? getSizeSelectGroups(category) : [];
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [openGroup, setOpenGroup] = useState('');
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setPickerOpen(false);
+    setOpenGroup('');
+  }, [category]);
+
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (rootRef.current?.contains(e.target as Node)) return;
+      setPickerOpen(false);
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPickerOpen(false);
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [pickerOpen]);
+
+  const disabled = !category;
+  const placeholder = category ? 'Select size' : 'Select category first';
+
+  return (
+    <Field>
+      <FieldLabel htmlFor="size-picker" className={labelTone}>
+        Size *
+      </FieldLabel>
+      <div ref={rootRef} className="relative">
+        <button
+          id="size-picker"
+          type="button"
+          disabled={disabled}
+          aria-haspopup="listbox"
+          aria-expanded={pickerOpen}
+          onClick={() => {
+            if (!disabled) setPickerOpen((open) => !open);
+          }}
+          className={cn(
+            sizePickerTriggerClass,
+            !value && 'text-muted-foreground',
+          )}
+        >
+          <span className="truncate">{value || placeholder}</span>
+          <ChevronDown
+            className={cn(
+              'size-4 shrink-0 text-muted-foreground transition-transform',
+              pickerOpen && 'rotate-180',
+            )}
+          />
+        </button>
+
+        {pickerOpen && category ? (
+          <div className={sizePickerPanelClass} role="listbox">
+            <Accordion
+              type="single"
+              collapsible
+              value={openGroup}
+              onValueChange={setOpenGroup}
+              className="w-full"
+            >
+              {groups.map((group, index) => {
+                const id = sizeGroupId(group.label, index);
+                const title = group.label || 'Sizes';
+                return (
+                  <AccordionItem
+                    key={id}
+                    value={id}
+                    className="border-b border-border/60 last:border-0"
+                  >
+                    <AccordionTrigger className={sizeGroupTriggerClass}>
+                      {title}
+                    </AccordionTrigger>
+                    <AccordionContent className="px-2 pt-2 pb-2 h-auto">
+                      <div className="flex flex-wrap gap-1.5">
+                        {group.options.map((o) => (
+                          <button
+                            key={o.value}
+                            type="button"
+                            role="option"
+                            aria-selected={value === o.value}
+                            data-active={value === o.value}
+                            onClick={() => {
+                              onChange(o.value);
+                              setPickerOpen(false);
+                              setOpenGroup('');
+                            }}
+                            className={sizeOptionClass}
+                          >
+                            {o.label}
+                          </button>
+                        ))}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                );
+              })}
+            </Accordion>
+          </div>
+        ) : null}
+      </div>
     </Field>
   );
 }
@@ -337,7 +489,7 @@ export default function ListingForm({
           </FieldLabel>
           <Input
             id="title"
-            className="h-10 bg-card"
+            className="bg-card"
             placeholder="e.g. Vera Wang Ball Gown, Ivory"
             value={form.title || ''}
             onChange={(e) => set('title', e.target.value)}
@@ -365,24 +517,28 @@ export default function ListingForm({
           required
           value={form.category ?? ''}
           options={GOWN_CATEGORIES.map((c) => ({ value: c.id, label: c.label }))}
-          onChange={(v) =>
-            setForm((f) => ({
-              ...f,
-              category: GOWN_CATEGORIES.some((c) => c.id === v)
-                ? (v as GownCategoryId)
-                : null,
-            }))
-          }
+          onChange={(v) => {
+            const category = GOWN_CATEGORIES.some((c) => c.id === v)
+              ? (v as GownCategoryId)
+              : null;
+            setForm((f) => {
+              const keepSize =
+                category &&
+                f.size &&
+                isValidSizeForCategory(category, f.size);
+              return {
+                ...f,
+                category,
+                size: keepSize ? f.size : '',
+              };
+            });
+          }}
         />
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <SelectField
-            id="size"
-            label="Size"
-            placeholder="Select size"
-            required
+          <CategorySizeSelect
+            category={form.category ?? null}
             value={form.size || ''}
-            options={toOpts(GOWN_SIZES)}
             onChange={(v) => set('size', v)}
           />
           <SelectField
@@ -409,7 +565,7 @@ export default function ListingForm({
             <FieldLabel htmlFor="price" className={labelTone}>
               Asking Price *
             </FieldLabel>
-            <InputGroup className="h-10 bg-card">
+            <InputGroup className="bg-card">
               <InputGroupAddon>
                 <InputGroupText className="font-semibold text-foreground">$</InputGroupText>
               </InputGroupAddon>
@@ -502,7 +658,7 @@ export default function ListingForm({
               <FieldLabel htmlFor="contact_email" className={labelTone}>
                 Email *
               </FieldLabel>
-              <InputGroup className="h-10 bg-card">
+              <InputGroup className="bg-card">
                 <InputGroupAddon>
                   <Mail />
                 </InputGroupAddon>
@@ -519,7 +675,7 @@ export default function ListingForm({
               <FieldLabel htmlFor="contact_phone" className={labelTone}>
                 Phone
               </FieldLabel>
-              <InputGroup className="h-10 bg-card">
+              <InputGroup className="bg-card">
                 <InputGroupAddon>
                   <Phone />
                 </InputGroupAddon>

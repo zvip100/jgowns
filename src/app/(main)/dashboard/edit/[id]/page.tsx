@@ -5,6 +5,7 @@ import { notFound } from 'next/navigation';
 export default async function EditListingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const supabase = await createClient();
+  
   const { data: listing } = await supabase.from('listings').select('*').eq('id', id).single();
   if (!listing) notFound();
 

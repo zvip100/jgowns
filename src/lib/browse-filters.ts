@@ -1,8 +1,8 @@
 import { parseBrowseParamList } from "@/lib/browse-params";
+import { getBrowseAllowedSizes } from "@/lib/gown-sizes";
 import {
   GOWN_CATEGORIES,
   GOWN_COLORS,
-  GOWN_SIZES,
   LOCATIONS,
   type BrowseFilters,
   type GownCategoryId,
@@ -49,9 +49,12 @@ function parsePrice(value: string | undefined): number | undefined {
 
 /** Raw `/browse` searchParams → validated filter state for queries and links. */
 export function parseBrowseFilters(params: PageSearchParams): BrowseFilters {
+  const category = pickAllowed(firstParam(params.category), GOWN_CATEGORY_IDS);
+  const allowedSizes = getBrowseAllowedSizes(category);
+
   return {
-    category: pickAllowed(firstParam(params.category), GOWN_CATEGORY_IDS),
-    size: pickAllowedMany(paramList(params.size), GOWN_SIZES),
+    category,
+    size: pickAllowedMany(paramList(params.size), allowedSizes),
     color: pickAllowedMany(paramList(params.color), GOWN_COLORS),
     location: pickAllowedMany(paramList(params.location), LOCATIONS),
     cond: pickAllowed(paramList(params.cond)?.[0], BROWSE_COND_VALUES),

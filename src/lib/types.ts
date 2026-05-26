@@ -49,7 +49,6 @@ export const GOWN_CATEGORIES = [
 
 export type GownCategoryId = (typeof GOWN_CATEGORIES)[number]["id"];
 
-export const GOWN_SIZES = ['0','2','4','6','8','10','12','14','16','18','20','22','24'];
 export const GOWN_COLORS = ['Ivory', 'White', 'Champagne', 'Black', 'Pink', 'Blush', 'Silver', 'Gold', 'Light Blue', 'Other'];
 export const LOCATIONS = ['Borough Park', 'Williamsburg', 'Monsey', 'Monroe', 'Lakewood', 'Catskills', 'Other'];
 export const GOWN_CONDITIONS = ['Brand New', 'Perfect Condition', 'Needs Alterations'] as const;
