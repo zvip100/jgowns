@@ -12,10 +12,14 @@ export const BROWSE_FILTER_PARAMS = [
   "maxPrice",
 ] as const;
 
-/** Stable ordering for /browse query strings (nav first, then filters). */
+/** Pagination — driven by BrowsePagination links. */
+export const BROWSE_PAGINATION_PARAMS = ["page"] as const;
+
+/** Stable ordering for /browse query strings (nav first, then filters, then page). */
 export const BROWSE_PARAM_ORDER = [
   ...BROWSE_NAV_PARAMS,
   ...BROWSE_FILTER_PARAMS,
+  ...BROWSE_PAGINATION_PARAMS,
 ] as const;
 
 /** Split a browse filter param into discrete values (comma-separated or repeated keys). */
@@ -39,7 +43,10 @@ export function canonicalBrowseQueryString(params: URLSearchParams): string {
 
   for (const key of BROWSE_PARAM_ORDER) {
     const value = params.get(key);
-    if (value) canonical.set(key, value);
+    if (!value) continue;
+    // Omit default page=1 for cleaner canonical URLs.
+    if (key === "page" && value === "1") continue;
+    canonical.set(key, value);
   }
   return canonical.toString();
 }

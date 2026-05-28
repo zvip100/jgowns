@@ -3,10 +3,15 @@ import {
   formatBrowseParamList,
   toPageSearchParams,
 } from "@/lib/browse-params";
+import { formatBrowsePage } from "@/lib/browse-pagination";
 import { parseBrowseFilters } from "@/lib/browse-filters";
 import type { BrowseFilters } from "@/lib/types";
+import { firstParam } from "@/lib/utils";
 
-function filtersToSearchParams(filters: BrowseFilters): URLSearchParams {
+function filtersToSearchParams(
+  filters: BrowseFilters,
+  page?: number,
+): URLSearchParams {
   const p = new URLSearchParams();
 
   if (filters.category) p.set("category", filters.category);
@@ -20,17 +25,25 @@ function filtersToSearchParams(filters: BrowseFilters): URLSearchParams {
   if (Number.isFinite(filters.maxPrice))
     p.set("maxPrice", String(filters.maxPrice));
 
+  const pageValue = formatBrowsePage(page ?? 1);
+  if (pageValue) p.set("page", pageValue);
+
   return p;
 }
 
-/** Canonical query string only — e.g. for `?back=` on listing detail. */
+/** Canonical query string — filters and optional page (for `?back=` on listing detail). */
+export function browseQueryString(filters: BrowseFilters, page = 1): string {
+  return canonicalBrowseQueryString(filtersToSearchParams(filters, page));
+}
+
+/** @deprecated Use {@link browseQueryString} when page may be > 1. */
 export function filtersToQuery(filters: BrowseFilters): string {
-  return canonicalBrowseQueryString(filtersToSearchParams(filters));
+  return browseQueryString(filters, 1);
 }
 
 /** Full browse path — e.g. `/browse?category=bridal`. */
-export function browseHref(filters: BrowseFilters): string {
-  const qs = filtersToQuery(filters);
+export function browseHref(filters: BrowseFilters, page = 1): string {
+  const qs = browseQueryString(filters, page);
   return qs ? `/browse?${qs}` : "/browse";
 }
 
@@ -45,5 +58,10 @@ export function browseHrefFromBack(back: string | undefined): string {
     trimmed = trimmed.slice("/browse".length).replace(/^\?/, "");
   }
 
-  return browseHref(parseBrowseFilters(toPageSearchParams(new URLSearchParams(trimmed))));
+  const params = toPageSearchParams(new URLSearchParams(trimmed));
+  const filters = parseBrowseFilters(params);
+  const pageRaw = firstParam(params.page);
+  const page = pageRaw ? Number.parseInt(pageRaw, 10) : 1;
+
+  return browseHref(filters, Number.isFinite(page) && page > 1 ? page : 1);
 }

@@ -17,10 +17,8 @@ type ListingsLayoutProps = {
   categoryNavMobile: ReactNode;
   /** Server-rendered category chips (desktop sub-navbar) */
   categoryNavDesktop: ReactNode;
-  /** Server-rendered count badge (Suspense-wrapped) */
-  count: ReactNode;
-  /** Server-rendered cards grid (Suspense-wrapped) */
-  cards: ReactNode;
+  /** Count + grid (Suspense-wrapped on browse page) */
+  listings: ReactNode;
 };
 
 export default function ListingsLayout({
@@ -28,8 +26,7 @@ export default function ListingsLayout({
   maxBound,
   categoryNavMobile,
   categoryNavDesktop,
-  count,
-  cards,
+  listings,
 }: ListingsLayoutProps) {
   // Filters open by default — the sub-navbar then "extends" downward into
   // the rail. Toggling collapses the rail back behind the sub-navbar.
@@ -196,13 +193,7 @@ export default function ListingsLayout({
           />
         </aside>
 
-        <div className='min-w-0'>
-          {/* lg:pt-3 keeps the count/cards from butting straight against the
-              sub-navbar's bottom border on desktop (where grid lg:pt-0 made
-              the rail flush). Mobile keeps its existing pt-2. */}
-          <div className='mb-4 flex justify-end pt-2 lg:pt-3'>{count}</div>
-          {cards}
-        </div>
+        <div className='min-w-0 pt-2 lg:pt-3'>{listings}</div>
       </div>
     </>
   );

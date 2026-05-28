@@ -30,6 +30,15 @@ export type ListingsListResult = {
   error: ListingReadError;
 };
 
+export type ListingsPageResult = {
+  listings: Listing[] | null;
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  error: ListingReadError;
+};
+
 export type PriceBounds = {
   minBound: number;
   maxBound: number;
