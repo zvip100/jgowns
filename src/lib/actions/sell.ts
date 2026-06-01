@@ -5,9 +5,10 @@ import { updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { isValidSizeForCategory } from "@/lib/gown-sizes";
+import { isValidSizePair } from "@/lib/gown-sizes";
 import {
   GOWN_CATEGORIES,
+  SIZE_GROUPS,
   type GownCategoryId,
   type ServerActionErrorResult,
 } from "@/lib/types";
@@ -36,6 +37,7 @@ const listingInputSchema = z
     title: z.string().trim().min(4),
     description: z.string().trim().optional(),
     size: z.string().trim().min(1),
+    size_group: z.enum(SIZE_GROUPS),
     color: z.string().trim().optional(),
     location: z.string().trim().min(1),
     condition: z.string().trim().min(1),
@@ -47,7 +49,7 @@ const listingInputSchema = z
     contact_phone: contactPhoneField,
     status: z.enum(["active", "sold", "removed"]).default("active"),
   })
-  .refine((data) => isValidSizeForCategory(data.category, data.size), {
+  .refine((data) => isValidSizePair(data.category, data.size_group, data.size), {
     message: "Size is not valid for this category.",
     path: ["size"],
   });
@@ -78,6 +80,7 @@ function rawListingFieldsFromFormData(formData: FormData) {
     title: formData.get("title"),
     description: strOrUndefined(formData.get("description")),
     size: formData.get("size"),
+    size_group: formData.get("size_group"),
     color: strOrUndefined(formData.get("color")),
     location: formData.get("location"),
     condition: formData.get("condition"),
@@ -96,6 +99,7 @@ function listingRowPayload(parsed: ParsedListing, image_url: string) {
     title: parsed.title,
     description: parsed.description ?? null,
     size: parsed.size,
+    size_group: parsed.size_group,
     color: parsed.color ?? null,
     location: parsed.location,
     condition: parsed.condition,

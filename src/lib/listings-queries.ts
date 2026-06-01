@@ -2,6 +2,7 @@ import { cacheLife, cacheTag } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { BROWSE_PAGE_SIZE, totalPagesFromCount } from "@/lib/browse-pagination";
+import { decodeSizeFilterToken } from "@/lib/gown-sizes";
 import type { BrowseFilters } from "@/lib/types";
 import { anonClient } from "@/lib/supabase/anon";
 import { createClient } from "@/lib/supabase/server";
@@ -57,6 +58,7 @@ function applyBrowseFilters<
   Q extends {
     eq: (column: string, value: string) => Q;
     in: (column: string, values: string[]) => Q;
+    or: (filters: string) => Q;
     gte: (column: string, value: number) => Q;
     lte: (column: string, value: number) => Q;
   },
@@ -65,7 +67,26 @@ function applyBrowseFilters<
 
   if (filters.category) next = next.eq("category", filters.category);
 
-  const inColumns = ["size", "color", "location"] as const;
+  if (filters.size?.length) {
+    const pairs = filters.size
+      .map((token) => decodeSizeFilterToken(token))
+      .filter((p): p is NonNullable<typeof p> => p !== null);
+
+    if (pairs.length === 1) {
+      next = next
+        .eq("size_group", pairs[0].sizeGroup)
+        .eq("size", pairs[0].size);
+    } else if (pairs.length > 1) {
+      const orFilter = pairs
+        .map(
+          (p) => `and(size_group.eq.${p.sizeGroup},size.eq.${p.size})`,
+        )
+        .join(",");
+      next = next.or(orFilter);
+    }
+  }
+
+  const inColumns = ["color", "location"] as const;
   for (const key of inColumns) {
     const values = filters[key];
     if (!values?.length) continue;
@@ -146,7 +167,7 @@ export async function fetchListingsPage(
           page: safePage,
           pageSize,
           totalPages,
-          error: null,
+          error: { message: error.message },
         };
       }
     }

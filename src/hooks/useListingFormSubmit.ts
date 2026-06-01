@@ -1,13 +1,14 @@
 'use client';
 
 import { useCallback, useState, type RefObject } from 'react';
-import { isValidSizeForCategory } from '@/lib/gown-sizes';
+import { isValidSizePair } from '@/lib/gown-sizes';
 import { dataUrlToFile } from '@/lib/image-upload';
 import { createListing, updateListing } from '@/lib/actions/sell';
 import {
   GOWN_CATEGORIES,
   type GownCategoryId,
   type ListingFormData,
+  type SizeGroupSlug,
 } from '@/lib/types';
 
 function digitsOnlyPhone(value: string | null | undefined): string {
@@ -34,6 +35,7 @@ function buildInitialForm(
   const raw = base.category;
   const category =
     raw && GOWN_CATEGORIES.some((c) => c.id === raw) ? raw : null;
+
   return {
     ...base,
     category,
@@ -71,17 +73,32 @@ export function useListingFormSubmit({
     [],
   );
 
+  const setSizeSelection = useCallback(
+    (selection: { size: string; sizeGroup: SizeGroupSlug }) => {
+      setForm((f) => ({
+        ...f,
+        size: selection.size,
+        size_group: selection.sizeGroup,
+      }));
+    },
+    [],
+  );
+
   const setCategory = useCallback((value: string) => {
     const category = GOWN_CATEGORIES.some((c) => c.id === value)
       ? (value as GownCategoryId)
       : null;
     setForm((f) => {
       const keepSize =
-        category && f.size && isValidSizeForCategory(category, f.size);
+        category &&
+        f.size &&
+        f.size_group &&
+        isValidSizePair(category, f.size_group, f.size);
       return {
         ...f,
         category,
         size: keepSize ? f.size : '',
+        size_group: keepSize ? f.size_group : undefined,
       };
     });
   }, []);
@@ -94,7 +111,7 @@ export function useListingFormSubmit({
     setForm((f) => ({ ...f, contact_phone: digitsOnlyPhone(value) }));
   }, []);
 
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     setLoading(true);
     setError('');
 
@@ -102,6 +119,7 @@ export function useListingFormSubmit({
       if (
         !form.title?.trim() ||
         !form.size ||
+        !form.size_group ||
         !form.location ||
         !form.condition ||
         form.price == null ||
@@ -137,6 +155,7 @@ export function useListingFormSubmit({
       formData.set('title', form.title.trim());
       formData.set('description', form.description?.trim() || '');
       formData.set('size', String(form.size));
+      formData.set('size_group', String(form.size_group));
       formData.set('color', form.color?.trim() || '');
       formData.set('location', String(form.location));
       formData.set('condition', String(form.condition));
@@ -159,11 +178,12 @@ export function useListingFormSubmit({
     } finally {
       setLoading(false);
     }
-  };
+  }, [form, listingId, image.imageFile, image.optimizedDataUrl, image.blurDataUrlRef]);
 
   return {
     form,
     setField,
+    setSizeSelection,
     setCategory,
     setContactPhone,
     clearImageUrl,

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { getSizeSelectGroups } from '@/lib/gown-sizes';
-import type { GownCategoryId } from '@/lib/types';
+import type { GownCategoryId, SizeGroupSlug } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { FormField } from '@/components/form/FormField';
 import { FORM_CONTROL_CLASS } from '@/components/form/constants';
@@ -32,13 +32,15 @@ function sizeGroupId(label: string, index: number) {
 
 type CategorySizeSelectProps = {
   category: GownCategoryId | null;
-  value: string;
-  onChange: (v: string) => void;
+  size: string;
+  sizeGroup: SizeGroupSlug | null;
+  onChange: (selection: { size: string; sizeGroup: SizeGroupSlug }) => void;
 };
 
 export function CategorySizeSelect({
   category,
-  value,
+  size,
+  sizeGroup,
   onChange,
 }: CategorySizeSelectProps) {
   const groups = category ? getSizeSelectGroups(category) : [];
@@ -70,6 +72,7 @@ export function CategorySizeSelect({
 
   const disabled = !category;
   const placeholder = category ? 'Select size' : 'Select category first';
+  const displayValue = size || '';
 
   return (
     <FormField id="size-picker" label="Size" required>
@@ -86,10 +89,10 @@ export function CategorySizeSelect({
           className={cn(
             sizePickerTriggerClass,
             FORM_CONTROL_CLASS,
-            !value && 'text-muted-foreground',
+            !displayValue && 'text-muted-foreground',
           )}
         >
-          <span className="truncate">{value || placeholder}</span>
+          <span className="truncate">{displayValue || placeholder}</span>
           <ChevronDown
             className={cn(
               'size-4 shrink-0 text-muted-foreground transition-transform',
@@ -121,23 +124,30 @@ export function CategorySizeSelect({
                     </AccordionTrigger>
                     <AccordionContent className="h-auto px-2 pt-2 pb-2">
                       <div className="flex flex-wrap gap-1.5">
-                        {group.options.map((o) => (
-                          <button
-                            key={o.value}
-                            type="button"
-                            role="option"
-                            aria-selected={value === o.value}
-                            data-active={value === o.value}
-                            onClick={() => {
-                              onChange(o.value);
-                              setPickerOpen(false);
-                              setOpenGroup('');
-                            }}
-                            className={sizeOptionClass}
-                          >
-                            {o.label}
-                          </button>
-                        ))}
+                        {group.options.map((o) => {
+                          const isActive =
+                            size === o.value && sizeGroup === o.sizeGroup;
+                          return (
+                            <button
+                              key={`${o.sizeGroup}-${o.value}`}
+                              type="button"
+                              role="option"
+                              aria-selected={isActive}
+                              data-active={isActive}
+                              onClick={() => {
+                                onChange({
+                                  size: o.value,
+                                  sizeGroup: o.sizeGroup,
+                                });
+                                setPickerOpen(false);
+                                setOpenGroup('');
+                              }}
+                              className={sizeOptionClass}
+                            >
+                              {o.label}
+                            </button>
+                          );
+                        })}
                       </div>
                     </AccordionContent>
                   </AccordionItem>

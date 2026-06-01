@@ -52,9 +52,7 @@ export function canonicalBrowseQueryString(params: URLSearchParams): string {
 }
 
 /** `URLSearchParams` → {@link PageSearchParams} for browse query keys. */
-export function toPageSearchParams(
-  params: URLSearchParams,
-): PageSearchParams {
+export function toPageSearchParams(params: URLSearchParams): PageSearchParams {
   const resolved: PageSearchParams = {};
   for (const key of BROWSE_PARAM_ORDER) {
     const values = params.getAll(key);

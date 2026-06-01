@@ -41,6 +41,7 @@ export default function ListingForm({
   const {
     form,
     setField,
+    setSizeSelection,
     setCategory,
     setContactPhone,
     clearImageUrl,
@@ -114,8 +115,9 @@ export default function ListingForm({
           />
           <CategorySizeSelect
             category={form.category ?? null}
-            value={form.size || ''}
-            onChange={(v) => setField('size', v)}
+            size={form.size || ''}
+            sizeGroup={form.size_group ?? null}
+            onChange={setSizeSelection}
           />
           <SelectField
             id="color"

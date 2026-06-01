@@ -3,11 +3,9 @@
 import type { RefObject } from 'react';
 import Image from 'next/image';
 import { Loader2, X } from 'lucide-react';
-import { FormField } from '@/components/form/FormField';
-import { FORM_FILE_INPUT_CLASS } from '@/components/form/constants';
+import { FileInputField } from '@/components/form/FileInputField';
 import { Button } from '@/components/ui/button';
 import { FieldError } from '@/components/ui/field';
-import { Input } from '@/components/ui/input';
 
 type ListingPhotoFieldProps = {
   fileInputRef: RefObject<HTMLInputElement | null>;
@@ -27,15 +25,14 @@ export function ListingPhotoField({
   onClear,
 }: ListingPhotoFieldProps) {
   return (
-    <FormField id="photo" label="Photo" required>
-      <Input
-        id="photo"
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        onChange={onFileChange}
-        className={FORM_FILE_INPUT_CLASS}
-      />
+    <FileInputField
+      id="photo"
+      label="Photo"
+      required
+      ref={fileInputRef}
+      accept="image/*"
+      onChange={onFileChange}
+    >
       {preview && (
         <div className="mt-2">
           <div className="relative w-48">
@@ -77,6 +74,6 @@ export function ListingPhotoField({
           )}
         </div>
       )}
-    </FormField>
+    </FileInputField>
   );
 }

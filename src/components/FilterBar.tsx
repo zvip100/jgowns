@@ -241,15 +241,15 @@ export default function FilterBar({
 
     const renderButtons = (opts: ReadonlyArray<SizeOption>) =>
       opts.map((opt) => {
-        const active = selected.includes(opt.value);
+        const active = selected.includes(opt.filterToken);
         return (
           <button
-            key={opt.value}
+            key={opt.filterToken}
             type="button"
             onClick={() => {
               const next = active
-                ? selected.filter((v) => v !== opt.value)
-                : [...selected, opt.value];
+                ? selected.filter((v) => v !== opt.filterToken)
+                : [...selected, opt.filterToken];
               updateFilter(key, formatBrowseParamList(next));
             }}
             data-active={active}

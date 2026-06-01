@@ -36,11 +36,6 @@ export function browseQueryString(filters: BrowseFilters, page = 1): string {
   return canonicalBrowseQueryString(filtersToSearchParams(filters, page));
 }
 
-/** @deprecated Use {@link browseQueryString} when page may be > 1. */
-export function filtersToQuery(filters: BrowseFilters): string {
-  return browseQueryString(filters, 1);
-}
-
 /** Full browse path — e.g. `/browse?category=bridal`. */
 export function browseHref(filters: BrowseFilters, page = 1): string {
   const qs = browseQueryString(filters, page);

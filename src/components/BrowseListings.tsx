@@ -34,12 +34,14 @@ export default async function BrowseListings({
 
   return (
     <>
-      <p
-        className='mb-4 text-right text-[0.8125rem] leading-snug text-[#9a8770] sm:text-sm'
-        aria-live='polite'
-      >
-        {result.totalCount.toLocaleString()} active listings
-      </p>
+      {!result.error && (
+        <p
+          className='mb-4 text-right text-[0.8125rem] leading-snug text-[#9a8770] sm:text-sm'
+          aria-live='polite'
+        >
+          {result.totalCount.toLocaleString()} active listings
+        </p>
+      )}
       <ListingsGrid
         listings={result.listings}
         error={result.error}

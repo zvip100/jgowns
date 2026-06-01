@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { FormField, type FormFieldProps } from '@/components/form/FormField';
 import { FORM_FILE_INPUT_CLASS } from '@/components/form/constants';
 import { Input } from '@/components/ui/input';
@@ -9,6 +10,7 @@ type FileInputFieldProps = Omit<FormFieldProps, 'children'> &
   Omit<React.ComponentProps<typeof Input>, 'id' | 'type'> & {
     id: string;
     inputClassName?: string;
+    children?: ReactNode;
   };
 
 export function FileInputField({
@@ -21,6 +23,7 @@ export function FileInputField({
   disabled,
   className,
   inputClassName,
+  children,
   ...inputProps
 }: FileInputFieldProps) {
   return (
@@ -42,6 +45,7 @@ export function FileInputField({
         className={cn(FORM_FILE_INPUT_CLASS, inputClassName)}
         {...inputProps}
       />
+      {children}
     </FormField>
   );
 }
