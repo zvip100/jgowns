@@ -1,5 +1,6 @@
 import { parseBrowseParamList } from "@/lib/browse-params";
 import { getBrowseAllowedSizes } from "@/lib/gown-sizes";
+import { firstParam } from "@/lib/utils";
 import {
   GOWN_CATEGORIES,
   GOWN_COLORS,
@@ -13,10 +14,6 @@ import {
 export const BROWSE_COND_VALUES = ["no-alterations", "Brand New"] as const;
 
 const GOWN_CATEGORY_IDS = GOWN_CATEGORIES.map((c) => c.id) as readonly GownCategoryId[];
-
-function firstParam(value: string | string[] | undefined) {
-  return Array.isArray(value) ? value[0] : value;
-}
 
 function paramList(value: string | string[] | undefined): string[] | undefined {
   const parsed = parseBrowseParamList(value);

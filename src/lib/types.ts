@@ -4,6 +4,7 @@ export type Listing = {
   title: string;
   description: string | null;
   size: string;
+  size_group: SizeGroupSlug;
   color: string | null;
   location: string | null;
   condition: GownCondition;
@@ -30,6 +31,15 @@ export type ListingsListResult = {
   error: ListingReadError;
 };
 
+export type ListingsPageResult = {
+  listings: Listing[] | null;
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  error: ListingReadError;
+};
+
 export type PriceBounds = {
   minBound: number;
   maxBound: number;
@@ -49,6 +59,9 @@ export const GOWN_CATEGORIES = [
 
 export type GownCategoryId = (typeof GOWN_CATEGORIES)[number]["id"];
 
+export const SIZE_GROUPS = ["toddler", "kids", "junior", "adult"] as const;
+export type SizeGroupSlug = (typeof SIZE_GROUPS)[number];
+
 export const GOWN_COLORS = ['Ivory', 'White', 'Champagne', 'Black', 'Pink', 'Blush', 'Silver', 'Gold', 'Light Blue', 'Other'];
 export const LOCATIONS = ['Borough Park', 'Williamsburg', 'Monsey', 'Monroe', 'Lakewood', 'Catskills', 'Other'];
 export const GOWN_CONDITIONS = ['Brand New', 'Perfect Condition', 'Needs Alterations'] as const;
@@ -62,6 +75,7 @@ export type PageSearchParams = {
 /** Validated `/browse` filter state (from `parseBrowseFilters` in `browse-filters`). */
 export type BrowseFilters = {
   category?: GownCategoryId;
+  /** URL size filter tokens — e.g. `a:8`, `k:10`. */
   size?: string[];
   color?: string[];
   location?: string[];

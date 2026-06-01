@@ -9,22 +9,29 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { hasBrowseFilters, parseBrowseFilters } from "@/lib/browse-filters";
-import { filtersToQuery } from "@/lib/browse-url";
-import type { Listing, ListingsListResult, PageSearchParams } from "@/lib/types";
-import { fetchListings } from "@/lib/listings-queries";
+import { browseQueryString } from "@/lib/browse-url";
+import type {
+  BrowseFilters,
+  Listing,
+  ListingReadError,
+} from "@/lib/types";
 
-export default async function ListingsGrid({
-  searchParams,
-}: {
-  searchParams: Promise<PageSearchParams>;
-}) {
-  const resolved = await searchParams;
-  const filters = parseBrowseFilters(resolved);
-  const { listings, error }: ListingsListResult = await fetchListings(filters);
+type ListingsGridProps = {
+  listings: Listing[] | null;
+  error: ListingReadError | null;
+  totalCount: number;
+  page: number;
+  filters: BrowseFilters;
+};
 
-  const backQueryRaw = hasBrowseFilters(filters) ? filtersToQuery(filters) : "";
-  const backQuery = backQueryRaw || undefined;
+export default function ListingsGrid({
+  listings,
+  error,
+  totalCount,
+  page,
+  filters,
+}: ListingsGridProps) {
+  const backQuery = browseQueryString(filters, page) || undefined;
 
   if (error) {
     return (
@@ -34,7 +41,7 @@ export default async function ListingsGrid({
     );
   }
 
-  if ((listings ?? []).length === 0) {
+  if (totalCount === 0) {
     return (
       <Empty className='surface-panel hairline rounded-[1.8rem] border-0 py-20 text-[#8e7962]'>
         <EmptyHeader>

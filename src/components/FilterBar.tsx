@@ -139,6 +139,7 @@ export default function FilterBar({
       const p = new URLSearchParams(params.toString());
       if (sizeValue) p.set("size", sizeValue);
       else p.delete("size");
+      p.delete("page");
       const qs = canonicalBrowseQueryString(p);
       router.replace(qs ? `/browse?${qs}` : "/browse", { scroll: false });
     }
@@ -150,6 +151,7 @@ export default function FilterBar({
     const p = new URLSearchParams(paramsRef.current.toString());
     if (value) p.set(key, value);
     else p.delete(key);
+    p.delete("page");
     const qs = canonicalBrowseQueryString(p);
     router.push(qs ? `/browse?${qs}` : "/browse", { scroll: false });
   };
@@ -160,6 +162,7 @@ export default function FilterBar({
       if (value) p.set(key, value);
       else p.delete(key);
     }
+    p.delete("page");
     const qs = canonicalBrowseQueryString(p);
     router.push(qs ? `/browse?${qs}` : "/browse", { scroll: false });
   };
@@ -238,15 +241,15 @@ export default function FilterBar({
 
     const renderButtons = (opts: ReadonlyArray<SizeOption>) =>
       opts.map((opt) => {
-        const active = selected.includes(opt.value);
+        const active = selected.includes(opt.filterToken);
         return (
           <button
-            key={opt.value}
+            key={opt.filterToken}
             type="button"
             onClick={() => {
               const next = active
-                ? selected.filter((v) => v !== opt.value)
-                : [...selected, opt.value];
+                ? selected.filter((v) => v !== opt.filterToken)
+                : [...selected, opt.filterToken];
               updateFilter(key, formatBrowseParamList(next));
             }}
             data-active={active}

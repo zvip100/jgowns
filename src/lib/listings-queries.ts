@@ -1,13 +1,16 @@
 import { cacheLife, cacheTag } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { BROWSE_PAGE_SIZE, totalPagesFromCount } from "@/lib/browse-pagination";
+import { decodeSizeFilterToken } from "@/lib/gown-sizes";
 import type { BrowseFilters } from "@/lib/types";
 import { anonClient } from "@/lib/supabase/anon";
 import { createClient } from "@/lib/supabase/server";
 import type {
   Listing,
   ListingByIdResult,
-  ListingsListResult,
+  ListingReadError,
+  ListingsPageResult,
   PriceBounds,
 } from "@/lib/types";
 
@@ -51,51 +54,152 @@ async function selectListingById(
   return { listing: listing as Listing | null, error: null };
 }
 
-export async function fetchListings(
-  filters: BrowseFilters,
-): Promise<ListingsListResult> {
-  "use cache";
-  applyListingsCachePolicy();
+function applyBrowseFilters<
+  Q extends {
+    eq: (column: string, value: string) => Q;
+    in: (column: string, values: string[]) => Q;
+    or: (filters: string) => Q;
+    gte: (column: string, value: number) => Q;
+    lte: (column: string, value: number) => Q;
+  },
+>(query: Q, filters: BrowseFilters): Q {
+  let next = query;
 
-  let query = anonClient
-    .from("listings")
-    .select("*")
-    .eq("status", "active")
-    .order("created_at", { ascending: false });
+  if (filters.category) next = next.eq("category", filters.category);
 
-  if (filters.category) query = query.eq("category", filters.category);
+  if (filters.size?.length) {
+    const pairs = filters.size
+      .map((token) => decodeSizeFilterToken(token))
+      .filter((p): p is NonNullable<typeof p> => p !== null);
 
-  const inColumns = ["size", "color", "location"] as const;
+    if (pairs.length === 1) {
+      next = next
+        .eq("size_group", pairs[0].sizeGroup)
+        .eq("size", pairs[0].size);
+    } else if (pairs.length > 1) {
+      const orFilter = pairs
+        .map(
+          (p) => `and(size_group.eq.${p.sizeGroup},size.eq.${p.size})`,
+        )
+        .join(",");
+      next = next.or(orFilter);
+    }
+  }
+
+  const inColumns = ["color", "location"] as const;
   for (const key of inColumns) {
     const values = filters[key];
     if (!values?.length) continue;
-    if (values.length === 1) query = query.eq(key, values[0]);
-    else query = query.in(key, values);
+    if (values.length === 1) next = next.eq(key, values[0]);
+    else next = next.in(key, values);
   }
 
   if (filters.cond === "no-alterations") {
-    query = query.in("condition", ["Brand New", "Perfect Condition"]);
+    next = next.in("condition", ["Brand New", "Perfect Condition"]);
   } else if (filters.cond) {
-    query = query.eq("condition", filters.cond);
+    next = next.eq("condition", filters.cond);
   }
-  if (Number.isFinite(filters.minPrice))
-    query = query.gte("price", filters.minPrice);
-  if (Number.isFinite(filters.maxPrice))
-    query = query.lte("price", filters.maxPrice);
+  if (Number.isFinite(filters.minPrice)) {
+    next = next.gte("price", filters.minPrice as number);
+  }
+  if (Number.isFinite(filters.maxPrice)) {
+    next = next.lte("price", filters.maxPrice as number);
+  }
 
-  const { data: listings, error } = await query;
+  return next;
+}
+
+async function fetchFilteredListingsCount(
+  filters: BrowseFilters,
+): Promise<{ totalCount: number; error: ListingReadError }> {
+  const countQuery = applyBrowseFilters(
+    anonClient
+      .from("listings")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "active"),
+    filters,
+  );
+
+  const { count, error } = await countQuery;
 
   if (error) {
-    console.error("[listings-queries] Failed to load listings", {
+    return { totalCount: 0, error: { message: error.message } };
+  }
+
+  return { totalCount: count ?? 0, error: null };
+}
+
+export async function fetchListingsPage(
+  filters: BrowseFilters,
+  page: number,
+  pageSize: number = BROWSE_PAGE_SIZE,
+): Promise<ListingsPageResult> {
+  "use cache";
+  applyListingsCachePolicy();
+
+  const safePage = Math.max(1, page);
+  const from = (safePage - 1) * pageSize;
+  const to = from + pageSize - 1;
+
+  const query = applyBrowseFilters(
+    anonClient
+      .from("listings")
+      .select("*", { count: "exact" })
+      .eq("status", "active")
+      .order("created_at", { ascending: false }),
+    filters,
+  );
+
+  const { data: listings, count, error } = await query.range(from, to);
+
+  let totalCount = count ?? 0;
+  let totalPages = totalPagesFromCount(totalCount, pageSize);
+
+  if (error) {
+    if (safePage > 1) {
+      const countResult = await fetchFilteredListingsCount(filters);
+      if (!countResult.error) {
+        totalCount = countResult.totalCount;
+        totalPages = totalPagesFromCount(totalCount, pageSize);
+        return {
+          listings: [],
+          totalCount,
+          page: safePage,
+          pageSize,
+          totalPages,
+          error: { message: error.message },
+        };
+      }
+    }
+
+    console.error("[listings-queries] Failed to load listings page", {
       message: error.message,
       details: error.details,
       hint: error.hint,
       code: error.code,
       filters,
+      page: safePage,
+      pageSize,
     });
+
+    return {
+      listings: null,
+      totalCount,
+      page: safePage,
+      pageSize,
+      totalPages,
+      error: { message: error.message },
+    };
   }
 
-  return { listings, error };
+  return {
+    listings: listings as Listing[] | null,
+    totalCount,
+    page: safePage,
+    pageSize,
+    totalPages,
+    error: null,
+  };
 }
 
 export async function fetchListingById(id: string): Promise<ListingByIdResult> {

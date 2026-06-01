@@ -35,8 +35,10 @@ next-env.d.ts
 # Cursor
 .cursor
 
-# project-internal
-.agents/tasks/
+# project-internal + skills
+.agents
+
+.claude
 
 # DB migrations
 /src/supabase/migrations
