@@ -19,6 +19,9 @@ export default async function ListingPage({
 }) {
   const [{ id }, { back, from }] = await Promise.all([params, searchParams]);
 
+  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  if (!UUID_REGEX.test(id)) notFound();
+
   const fromDashboard = from === 'dash';
   const backHref = fromDashboard ? '/dashboard' : browseHrefFromBack(back);
   const backLabel = fromDashboard ? 'Back to dashboard' : 'Browse all gowns';

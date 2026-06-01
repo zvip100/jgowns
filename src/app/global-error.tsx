@@ -27,6 +27,12 @@ export default function GlobalError({
             >
               Try Again
             </button>
+            <a
+              href='/browse'
+              className='mt-3 inline-flex w-full items-center justify-center rounded-full border border-[#d4c2ad] bg-white/70 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-[#5a4738] hover:bg-white'
+            >
+              Browse all gowns
+            </a>
           </div>
         </div>
       </body>
