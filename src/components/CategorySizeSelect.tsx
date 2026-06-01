@@ -72,7 +72,7 @@ export function CategorySizeSelect({
 
   const disabled = !category;
   const placeholder = category ? 'Select size' : 'Select category first';
-  const displayValue = size || '';
+  const displayValue = size;
 
   return (
     <FormField id="size-picker" label="Size" required>
