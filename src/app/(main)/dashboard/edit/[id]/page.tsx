@@ -1,11 +1,21 @@
-import { createClient } from '@/lib/supabase/server';
-import ListingForm from '@/components/ListingForm';
+import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+
+import { createClient } from '@/lib/supabase/server';
+import { isValidUUID } from '@/lib/utils';
+import ListingForm from '@/components/ListingForm';
+
+export const metadata: Metadata = {
+  title: "Edit Listing",
+  description: "Update your gown listing details.",
+  robots: { index: false, follow: false },
+};
 
 export default async function EditListingPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  if (!isValidUUID(id)) notFound();
   const supabase = await createClient();
-  
+
   const { data: listing } = await supabase.from('listings').select('*').eq('id', id).single();
   if (!listing) notFound();
 

@@ -1,14 +1,52 @@
+import type { Metadata } from "next";
 import { browseHrefFromBack } from "@/lib/browse-url";
-import {
-  fetchListingById,
-  fetchListingByIdForSessionUser,
-} from "@/lib/listings-queries";
+import { fetchListingWithFallback } from "@/lib/listings-queries";
 import { GOWN_CATEGORIES } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, isValidUUID } from "@/lib/utils";
 import { notFound } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  if (!isValidUUID(id)) return { title: "Listing Not Found" };
+
+  const { listing } = await fetchListingWithFallback(id);
+  if (!listing) return { title: "Listing Not Found" };
+
+  const price = `$${listing.price.toLocaleString()}`;
+  const details = [
+    `Size ${listing.size}`,
+    listing.condition,
+    listing.location,
+  ].filter(Boolean).join(" · ");
+
+  const description = listing.description
+    ? `${listing.description.slice(0, 120).trimEnd()} — ${details}`
+    : `${listing.title}. ${details}`;
+
+  return {
+    title: listing.title,
+    description,
+    openGraph: {
+      title: `${listing.title} — ${price}`,
+      description: details,
+      images: [{ url: listing.image_url, alt: listing.title }],
+      type: "website",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: `${listing.title} — ${price}`,
+      description: details,
+      images: [listing.image_url],
+    },
+  };
+}
 
 export default async function ListingPage({
   params,
@@ -19,25 +57,14 @@ export default async function ListingPage({
 }) {
   const [{ id }, { back, from }] = await Promise.all([params, searchParams]);
 
-  const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-  if (!UUID_REGEX.test(id)) notFound();
+  if (!isValidUUID(id)) notFound();
 
   const fromDashboard = from === 'dash';
   const backHref = fromDashboard ? '/dashboard' : browseHrefFromBack(back);
   const backLabel = fromDashboard ? 'Back to dashboard' : 'Browse all gowns';
 
-  const { listing: publicListing, error: publicError } =
-    await fetchListingById(id);
-  if (publicError) throw new Error(publicError.message);
-
-  let listing = publicListing;
-  if (!listing) {
-    const { listing: sessionListing, error: sessionError } =
-      await fetchListingByIdForSessionUser(id);
-    if (sessionError) throw new Error(sessionError.message);
-    listing = sessionListing;
-  }
-
+  const { listing, error } = await fetchListingWithFallback(id);
+  if (error) throw new Error(error.message);
   if (!listing) notFound();
 
   const categoryLabel =

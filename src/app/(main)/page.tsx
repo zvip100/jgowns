@@ -1,6 +1,21 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { Search } from "lucide-react";
+
+export const metadata: Metadata = {
+  title: {
+    absolute: "Jgowns — The ultimate marketplace for modest gowns.",
+  },
+  description:
+    "Find your dream modest gown at a fraction of the retail price. Browse pre-loved bridal, women's, mother-of-the-bride, girls', and maternity gowns from trusted sellers.",
+  openGraph: {
+    title: "Jgowns — The ultimate marketplace for modest gowns.",
+    description:
+      "Find your dream modest gown at a fraction of the retail price. Browse pre-loved bridal, women's, mother-of-the-bride, girls', and maternity gowns from trusted sellers.",
+    type: "website",
+  },
+};
 
 import heroImage from "@/assets/jgowns-hero.png";
 import SellSection from "@/components/SellSection";

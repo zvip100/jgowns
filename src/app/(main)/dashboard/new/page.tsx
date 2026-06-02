@@ -1,4 +1,10 @@
+import type { Metadata } from 'next';
 import ListingForm from '@/components/ListingForm';
+
+export const metadata: Metadata = {
+  title: "List a Gown",
+  description: "Create a new listing to sell your pre-loved modest gown.",
+};
 
 export default function NewListingPage() {
   return (

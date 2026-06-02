@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cacheLife, cacheTag } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -202,7 +203,7 @@ export async function fetchListingsPage(
   };
 }
 
-export async function fetchListingById(id: string): Promise<ListingByIdResult> {
+export async function fetchListing(id: string): Promise<ListingByIdResult> {
   "use cache";
   const normalizedId = normalizeId(id);
   if (!normalizedId) {
@@ -217,7 +218,7 @@ export async function fetchListingById(id: string): Promise<ListingByIdResult> {
 }
 
 /** Uncached: request cookies so RLS can return the row to the owning seller (e.g. sold/removed). */
-export async function fetchListingByIdForSessionUser(
+export async function fetchListingAsOwner(
   id: string,
 ): Promise<ListingByIdResult> {
   const normalizedId = normalizeId(id);
@@ -228,6 +229,17 @@ export async function fetchListingByIdForSessionUser(
   const supabase = await createClient();
   return selectListingById(supabase, normalizedId, "session");
 }
+
+/** Public lookup first; falls back to session-scoped query for sold/removed listings visible to the owner. */
+export const fetchListingWithFallback = cache(
+  async (id: string): Promise<ListingByIdResult> => {
+    const { listing, error } = await fetchListing(id);
+    if (error) return { listing: null, error };
+    if (listing) return { listing, error: null };
+
+    return fetchListingAsOwner(id);
+  },
+);
 
 export async function fetchPriceBounds(): Promise<PriceBounds> {
   "use cache";

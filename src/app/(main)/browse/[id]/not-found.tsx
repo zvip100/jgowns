@@ -1,5 +1,12 @@
+import type { Metadata } from 'next'
 import Link from 'next/link'
 import { SearchX } from 'lucide-react'
+
+export const metadata: Metadata = {
+  title: "Listing Not Found",
+  description: "This gown listing doesn't exist or has been removed.",
+  robots: { index: false },
+}
 
 export default function ListingNotFound() {
   return (

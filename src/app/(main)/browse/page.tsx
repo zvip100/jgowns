@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import BrowseCategoryNav from "@/components/BrowseCategoryNav";
@@ -6,6 +7,18 @@ import ListingsLayout from "@/components/ListingsLayout";
 import ListingsSkeleton from "@/components/ListingsSkeleton";
 import type { PageSearchParams } from "@/lib/types";
 import { fetchPriceBounds } from "@/lib/listings-queries";
+
+export const metadata: Metadata = {
+  title: "Browse Modest Gowns",
+  description:
+    "Shop pre-loved modest gowns. Filter by size, category, price, and location to find your perfect match.",
+  openGraph: {
+    title: "Browse Modest Gowns | Jgowns",
+    description:
+      "Shop pre-loved modest gowns. Filter by size, category, price, and location to find your perfect match.",
+    type: "website",
+  },
+};
 
 export default async function BrowsePage({
   searchParams,
