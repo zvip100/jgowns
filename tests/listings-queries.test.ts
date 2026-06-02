@@ -29,8 +29,9 @@ vi.mock("@/lib/supabase/server", () => ({ createClient: mockCreateClient }));
 
 import { fetchListingWithFallback } from "@/lib/listings-queries";
 
-const VALID_ID = "11111111-1111-1111-1111-111111111111";
-const MOCK_LISTING = { id: VALID_ID, title: "Test Gown", price: 500 };
+const ID_PUBLIC_HIT    = "11111111-1111-1111-1111-111111111111";
+const ID_SESSION_HIT   = "22222222-2222-2222-2222-222222222222";
+const ID_PUBLIC_ERROR  = "33333333-3333-3333-3333-333333333333";
 
 describe("fetchListingWithFallback", () => {
   beforeEach(() => {
@@ -39,22 +40,24 @@ describe("fetchListingWithFallback", () => {
   });
 
   it("returns the listing when the public query finds it", async () => {
-    anonMaybeSingle.mockResolvedValue({ data: MOCK_LISTING, error: null });
+    const listing = { id: ID_PUBLIC_HIT, title: "Test Gown", price: 500 };
+    anonMaybeSingle.mockResolvedValue({ data: listing, error: null });
 
-    const result = await fetchListingWithFallback(VALID_ID);
+    const result = await fetchListingWithFallback(ID_PUBLIC_HIT);
 
-    expect(result.listing).toEqual(MOCK_LISTING);
+    expect(result.listing).toEqual(listing);
     expect(result.error).toBeNull();
     expect(sessionMaybeSingle).not.toHaveBeenCalled();
   });
 
   it("falls back to session query when the public query returns no listing", async () => {
+    const listing = { id: ID_SESSION_HIT, title: "Test Gown", price: 500 };
     anonMaybeSingle.mockResolvedValue({ data: null, error: null });
-    sessionMaybeSingle.mockResolvedValue({ data: MOCK_LISTING, error: null });
+    sessionMaybeSingle.mockResolvedValue({ data: listing, error: null });
 
-    const result = await fetchListingWithFallback(VALID_ID);
+    const result = await fetchListingWithFallback(ID_SESSION_HIT);
 
-    expect(result.listing).toEqual(MOCK_LISTING);
+    expect(result.listing).toEqual(listing);
     expect(result.error).toBeNull();
     expect(sessionMaybeSingle).toHaveBeenCalledOnce();
   });
@@ -65,7 +68,7 @@ describe("fetchListingWithFallback", () => {
       error: { message: "connection failed", details: "", hint: "", code: "PGRST" },
     });
 
-    const result = await fetchListingWithFallback(VALID_ID);
+    const result = await fetchListingWithFallback(ID_PUBLIC_ERROR);
 
     expect(result.listing).toBeNull();
     expect(result.error).toEqual({ message: "connection failed" });

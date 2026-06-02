@@ -16,7 +16,8 @@ export async function generateMetadata({
   const { id } = await params;
   if (!isValidUUID(id)) return { title: "Listing Not Found" };
 
-  const { listing } = await fetchListingWithFallback(id);
+  const { listing, error } = await fetchListingWithFallback(id);
+  if (error) return { title: "Something went wrong" };
   if (!listing) return { title: "Listing Not Found" };
 
   const price = `$${listing.price.toLocaleString()}`;

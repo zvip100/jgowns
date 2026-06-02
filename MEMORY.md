@@ -16,7 +16,7 @@ Categories: `decision` | `completed` | `never`
 
 - [06-01-2026] completed: Fixed invalid listing ID showing error page — UUID guard in browse/[id]/page.tsx + dedicated not-found.tsx for that route
 
-- [06-01-2026] completed: Added per-page metadata across all routes — root layout has title template + OG/twitter base; listing detail uses generateMetadata with fetchListingById; login/register pages were split into server page + client form component to allow metadata export; dashboard/edit are noindex; register/new are indexed
+- [06-01-2026] completed: Added per-page metadata across all routes — root layout has title template + OG/twitter base; listing detail uses generateMetadata with fetchListingWithFallback; login/register pages were split into server page + client form component to allow metadata export; dashboard/edit are noindex; register/new are indexed
 
 ## Never
 
