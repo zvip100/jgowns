@@ -11,7 +11,12 @@ Categories: `decision` | `completed` | `never`
 ## Decisions
 
 - [05-28-2026] decision: All test files live in project-root `tests/` (e.g. `tests/gown-sizes.test.ts`). Do not colocate `*.test.ts` under `src/`.
+
 ## Completed
+
+- [06-01-2026] completed: Fixed invalid listing ID showing error page — UUID guard in browse/[id]/page.tsx + dedicated not-found.tsx for that route
+
+- [06-01-2026] completed: Added per-page metadata across all routes — root layout has title template + OG/twitter base; listing detail uses generateMetadata with fetchListingWithFallback; login/register pages were split into server page + client form component to allow metadata export; dashboard/edit are noindex; register/new are indexed
 
 ## Never
 

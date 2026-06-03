@@ -168,7 +168,8 @@ export default function ListingForm({
               label="Email"
               required
               type="email"
-              placeholder="you@email.com"
+              placeholder="example@gmail.com"
+              autoComplete="email"
               value={form.contact_email || ''}
               onChange={(e) => setField('contact_email', e.target.value)}
               leading={<Mail />}
@@ -178,6 +179,7 @@ export default function ListingForm({
               label="Phone"
               type="tel"
               placeholder="(555) 000-0000"
+              autoComplete="tel"
               value={form.contact_phone || ''}
               onChange={(e) => setContactPhone(e.target.value)}
               leading={<Phone />}

@@ -15,8 +15,21 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: "Jgowns — The ultimate marketplace for modest gowns.",
-  description: "Buy and sell pre-loved wedding gowns",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://jgowns.com"),
+  title: {
+    default: "Jgowns — The ultimate marketplace for modest gowns.",
+    template: "%s | Jgowns",
+  },
+  description:
+    "Buy and sell pre-loved modest wedding gowns. Browse bridal, women's, mother-of-the-bride, girls', and maternity gowns from trusted sellers.",
+  openGraph: {
+    siteName: "Jgowns",
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+  },
 };
 
 export default function RootLayout({

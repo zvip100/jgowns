@@ -1,4 +1,11 @@
+import type { Metadata } from 'next';
 import { Suspense } from 'react';
+
+export const metadata: Metadata = {
+  title: "My Listings",
+  description: "Manage your gown listings.",
+  robots: { index: false, follow: false },
+};
 import Link from 'next/link';
 import { Plus, Sparkles } from 'lucide-react';
 
