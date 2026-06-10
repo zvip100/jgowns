@@ -4,9 +4,9 @@ import { fetchListingWithFallback } from "@/lib/listings-queries";
 import { GOWN_CATEGORIES } from "@/lib/types";
 import { cn, isValidUUID } from "@/lib/utils";
 import { notFound } from "next/navigation";
-import Image from "next/image";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
+import { ImageViewer } from "@/components/ImageViewer";
 
 export async function generateMetadata({
   params,
@@ -31,20 +31,22 @@ export async function generateMetadata({
     ? `${listing.description.slice(0, 120).trimEnd()} — ${details}`
     : `${listing.title}. ${details}`;
 
+  const primaryImage = listing.image_urls[0];
+
   return {
     title: listing.title,
     description,
     openGraph: {
       title: `${listing.title} — ${price}`,
       description: details,
-      images: [{ url: listing.image_url, alt: listing.title }],
+      images: primaryImage ? [{ url: primaryImage, alt: listing.title }] : [],
       type: "website",
     },
     twitter: {
       card: "summary_large_image",
       title: `${listing.title} — ${price}`,
       description: details,
-      images: [listing.image_url],
+      images: primaryImage ? [primaryImage] : [],
     },
   };
 }
@@ -87,33 +89,12 @@ export default async function ListingPage({
       </Link>
 
       <div className='grid grid-cols-1 gap-8 md:grid-cols-2 md:gap-12'>
-        <div className='relative aspect-3/4 overflow-hidden rounded-[1.7rem] bg-[#efe7dc]'>
-          <Image
-            src={listing.image_url}
-            alt={listing.title}
-            fill
-            sizes='(max-width: 768px) 100vw, 56vw'
-            className='object-cover'
-            {...(listing.image_blur_data_url
-              ? { placeholder: 'blur' as const, blurDataURL: listing.image_blur_data_url }
-              : {})}
-          />
-          {listing.status === 'sold' && (
-            <>
-              <div
-                aria-hidden
-                className='pointer-events-none absolute inset-0 bg-linear-to-br from-(--ink)/35 via-(--ink)/15 to-transparent'
-              />
-              <div
-                role='status'
-                aria-label='This gown has been sold'
-                className='pointer-events-none absolute -left-16 top-10 w-64 -rotate-45 border-y border-white/20 bg-(--sold) py-2.5 text-center text-sm font-semibold uppercase tracking-[0.5em] text-white shadow-[0_18px_36px_rgba(120,20,40,0.4)]'
-              >
-                Sold
-              </div>
-            </>
-          )}
-        </div>
+        <ImageViewer
+          imageUrls={listing.image_urls}
+          blurDataUrls={listing.image_blur_data_urls}
+          title={listing.title}
+          isSold={sold}
+        />
 
         <div className='flex flex-col py-2'>
           {listing.color && (

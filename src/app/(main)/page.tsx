@@ -29,7 +29,7 @@ export default function HomePage() {
         src={heroImage}
         alt='Softly lit bridal showroom with floral arrangements'
         fill
-        preload
+        priority
         sizes='(max-width: 768px) 100vw, 1280px'
         className='object-cover object-center'
       />

@@ -10,8 +10,8 @@ export type Listing = {
   condition: GownCondition;
   category: GownCategoryId | null;
   price: number;
-  image_url: string;
-  image_blur_data_url: string | null;
+  image_urls: string[];
+  image_blur_data_urls: string[];
   contact_email: string;
   contact_phone: string | null;
   status: 'active' | 'sold' | 'removed';
@@ -45,9 +45,21 @@ export type PriceBounds = {
   maxBound: number;
 };
 
-export type ListingFormData = Omit<Listing, 'id' | 'user_id' | 'created_at'> & {
-  image_file?: File;
+export type ListingFormData = Omit<Listing, 'id' | 'user_id' | 'created_at'>;
+
+/** Client-side state for one image slot in the listing form. */
+export type ImageSlotState = {
+  id: string;
+  preview: string | null;
+  imageFile: File | null;
+  optimizedDataUrl: string | null;
+  blurPromise: Promise<string | null>;
+  optimizing: boolean;
+  optimizeError: string;
+  existingUrl: string | null;
 };
+
+export const MAX_LISTING_IMAGES = 3;
 
 export const GOWN_CATEGORIES = [
   { id: "bridal", label: "Bridal" },

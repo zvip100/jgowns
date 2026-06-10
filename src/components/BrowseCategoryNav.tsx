@@ -57,7 +57,7 @@ export default function BrowseCategoryNav({
           scroll={false}
           className={cn(chipBase, !current ? chipActive : chipIdle)}
         >
-          All gowns
+          All
         </Link>
 
         {GOWN_CATEGORIES.map((cat) => {

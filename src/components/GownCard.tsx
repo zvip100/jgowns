@@ -3,6 +3,8 @@ import Link from "next/link";
 
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { blurProps } from "@/lib/utils";
+
 import type { Listing } from "@/lib/types";
 
 export default function GownCard({
@@ -22,14 +24,12 @@ export default function GownCard({
       <Card className='surface-panel hairline gap-0 overflow-hidden rounded-3xl bg-transparent p-0 py-0 text-card-foreground ring-0'>
         <div className='relative aspect-3/4 overflow-hidden bg-[#efe7dc]'>
           <Image
-            src={listing.image_url}
+            src={listing.image_urls[0]}
             alt={listing.title}
             fill
             sizes='(max-width: 640px) 100vw, (max-width: 1024px) 56vw, 30vw'
             className='object-cover transition duration-500 group-hover:scale-[1.045]'
-            {...(listing.image_blur_data_url
-              ? { placeholder: 'blur' as const, blurDataURL: listing.image_blur_data_url }
-              : {})}
+            {...blurProps(listing.image_blur_data_urls[0])}
           />
           {listing.color && (
             <Badge

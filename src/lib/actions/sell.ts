@@ -8,12 +8,14 @@ import { z } from "zod";
 import { isValidSizePair } from "@/lib/gown-sizes";
 import {
   GOWN_CATEGORIES,
+  MAX_LISTING_IMAGES,
   SIZE_GROUPS,
   type GownCategoryId,
   type ServerActionErrorResult,
 } from "@/lib/types";
+import { imageSlotFormKeys } from "@/lib/utils";
 import { getAuthClient, type SupabaseServer } from "@/lib/actions/auth";
-import { deleteListingImage } from "@/lib/actions/images";
+import { deleteListingImages } from "@/lib/actions/images";
 
 const CATEGORY_IDS = GOWN_CATEGORIES.map((c) => c.id) as [
   GownCategoryId,
@@ -43,8 +45,6 @@ const listingInputSchema = z
     condition: z.string().trim().min(1),
     category: z.enum(CATEGORY_IDS),
     price: z.coerce.number(),
-    image_url: z.url().optional(),
-    image_blur_data_url: z.string().trim().optional(),
     contact_email: z.email(),
     contact_phone: contactPhoneField,
     status: z.enum(["active", "sold", "removed"]).default("active"),
@@ -55,6 +55,12 @@ const listingInputSchema = z
   });
 
 type ParsedListing = z.infer<typeof listingInputSchema>;
+
+type ImageSlot = {
+  file: File | null;
+  existingUrl: string | null;
+  blur: string;
+};
 
 function strOrUndefined(value: FormDataEntryValue | null): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -86,15 +92,17 @@ function rawListingFieldsFromFormData(formData: FormData) {
     condition: formData.get("condition"),
     category: formData.get("category"),
     price: formData.get("price"),
-    image_url: strOrUndefined(formData.get("image_url")),
-    image_blur_data_url: strOrUndefined(formData.get("image_blur_data_url")),
     contact_email: formData.get("contact_email"),
     contact_phone: strOrUndefined(formData.get("contact_phone")),
     status: strOrUndefined(formData.get("status")),
   };
 }
 
-function listingRowPayload(parsed: ParsedListing, image_url: string) {
+function listingRowPayload(
+  parsed: ParsedListing,
+  image_urls: string[],
+  image_blur_data_urls: string[],
+) {
   return {
     title: parsed.title,
     description: parsed.description ?? null,
@@ -105,8 +113,8 @@ function listingRowPayload(parsed: ParsedListing, image_url: string) {
     condition: parsed.condition,
     category: parsed.category,
     price: parsed.price,
-    image_url,
-    image_blur_data_url: parsed.image_blur_data_url ?? null,
+    image_urls,
+    image_blur_data_urls,
     contact_email: parsed.contact_email,
     contact_phone: parsed.contact_phone ?? null,
     status: parsed.status,
@@ -118,6 +126,38 @@ function catchSellActionError(e: unknown): { error: string } {
     return { error: zodListingFormErrorMessage(e) };
   }
   return { error: e instanceof Error ? e.message : "Something went wrong." };
+}
+
+const MAX_BLUR_DATA_URL_LENGTH = 4096;
+
+/** Blur strings are client-generated tiny data URLs; reject anything else. */
+function sanitizeBlur(value: FormDataEntryValue | null): string {
+  const blur = strOrUndefined(value);
+  if (!blur) return "";
+  if (!blur.startsWith("data:image/")) return "";
+  if (blur.length > MAX_BLUR_DATA_URL_LENGTH) return "";
+  return blur;
+}
+
+/** Collect image slots from formData, compacted (skip empty slots), at least 1 required. */
+function collectImageSlots(formData: FormData): ImageSlot[] | { error: string } {
+  const slots: ImageSlot[] = [];
+
+  for (let n = 0; n < MAX_LISTING_IMAGES; n++) {
+    const keys = imageSlotFormKeys(n);
+    const file = fileOrNull(formData.get(keys.file));
+    const existingUrl = strOrUndefined(formData.get(keys.existingUrl)) ?? null;
+    const blur = sanitizeBlur(formData.get(keys.blur));
+
+    if (file || existingUrl) {
+      slots.push({ file, existingUrl, blur });
+    }
+  }
+
+  if (slots.length === 0) {
+    return { error: "Please add at least one gown photo." };
+  }
+  return slots;
 }
 
 const UPLOAD_EXT_BY_MIME: Record<string, string> = {
@@ -152,28 +192,6 @@ async function uploadListingImage({
   return urlData.publicUrl;
 }
 
-/** Update path: new file wins; otherwise keep parsed URL; must end with a non-empty URL. */
-async function resolveUpdateListingImageUrl(
-  supabase: SupabaseServer,
-  userId: string,
-  imageFile: File | null,
-  parsed: ParsedListing,
-): Promise<{ image_url: string } | { error: string }> {
-  if (imageFile) {
-    const image_url = await uploadListingImage({
-      supabase,
-      file: imageFile,
-    });
-    return { image_url };
-  }
-
-  const image_url = parsed.image_url;
-  if (!image_url) {
-    return { error: "Please add a gown photo." };
-  }
-  return { image_url };
-}
-
 export async function createListing(
   formData: FormData,
 ): Promise<ServerActionErrorResult> {
@@ -182,34 +200,52 @@ export async function createListing(
   const { supabase, user } = auth;
 
   let shouldRedirect = false;
+  const uploadedUrls: string[] = [];
 
   try {
-    const imageFile = fileOrNull(formData.get("image_file"));
+    const slots = collectImageSlots(formData);
+    if ("error" in slots) return { error: slots.error };
 
-    if (!imageFile) {
-      return { error: "Please add a gown photo." };
+    const files: File[] = [];
+    for (const slot of slots) {
+      if (!slot.file) {
+        return { error: "Please add at least one gown photo." };
+      }
+      files.push(slot.file);
     }
 
     const parsed = listingInputSchema.parse(
       rawListingFieldsFromFormData(formData),
     );
 
-    const image_url = await uploadListingImage({
-      supabase,
-      file: imageFile,
-    });
+    const uploadResults = await Promise.allSettled(
+      files.map((file) => uploadListingImage({ supabase, file })),
+    );
+    for (const result of uploadResults) {
+      if (result.status === "fulfilled") uploadedUrls.push(result.value);
+    }
+    const failedUpload = uploadResults.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (failedUpload) throw failedUpload.reason;
+
+    const image_blur_data_urls = slots.map((s) => s.blur);
 
     const payload = {
-      ...listingRowPayload(parsed, image_url),
+      ...listingRowPayload(parsed, uploadedUrls, image_blur_data_urls),
       user_id: user.id,
     };
 
     const { error: dbError } = await supabase.from("listings").insert(payload);
-    if (dbError) return { error: dbError.message };
+    if (dbError) {
+      await deleteListingImages(uploadedUrls);
+      return { error: dbError.message };
+    }
 
     updateTag("listings");
     shouldRedirect = true;
   } catch (e) {
+    if (uploadedUrls.length > 0) await deleteListingImages(uploadedUrls);
     return catchSellActionError(e);
   }
 
@@ -231,7 +267,7 @@ export async function updateListing(
 
   const { data: existing, error: existingError } = await supabase
     .from("listings")
-    .select("user_id, image_url")
+    .select("user_id, image_urls")
     .eq("id", id)
     .maybeSingle();
 
@@ -239,26 +275,56 @@ export async function updateListing(
   if (!existing) return { error: "Listing not found" };
   if (existing.user_id !== user.id) return { error: "Not authorized" };
 
-  const oldImageUrl: string | null = existing.image_url ?? null;
+  const oldImageUrls: string[] = existing.image_urls ?? [];
 
   let shouldRedirect = false;
+  const newlyUploadedUrls: string[] = [];
 
   try {
-    const imageFile = fileOrNull(formData.get("image_file"));
+    const slots = collectImageSlots(formData);
+    if ("error" in slots) return { error: slots.error };
+
+    for (const slot of slots) {
+      if (slot.existingUrl && !oldImageUrls.includes(slot.existingUrl)) {
+        return { error: "Invalid existing image URL." };
+      }
+    }
 
     const parsed = listingInputSchema.parse(
       rawListingFieldsFromFormData(formData),
     );
 
-    const image = await resolveUpdateListingImageUrl(
-      supabase,
-      user.id,
-      imageFile,
-      parsed,
+    const uploadResults = await Promise.allSettled(
+      slots.map((slot) =>
+        slot.file
+          ? uploadListingImage({ supabase, file: slot.file })
+          : Promise.resolve(null),
+      ),
     );
-    if ("error" in image) return { error: image.error };
+    for (const result of uploadResults) {
+      if (result.status === "fulfilled" && result.value) {
+        newlyUploadedUrls.push(result.value);
+      }
+    }
+    const failedUpload = uploadResults.find(
+      (result): result is PromiseRejectedResult => result.status === "rejected",
+    );
+    if (failedUpload) throw failedUpload.reason;
 
-    const payload = listingRowPayload(parsed, image.image_url);
+    const nextImageUrls: string[] = [];
+    const nextBlurUrls: string[] = [];
+
+    for (const [i, slot] of slots.entries()) {
+      const uploaded = uploadResults[i];
+      if (uploaded.status === "fulfilled" && uploaded.value) {
+        nextImageUrls.push(uploaded.value);
+      } else if (slot.existingUrl) {
+        nextImageUrls.push(slot.existingUrl);
+      }
+      nextBlurUrls.push(slot.blur);
+    }
+
+    const payload = listingRowPayload(parsed, nextImageUrls, nextBlurUrls);
 
     const { error: dbError } = await supabase
       .from("listings")
@@ -267,15 +333,14 @@ export async function updateListing(
       .eq("user_id", user.id);
 
     if (dbError) {
-      if (imageFile) {
-        const cleanup = await deleteListingImage(image.image_url);
+      if (newlyUploadedUrls.length > 0) {
+        const cleanup = await deleteListingImages(newlyUploadedUrls);
         if ("error" in cleanup) {
           console.warn(
-            "Failed to clean up replacement image after listing update error:",
+            "Failed to clean up replacement images after listing update error:",
             {
               listingId: id,
-              oldImageUrl,
-              replacementImageUrl: image.image_url,
+              replacementImageUrls: newlyUploadedUrls,
               error: cleanup.error,
             },
           );
@@ -287,12 +352,14 @@ export async function updateListing(
     updateTag(`listing:${id}`);
     updateTag("listings");
 
-    if (imageFile && oldImageUrl && oldImageUrl !== image.image_url) {
-      await deleteListingImage(oldImageUrl);
+    const orphans = oldImageUrls.filter((u) => !nextImageUrls.includes(u));
+    if (orphans.length > 0) {
+      await deleteListingImages(orphans);
     }
 
     shouldRedirect = true;
   } catch (e) {
+    if (newlyUploadedUrls.length > 0) await deleteListingImages(newlyUploadedUrls);
     return catchSellActionError(e);
   }
 
