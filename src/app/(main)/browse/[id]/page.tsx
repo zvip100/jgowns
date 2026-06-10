@@ -5,7 +5,7 @@ import { GOWN_CATEGORIES } from "@/lib/types";
 import { cn, isValidUUID } from "@/lib/utils";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, Mail, Phone } from "lucide-react";
 import { ImageViewer } from "@/components/ImageViewer";
 
 export async function generateMetadata({
@@ -194,7 +194,8 @@ export default async function ListingPage({
                   : 'hover:-translate-y-0.5 hover:brightness-105',
               )}
             >
-              ✉️ Email Seller
+              <Mail data-icon='inline-start' className='size-3.5 shrink-0' />
+              Email Seller
             </a>
             {listing.contact_phone && (
               <a
@@ -207,7 +208,8 @@ export default async function ListingPage({
                   sold ? 'pointer-events-none opacity-40 grayscale' : 'hover:bg-white',
                 )}
               >
-                📞 Call Seller
+                <Phone data-icon='inline-start' className='size-3.5 shrink-0' />
+                Call Seller
               </a>
             )}
           </div>
