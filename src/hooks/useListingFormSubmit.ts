@@ -2,16 +2,18 @@
 
 import { useCallback, useRef, useState } from "react";
 import { unstable_rethrow, useRouter } from "next/navigation";
+
 import { isValidSizePair } from "@/lib/gown-sizes";
 import { createListing, updateListing } from "@/lib/actions/sell";
+import { imageSlotFormKeys } from "@/lib/utils";
+
 import {
   GOWN_CATEGORIES,
   type GownCategoryId,
   type ListingFormData,
   type SizeGroupSlug,
+  type ImageSlotState,
 } from "@/lib/types";
-import { imageSlotFormKeys } from "@/lib/utils";
-import type { ImageSlotState } from "@/lib/types";
 
 function digitsOnlyPhone(value: string | null | undefined): string {
   if (!value) return "";

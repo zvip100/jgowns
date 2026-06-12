@@ -1,7 +1,12 @@
-import type { Metadata } from "next";
+import { Search } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { Search } from "lucide-react";
+
+import heroImage from "@/assets/jgowns-hero.png";
+import SellSection from "@/components/SellSection";
+import { Button } from "@/components/ui/button";
+
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: {
@@ -16,10 +21,6 @@ export const metadata: Metadata = {
     type: "website",
   },
 };
-
-import heroImage from "@/assets/jgowns-hero.png";
-import SellSection from "@/components/SellSection";
-import { Button } from "@/components/ui/button";
 
 export default function HomePage() {
   return (
