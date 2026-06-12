@@ -33,7 +33,7 @@ export default function ListingForm({
   initial?: Partial<ListingFormData>;
   listingId?: string;
 }) {
-  const { slots, onFileChange, onClear, resolveUploadFile } =
+  const { slots, onFileSelected, onClear, resolveUploadFile } =
     useListingImageSlots({
       initialUrls: initial?.image_urls ?? [],
       initialBlurUrls: initial?.image_blur_data_urls ?? [],
@@ -143,7 +143,7 @@ export default function ListingForm({
 
         <ListingPhotoField
           slots={slots}
-          onFileChange={onFileChange}
+          onFileSelected={onFileSelected}
           onClear={onClear}
         />
 

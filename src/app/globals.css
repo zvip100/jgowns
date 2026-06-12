@@ -136,6 +136,13 @@
     z-index: -1;
   }
 
+  /* Tailwind v4 preflight resets buttons to `cursor: default`; restore the
+     pointer for all enabled interactive controls (shadcn-recommended rule). */
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
   h1,
   h2,
   h3,

@@ -199,6 +199,7 @@ Imports must appear at the top of the file. No code, declarations, or exports go
 - **Route handlers:** always return typed JSON with an appropriate HTTP status code.
 - Never swallow errors silently (`catch (e) {}`).
 - Log errors server-side; return a sanitized message to the client.
+- **Client calls to redirecting server actions:** a server action that `redirect()`s on success throws `NEXT_REDIRECT`. Any client code that wraps such a call in `try/catch` must call `unstable_rethrow(e)` at the top of the `catch` (before showing an error) so the redirect/`notFound` signal isn't swallowed and rendered as a form error.
 
 ---
 
@@ -234,6 +235,7 @@ Before writing any Next.js-related code:
   3. A `@layer components` rule in `globals.css` only when 1 and 2 don't fit.
 - Never duplicate long class strings across JSX blocks.
 - Co-locate variant logic with the component that owns it. Don't scatter `cn(...)` ternaries throughout the tree.
+- Buttons get `cursor-pointer` from a base rule in `globals.css` (`button:not(:disabled)`, `[role="button"]`) — Tailwind v4 preflight resets buttons to `cursor: default` and shadcn's `Button` doesn't restore it. Don't add `cursor-pointer` per-element. Non-button dropzones/divs (e.g. react-dropzone roots, which get `role="presentation"`) still need it explicitly.
 
 ### General
 

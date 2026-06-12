@@ -26,6 +26,10 @@ Categories: `decision` | `completed` | `never`
 
 - [06-09-2026] completed: Multi-image code review applied — slot contract centralized in types.ts (MAX_LISTING_IMAGES + imageSlotFormKeys), createListing validates slots before uploading, blur_N sanitized server-side (data:image/ prefix, 4096 cap), per-slot request-token guard in useListingImageSlots, parallel uploads via Promise.allSettled, deleted unused ui/carousel.tsx and deleteListingImage (singular), migration 008 adds image-array check constraint.
 
+- [06-12-2026] completed: Photo upload UI refactored to react-dropzone — ListingPhotoField is now three horizontal drag-and-drop slot cards (empty/hover/drag-active/reject/optimizing/populated states, numbered chips, replace-on-drop, gold ShieldCheck blur-faces note); useListingImageSlots.onFileChange→onFileSelected(index,file); pipeline (optimize→preview→upload, blur, slots, validation) unchanged; deleted unused FileInputField.tsx + FORM_FILE_INPUT_CLASS.
+
+- [06-12-2026] completed: Listing submit-flow fixes in useListingFormSubmit — no-op edit skips the server round-trip and client-side router.push('/dashboard') (generic field compare + slots/image compare); setLoading(true) moved past the early return to fix stuck "Saving…" on the cached edit page; unstable_rethrow(e) in catch stops the NEXT_REDIRECT flash on successful save. Plus global button cursor-pointer rule in globals.css (button:not(:disabled), [role=button]) replacing per-element copies.
+
 ## Never
 
 - [05-28-2026] never: Do not add runtime legacy/backfill/migration-bridge logic (inferring missing fields, aliasing old formats, guessing from partial data) unless the user explicitly asks. Assume the DB and APIs are on the current schema.

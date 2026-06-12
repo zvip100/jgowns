@@ -9,7 +9,7 @@ import { blurProps, cn } from '@/lib/utils';
 import { Lightbox } from './Lightbox';
 
 const heroNavButtonClass =
-  'absolute top-1/2 z-10 flex size-8 -translate-y-1/2 cursor-pointer items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm transition hover:bg-black/70';
+  'absolute top-1/2 z-10 flex size-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm transition hover:bg-black/70';
 
 type ImageViewerProps = {
   imageUrls: string[];

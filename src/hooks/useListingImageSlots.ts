@@ -66,13 +66,7 @@ export function useListingImageSlots({
     );
   };
 
-  const onFileChange = async (
-    index: number,
-    e: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const onFileSelected = async (index: number, file: File) => {
     const slotId = slots[index].id;
 
     const oldPreview = slots[index].preview;
@@ -146,7 +140,7 @@ export function useListingImageSlots({
 
   return {
     slots,
-    onFileChange,
+    onFileSelected,
     onClear,
     resolveUploadFile,
   };
