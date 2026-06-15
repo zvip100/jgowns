@@ -21,7 +21,7 @@ import {
 import { TextInputField } from '@/components/form/TextInputField';
 import { TextareaField } from '@/components/form/TextareaField';
 import { useListingFormSubmit } from '@/hooks/useListingFormSubmit';
-import { useListingImageUpload } from '@/hooks/useListingImageUpload';
+import { useListingImageSlots } from '@/hooks/useListingImageSlots';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FieldError, FieldGroup } from '@/components/ui/field';
@@ -33,10 +33,11 @@ export default function ListingForm({
   initial?: Partial<ListingFormData>;
   listingId?: string;
 }) {
-  const image = useListingImageUpload({
-    initialPreview: initial?.image_url ?? null,
-    initialBlurDataUrl: initial?.image_blur_data_url ?? null,
-  });
+  const { slots, onFileSelected, onClear, resolveUploadFile } =
+    useListingImageSlots({
+      initialUrls: initial?.image_urls ?? [],
+      initialBlurUrls: initial?.image_blur_data_urls ?? [],
+    });
 
   const {
     form,
@@ -44,7 +45,6 @@ export default function ListingForm({
     setSizeSelection,
     setCategory,
     setContactPhone,
-    clearImageUrl,
     loading,
     error,
     handleSubmit,
@@ -52,17 +52,9 @@ export default function ListingForm({
   } = useListingFormSubmit({
     initial,
     listingId,
-    image: {
-      imageFile: image.imageFile,
-      optimizedDataUrl: image.optimizedDataUrl,
-      blurDataUrlRef: image.blurDataUrlRef,
-    },
+    slots,
+    resolveUploadFile,
   });
-
-  const handleClearImage = () => {
-    image.onClear();
-    clearImageUrl();
-  };
 
   return (
     <form
@@ -150,12 +142,9 @@ export default function ListingForm({
         </FormFieldGrid>
 
         <ListingPhotoField
-          fileInputRef={image.fileInputRef}
-          preview={image.preview}
-          imageOptimizing={image.imageOptimizing}
-          imageOptimizeError={image.imageOptimizeError}
-          onFileChange={image.onFileChange}
-          onClear={handleClearImage}
+          slots={slots}
+          onFileSelected={onFileSelected}
+          onClear={onClear}
         />
 
         <FormSection
@@ -199,7 +188,7 @@ export default function ListingForm({
 
         <Button
           type="submit"
-          disabled={loading || image.imageOptimizing}
+          disabled={loading || slots.some((s) => s.optimizing)}
           className="h-12 w-full rounded-full border border-[#b58d5f]/70 bg-[linear-gradient(180deg,#c49a68,#a67841)] text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)] transition hover:-translate-y-0.5 hover:brightness-105 disabled:translate-y-0 disabled:opacity-50"
         >
           {loading ? 'Saving…' : isEdit ? 'Update Listing' : 'Publish Listing'}

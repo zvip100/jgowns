@@ -32,13 +32,17 @@ No in-app transactions yet. Stripe is planned but **not implemented** — do not
 
 ## Agent Behavior
 
-- **Do only what's asked.** No extra changes, no unsolicited refactors, no unrequested suggestions.
+- **Do only what's asked.** No extra changes, no unsolicited refactors, no unrequested suggestions. Exception: if a fix obviously applies to a sibling file (e.g. `LoginForm` ↔ `RegisterForm`), flag it and offer — but do not apply until approved.
 - **Clarify before acting** on anything ambiguous or underspecified.
 - **Confirm before destructive changes** (deleting files, removing logic, breaking APIs).
 - **When multiple valid approaches exist**, list them briefly and wait for approval before writing code.
 - **Always choose the simplest, cleanest, best-practice solution.** Don't over-engineer.
 - **Responses mirror the task.** Simple question → short answer. Complex task → full but concise. No filler phrases.
 - **No over-commenting.** A single JSDoc-style comment above a complex function is fine. Never comment above random lines, never write paragraph-style comments in code. If a file being modified has excessive comments, remove or trim them as part of the task.
+- **Code review / suggestion evaluation:** Compile all findings into a single list before editing any file. Wait for explicit "apply all" or selective approval. Never auto-apply a finding the moment it is identified.
+- **Search exhaustiveness:** When asked to update "all" occurrences of something, search the full codebase before reporting done. Do not stop at the first match.
+- **Metadata descriptions:** Never write "on JGowns" in metadata `description` fields — the site name already appears in the title template.
+- **`noindex`** applied to a page requires explicit justification. Do not apply it to registration, new-listing, or other discovery pages without instruction. When unsure, ask.
 
 ---
 
@@ -149,6 +153,12 @@ src/lib/actions/
 - Prefer `type` over `interface` unless declaration merging is needed.
 - No `as` casts unless unavoidable — add a comment explaining why if used.
 - Use `satisfies` to validate object shapes without widening the type.
+- Declare component prop types as a named `type` above the function. Name it after the component with a `Props` suffix — never just `Props`:
+  ```ts
+  type ListingCardProps = { id: string; isActive: boolean };
+  export function ListingCard({ id, isActive }: ListingCardProps) { ... }
+  ```
+- Global, reusable types (shared across multiple files) belong in `src/lib/types.ts`. Component- or function-specific types live in the same file as the component or function that owns them.
 
 ---
 
@@ -164,6 +174,8 @@ src/lib/actions/
 | Constants             | SCREAMING_SNAKE_CASE | `MAX_UPLOAD_SIZE`               |
 | Boolean vars / props  | `is` / `has` prefix  | `isLoading`, `hasError`         |
 
+Never abbreviate identifiers: `UUID_REGEX` not `UUID_RE`, `MAX_FILE_SIZE` not `MAX_SZ`.
+
 ---
 
 ## 6. Import Order
@@ -176,6 +188,8 @@ Separate each group with a blank line:
 4. Relative imports (`./`, `../`)
 5. Type-only imports (`import type ...`)
 
+Imports must appear at the top of the file. No code, declarations, or exports go between import groups or before the import block is complete.
+
 ---
 
 ## 7. Error Handling
@@ -185,6 +199,7 @@ Separate each group with a blank line:
 - **Route handlers:** always return typed JSON with an appropriate HTTP status code.
 - Never swallow errors silently (`catch (e) {}`).
 - Log errors server-side; return a sanitized message to the client.
+- **Client calls to redirecting server actions:** a server action that `redirect()`s on success throws `NEXT_REDIRECT`. Any client code that wraps such a call in `try/catch` must call `unstable_rethrow(e)` at the top of the `catch` (before showing an error) so the redirect/`notFound` signal isn't swallowed and rendered as a form error.
 
 ---
 
@@ -209,6 +224,8 @@ Before writing any Next.js-related code:
 - Prefer many small, focused components over one large file. A component does one thing.
 - If the same JSX shape appears in two or more places, extract a component.
 - Keep component APIs minimal — only props that are actually needed.
+- Use `lucide-react` icons as UI visual elements — including error pages, not-found pages, and empty states. Never use emojis as visual replacements for icons.
+- Before writing a new button or link style, check what already exists in the app and reuse it.
 
 ### Tailwind / CSS
 
@@ -218,12 +235,16 @@ Before writing any Next.js-related code:
   3. A `@layer components` rule in `globals.css` only when 1 and 2 don't fit.
 - Never duplicate long class strings across JSX blocks.
 - Co-locate variant logic with the component that owns it. Don't scatter `cn(...)` ternaries throughout the tree.
+- Buttons get `cursor-pointer` from a base rule in `globals.css` (`button:not(:disabled)`, `[role="button"]`) — Tailwind v4 preflight resets buttons to `cursor: default` and shadcn's `Button` doesn't restore it. Don't add `cursor-pointer` per-element. Non-button dropzones/divs (e.g. react-dropzone roots, which get `role="presentation"`) still need it explicitly.
 
 ### General
 
 - No over-engineering, no premature abstraction. Write the simplest code that correctly solves the problem.
 - Use `loading.tsx` and `error.tsx` at appropriate route segments. Wrap deferred data in `<Suspense>`.
 - No dead code, no commented-out blocks, no unexplained `TODO`s.
+- Test suites must cover every exported function from the module on the first pass. Confirm every export is tested before reporting done.
+- Before flagging a legacy-data issue (e.g. stale enum values, old column formats), check migration history in `src/supabase/migrations/`. If a migration already resolved it, the finding is not actionable.
+- All auth and contact form inputs must carry the correct `autocomplete` attribute: `email`, `new-password`, `current-password`, `tel`, etc.
 
 ---
 

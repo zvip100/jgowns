@@ -183,32 +183,31 @@ function padAndClamp({ left, top, width, height }: Region): Region {
 }
 
 /**
- * Removes a previously uploaded listing image from Supabase Storage.
+ * Removes previously uploaded listing images from Supabase Storage.
  *
- * Safe to call with any URL: non-Supabase URLs (e.g. legacy Cloudinary)
+ * Safe to call with any URLs: non-Supabase URLs (e.g. legacy Cloudinary)
  * are skipped silently. Security is enforced by the storage RLS policy
  * "Users can delete own images" — only the original uploader can delete
  * their own files.
  */
-export async function deleteListingImage(
-  imageUrl: string,
+export async function deleteListingImages(
+  imageUrls: string[],
 ): Promise<DeleteListingImageResult> {
-  if (typeof imageUrl !== "string" || !imageUrl.trim()) {
-    return { ok: true };
-  }
+  const paths = imageUrls
+    .map((url) => listingImagePathFromUrl(url))
+    .filter((p): p is string => p !== null);
 
-  const path = listingImagePathFromUrl(imageUrl);
-  if (!path) return { ok: true };
+  if (paths.length === 0) return { ok: true };
 
   const auth = await getAuthClient();
   if (!auth.ok) return { error: auth.error };
 
   const { error } = await auth.supabase.storage
     .from(LISTING_IMAGE_BUCKET)
-    .remove([path]);
+    .remove(paths);
 
   if (error) {
-    console.warn("deleteListingImage failed:", error.message);
+    console.warn("deleteListingImages failed:", error.message);
     return { error: error.message };
   }
   return { ok: true };

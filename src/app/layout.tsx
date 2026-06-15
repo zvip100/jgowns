@@ -15,7 +15,13 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://jgowns.com"),
+  metadataBase: (() => {
+    try {
+      return new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://jgowns.com");
+    } catch {
+      return new URL("https://jgowns.com");
+    }
+  })(),
   title: {
     default: "Jgowns — The ultimate marketplace for modest gowns.",
     template: "%s | Jgowns",

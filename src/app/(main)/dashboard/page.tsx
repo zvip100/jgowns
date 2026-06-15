@@ -1,17 +1,8 @@
-import type { Metadata } from 'next';
-import { Suspense } from 'react';
-
-export const metadata: Metadata = {
-  title: "My Listings",
-  description: "Manage your gown listings.",
-  robots: { index: false, follow: false },
-};
 import Link from 'next/link';
+import { Suspense } from 'react';
 import { Plus, Sparkles } from 'lucide-react';
 
 import { createClient } from '@/lib/supabase/server';
-import type { Listing } from '@/lib/types';
-
 import { Button } from '@/components/ui/button';
 import {
   Empty,
@@ -24,6 +15,15 @@ import {
 import DashboardStats from '@/components/DashboardStats';
 import DashboardPageSkeleton from '@/components/DashboardPageSkeleton';
 import ListingRow from '@/components/ListingRow';
+
+import type { Metadata } from 'next';
+import type { Listing } from '@/lib/types';
+
+export const metadata: Metadata = {
+  title: "My Listings",
+  description: "Manage your gown listings.",
+  robots: { index: false, follow: false },
+};
 
 async function DashboardCollectionSummary({
   listingsPromise,

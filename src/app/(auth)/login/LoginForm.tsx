@@ -16,6 +16,7 @@ export default function LoginForm() {
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
+    setError('');
     setLoading(true);
     try {
       const { error: signInError } = await supabase.auth.signInWithPassword({

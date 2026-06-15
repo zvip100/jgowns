@@ -5,6 +5,7 @@ import { Eye, Pencil } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import MarkSoldButton from '@/components/MarkSoldButton';
+import { blurProps } from '@/lib/utils';
 import { GOWN_CATEGORIES, type Listing } from '@/lib/types';
 
 const statusStyles: Record<Listing['status'], string> = {
@@ -22,14 +23,12 @@ export default function ListingRow({ listing }: { listing: Listing }) {
       <Link href={href} className="shrink-0">
         <div className="relative aspect-4/5 w-20 overflow-hidden rounded-xl bg-(--bg-ivory) sm:w-24">
           <Image
-            src={listing.image_url}
+            src={listing.image_urls[0]}
             alt={listing.title}
             fill
             sizes="(max-width: 640px) 96px, 112px"
             className="object-cover transition duration-500 group-hover:scale-105"
-            {...(listing.image_blur_data_url
-              ? { placeholder: 'blur' as const, blurDataURL: listing.image_blur_data_url }
-              : {})}
+            {...blurProps(listing.image_blur_data_urls[0])}
           />
         </div>
       </Link>

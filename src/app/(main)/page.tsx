@@ -1,7 +1,12 @@
-import type { Metadata } from "next";
+import { Search } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
-import { Search } from "lucide-react";
+
+import heroImage from "@/assets/jgowns-hero.png";
+import SellSection from "@/components/SellSection";
+import { Button } from "@/components/ui/button";
+
+import type { Metadata } from "next";
 
 export const metadata: Metadata = {
   title: {
@@ -17,10 +22,6 @@ export const metadata: Metadata = {
   },
 };
 
-import heroImage from "@/assets/jgowns-hero.png";
-import SellSection from "@/components/SellSection";
-import { Button } from "@/components/ui/button";
-
 export default function HomePage() {
   return (
     <>
@@ -29,7 +30,7 @@ export default function HomePage() {
         src={heroImage}
         alt='Softly lit bridal showroom with floral arrangements'
         fill
-        preload
+        priority
         sizes='(max-width: 768px) 100vw, 1280px'
         className='object-cover object-center'
       />

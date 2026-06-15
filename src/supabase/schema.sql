@@ -21,12 +21,16 @@ create table listings (
   ),
   condition text not null check (condition in ('Brand New', 'Perfect Condition', 'Needs Alterations')),
   price numeric(10,2) not null,
-  image_url text not null,
-  image_blur_data_url text,
+  image_urls text[] not null default '{}',
+  image_blur_data_urls text[] not null default '{}',
   contact_email text not null,
   contact_phone text,
   status text default 'active' check (status in ('active', 'sold', 'removed')),
   created_at timestamp with time zone default now(),
+  constraint listings_image_arrays_check check (
+    cardinality(image_urls) between 1 and 3
+    and cardinality(image_blur_data_urls) = cardinality(image_urls)
+  ),
   constraint listings_size_pair_check check (
     (size_group = 'toddler' and size in ('2T','3T','4T','5T','6T','7T','8T','9T','10T')) or
     (size_group = 'kids'    and size in ('3','5','6','7','8','10','12','14','16')) or

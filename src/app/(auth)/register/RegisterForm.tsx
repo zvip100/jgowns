@@ -16,6 +16,8 @@ export default function RegisterForm() {
   const [loading, setLoading] = useState(false);
 
   const handleRegister = async () => {
+    setMsg('');
+    setIsError(false);
     setLoading(true);
     try {
       const { error } = await supabase.auth.signUp({ email, password });
