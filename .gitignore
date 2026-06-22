@@ -1,9 +1,6 @@
 # dependencies
 /node_modules
 
-# testing
-/coverage
-
 # next.js
 /.next/
 /out/
@@ -23,6 +20,7 @@ npm-debug.log*
 
 # env files
 .env*
+!.env.local.example
 
 # vercel
 .vercel
@@ -44,3 +42,5 @@ next-env.d.ts
 
 # DB migrations
 /src/supabase/migrations
+
+docs/

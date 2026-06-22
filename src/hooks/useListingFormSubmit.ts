@@ -5,7 +5,7 @@ import { unstable_rethrow, useRouter } from "next/navigation";
 
 import { isValidSizePair } from "@/lib/gown-sizes";
 import { createListing, updateListing } from "@/lib/actions/sell";
-import { imageSlotFormKeys } from "@/lib/utils";
+import { digitsOnlyPhone, imageSlotFormKeys } from "@/lib/utils";
 
 import {
   GOWN_CATEGORIES,
@@ -14,11 +14,6 @@ import {
   type SizeGroupSlug,
   type ImageSlotState,
 } from "@/lib/types";
-
-function digitsOnlyPhone(value: string | null | undefined): string {
-  if (!value) return "";
-  return value.replace(/\D/g, "");
-}
 
 function buildInitialForm(
   initial?: Partial<ListingFormData>,

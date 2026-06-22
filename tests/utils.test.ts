@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { cn, firstParam } from "@/lib/utils";
+import {
+  cn,
+  digitsOnlyPhone,
+  firstParam,
+  optionalPhoneSchema,
+} from "@/lib/utils";
 
 describe("utils", () => {
   describe("cn", () => {
@@ -45,6 +50,48 @@ describe("utils", () => {
 
     it("returns undefined for an empty array", () => {
       expect(firstParam([])).toBeUndefined();
+    });
+  });
+
+  describe("digitsOnlyPhone", () => {
+    it("keeps digits and strips everything else", () => {
+      expect(digitsOnlyPhone("(555) 123-4567")).toBe("5551234567");
+      expect(digitsOnlyPhone("555abc123")).toBe("555123");
+      expect(digitsOnlyPhone("+1 555.123.4567")).toBe("15551234567");
+    });
+
+    it("returns an empty string for blank / null / undefined", () => {
+      expect(digitsOnlyPhone("")).toBe("");
+      expect(digitsOnlyPhone(null)).toBe("");
+      expect(digitsOnlyPhone(undefined)).toBe("");
+    });
+  });
+
+  describe("optionalPhoneSchema", () => {
+    it("treats blank / undefined / whitespace as undefined", () => {
+      expect(optionalPhoneSchema.parse(undefined)).toBeUndefined();
+      expect(optionalPhoneSchema.parse("")).toBeUndefined();
+      expect(optionalPhoneSchema.parse("   ")).toBeUndefined();
+    });
+
+    it("normalizes a formatted number to digits only", () => {
+      expect(optionalPhoneSchema.parse("+1 (555) 123-4567")).toBe("15551234567");
+      expect(optionalPhoneSchema.parse("555-123-4567")).toBe("5551234567");
+    });
+
+    it("rejects values containing letters instead of stripping them", () => {
+      expect(optionalPhoneSchema.safeParse("555-CALL-NOW").success).toBe(false);
+      expect(optionalPhoneSchema.safeParse("abc").success).toBe(false);
+      expect(optionalPhoneSchema.safeParse("123abc4567").success).toBe(false);
+    });
+
+    it("rejects too-short and too-long digit counts", () => {
+      expect(optionalPhoneSchema.safeParse("12345").success).toBe(false);
+      expect(optionalPhoneSchema.safeParse("1234567890123456").success).toBe(false);
+    });
+
+    it("rejects formatting with no digits", () => {
+      expect(optionalPhoneSchema.safeParse("()-+").success).toBe(false);
     });
   });
 });
