@@ -27,10 +27,10 @@ export default function RegisterForm({ next }: RegisterFormProps) {
 
   useLayoutEffect(() => {
     return () => {
-      if (isError) setIsError(false);
-      if (msg) setMsg('');
-    }
-  }, [])
+      setIsError(false);
+      setMsg('');
+    };
+  }, []);
 
   const handleRegister = async () => {
     setMsg('');

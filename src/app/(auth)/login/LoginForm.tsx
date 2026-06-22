@@ -22,10 +22,8 @@ export default function LoginForm({ next }: LoginFormProps) {
   const [loading, setLoading] = useState(false);
 
   useLayoutEffect(() => {
-    return () => {
-      if (error) setError('');
-    };
-  }, [])
+    return () => setError('');
+  }, []);
 
   const handleLogin = async () => {
     setError('');
