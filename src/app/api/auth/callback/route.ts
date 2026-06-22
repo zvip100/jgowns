@@ -1,7 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
 
-import { safePostAuthPath } from "@/lib/auth-redirect";
+import { DEFAULT_POST_AUTH_PATH, safePostAuthPath } from "@/lib/auth-redirect";
 import { createClient } from "@/lib/supabase/server";
+
+function loginErrorUrl(origin: string, next: string): string {
+  const url = new URL("/login", origin);
+  url.searchParams.set("error", "auth");
+  if (next !== DEFAULT_POST_AUTH_PATH) url.searchParams.set("next", next);
+  return url.toString();
+}
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
   const { searchParams, origin } = new URL(request.url);
@@ -9,7 +16,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const next = safePostAuthPath(searchParams.get("next"));
 
   if (!code) {
-    return NextResponse.redirect(`${origin}/login?error=auth`);
+    return NextResponse.redirect(loginErrorUrl(origin, next));
   }
 
   const supabase = await createClient();
@@ -17,7 +24,7 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   if (error) {
     console.error("Auth callback failed:", error.message);
-    return NextResponse.redirect(`${origin}/login?error=auth`);
+    return NextResponse.redirect(loginErrorUrl(origin, next));
   }
 
   return NextResponse.redirect(`${origin}${next}`);

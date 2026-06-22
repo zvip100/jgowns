@@ -51,6 +51,7 @@ export function MobileMenuTrigger() {
 
   return (
     <button
+      type="button"
       onClick={toggle}
       className="flex flex-col gap-1.5 rounded-xl border border-[#d8c9b5] bg-white/60 p-3 md:hidden"
       aria-expanded={isOpen}
