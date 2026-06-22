@@ -29,7 +29,7 @@ export default async function BrowsePage({
   const resolvedSearchParams = await searchParams;
 
   return (
-    <div className='lg:-mt-10'>
+    <div className='-mt-4 lg:-mt-10'>
       <ListingsLayout
         minBound={minBound}
         maxBound={maxBound}

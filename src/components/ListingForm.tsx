@@ -22,6 +22,7 @@ import { TextInputField } from '@/components/form/TextInputField';
 import { TextareaField } from '@/components/form/TextareaField';
 import { useListingFormSubmit } from '@/hooks/useListingFormSubmit';
 import { useListingImageSlots } from '@/hooks/useListingImageSlots';
+import { PRIMARY_CTA_CLASS } from '@/lib/styles';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FieldError, FieldGroup } from '@/components/ui/field';
@@ -189,7 +190,7 @@ export default function ListingForm({
         <Button
           type="submit"
           disabled={loading || slots.some((s) => s.optimizing)}
-          className="h-12 w-full rounded-full border border-[#b58d5f]/70 bg-[linear-gradient(180deg,#c49a68,#a67841)] text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)] transition hover:-translate-y-0.5 hover:brightness-105 disabled:translate-y-0 disabled:opacity-50"
+          className={`${PRIMARY_CTA_CLASS} h-12 disabled:translate-y-0`}
         >
           {loading ? 'Saving…' : isEdit ? 'Update Listing' : 'Publish Listing'}
         </Button>

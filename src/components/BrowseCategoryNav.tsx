@@ -19,7 +19,7 @@ const chipIdle =
   "border-[#e0cfb6] bg-white/50 text-[#6a5544] hover:border-[#c9a880] hover:bg-white/85 hover:text-[#3f3023]";
 
 const chipActive =
-  "border-[#a67841] bg-[linear-gradient(180deg,#c49a68,#a67841)] text-white shadow-[0_8px_20px_rgba(166,120,65,0.28)] [text-shadow:0_1px_0_rgba(74,49,21,0.2)]";
+  "border-[#a67841] bg-[linear-gradient(180deg,#c49a68,#a67841)] text-white [text-shadow:0_1px_0_rgba(74,49,21,0.2)]";
 
 function hrefForCategory(
   resolved: PageSearchParams,
@@ -48,7 +48,7 @@ export default function BrowseCategoryNav({
       <div
         className={cn(
           isMobile &&
-          "flex gap-2 overflow-x-auto overscroll-x-contain pb-1 [-ms-overflow-style:none] [scrollbar-width:none] snap-x snap-mandatory scroll-px-4 touch-pan-x [&::-webkit-scrollbar]:hidden",
+          "flex gap-2 overflow-x-auto overscroll-x-contain pb-1 -mb-1 [-ms-overflow-style:none] [scrollbar-width:none] snap-x snap-mandatory scroll-px-4 touch-pan-x [&::-webkit-scrollbar]:hidden",
           !isMobile && "flex flex-nowrap items-center justify-end gap-2",
         )}
       >

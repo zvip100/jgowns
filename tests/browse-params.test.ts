@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   canonicalBrowseQueryString,
+  countActiveBrowseFilters,
   formatBrowseParamList,
   parseBrowseParamList,
   toPageSearchParams,
@@ -63,6 +64,37 @@ describe("browse-params", () => {
 
     it("filters out empty strings", () => {
       expect(formatBrowseParamList(["a", "", "b"])).toBe("a,b");
+    });
+  });
+
+  describe("countActiveBrowseFilters", () => {
+    it("returns 0 when no filter params are present", () => {
+      expect(countActiveBrowseFilters(new URLSearchParams())).toBe(0);
+    });
+
+    it("counts each filter category once regardless of how many values it holds", () => {
+      const p = new URLSearchParams("size=a:8,a:10,a:12,a:14,a:16");
+      expect(countActiveBrowseFilters(p)).toBe(1);
+    });
+
+    it("counts a two-sided price range as a single category", () => {
+      const p = new URLSearchParams("minPrice=500&maxPrice=2000");
+      expect(countActiveBrowseFilters(p)).toBe(1);
+    });
+
+    it("counts a one-sided price as a single category", () => {
+      expect(countActiveBrowseFilters(new URLSearchParams("minPrice=500"))).toBe(1);
+      expect(countActiveBrowseFilters(new URLSearchParams("maxPrice=2000"))).toBe(1);
+    });
+
+    it("counts size plus a price range as 2", () => {
+      const p = new URLSearchParams("size=a:8,a:10&minPrice=500&maxPrice=2000");
+      expect(countActiveBrowseFilters(p)).toBe(2);
+    });
+
+    it("does not count the category nav param as a filter", () => {
+      const p = new URLSearchParams("category=bridal");
+      expect(countActiveBrowseFilters(p)).toBe(0);
     });
   });
 

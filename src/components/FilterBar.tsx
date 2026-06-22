@@ -8,6 +8,7 @@ import {
   BROWSE_FILTER_PARAMS,
   BROWSE_NAV_PARAMS,
   canonicalBrowseQueryString,
+  countActiveBrowseFilters,
   formatBrowseParamList,
   parseBrowseParamList,
 } from "@/lib/browse-params";
@@ -32,24 +33,23 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
+  SheetClose,
   SheetContent,
-  SheetHeader,
+  SheetFooter,
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
+import FilterCountBadge from "@/components/FilterCountBadge";
+import { PRIMARY_CTA_CLASS } from "@/lib/styles";
 import { cn } from "@/lib/utils";
 
-// URL semantics for the `cond` param:
-//   "":               All conditions
-//   "no-alterations": Brand New + Perfect Condition
-//   "Brand New":      Brand New only
+// `cond=no-alterations` preserves the combined "Ready to Wear" URL value.
 
 type FilterBarProps = {
   variant: "rail" | "drawer";
   minBound: number;
   maxBound: number;
-  /** Desktop rail only: parent removes the rail column so listings expand. */
   onCollapseRail?: () => void;
 };
 
@@ -93,7 +93,7 @@ export default function FilterBar({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [openAccordions, setOpenAccordions] = useState<string[]>([]);
 
-  // Fully controlled local state to prevent focus loss on URL pushes.
+  // Local state prevents focus loss while URL-backed filters update.
   const [local, setLocal] = useState({
     size: params.get("size") ?? "",
     color: params.get("color") ?? "",
@@ -119,7 +119,7 @@ export default function FilterBar({
   );
   const allowedSizeSet = useMemo(() => new Set(allowedSizes), [allowedSizes]);
 
-  // Sync local state when URL changes externally (clear-all, browser back/forward)
+  // Resync when navigation changes outside this component.
   useEffect(() => {
     const rawSize = params.get("size") ?? "";
     const selected = parseBrowseParamList(rawSize || null);
@@ -146,6 +146,7 @@ export default function FilterBar({
   }, [params, allowedSizes, router]);
 
   const hasFilters = BROWSE_FILTER_PARAMS.some((k) => params.has(k));
+  const activeCount = countActiveBrowseFilters(params);
 
   const pushURL = (key: string, value: string) => {
     const p = new URLSearchParams(paramsRef.current.toString());
@@ -172,7 +173,7 @@ export default function FilterBar({
     pushURL(key, value);
   };
 
-  // Debounced price commit so dragging the slider doesn't spam navigations.
+  // Debounce URL pushes while dragging the price slider.
   const syncPrices = (nextMin: number, nextMax: number) => {
     const lo = clamp(nextMin, minBound, maxBound);
     const hi = clamp(nextMax, minBound, maxBound);
@@ -197,8 +198,8 @@ export default function FilterBar({
     if (priceTimer.current) clearTimeout(priceTimer.current);
     if (isDrawer) setDrawerOpen(false);
     setOpenAccordions([]);
-    
-    // Preserve nav params (category) — the secondary navbar owns those.
+
+    // Preserve nav params owned by the category navbar.
     const p = new URLSearchParams();
 
     for (const k of BROWSE_NAV_PARAMS) {
@@ -391,16 +392,8 @@ export default function FilterBar({
   const panel = (
     <div
       className={cn(
-        "surface-panel hairline px-4 py-4 sm:px-5",
-        isDrawer
-          ? "rounded-[1.75rem]"
-          : // Rail variant: panel itself is NOT scrollable — it just takes
-          // its natural content height and grows/shrinks as accordions
-          // open and close. The OUTER sticky wrapper below owns the
-          // scroll. `[box-shadow:inset_…]!` keeps the surface clean of
-          // the soft drop shadow `.surface-panel` would otherwise paint,
-          // while preserving the 1px white inset highlight.
-          "rounded-b-[1.75rem] [box-shadow:inset_0_1px_0_rgba(255,255,255,0.74)]!",
+        "surface-panel hairline px-4 py-4 sm:px-5 [box-shadow:inset_0_1px_0_rgba(255,255,255,0.74)]!",
+        isDrawer ? "rounded-[1.75rem]" : "rounded-b-[1.75rem]",
       )}
     >
       <div className='mb-3 flex items-center justify-between gap-2 px-1'>
@@ -536,15 +529,8 @@ export default function FilterBar({
   );
 
   if (!isDrawer) {
-    // Desktop rail: sticky-positioned column that owns the SCROLL. The
-    // panel inside is content-height (no internal scroll), so when the
-    // user opens enough accordions to push the panel past the available
-    // viewport space, THIS wrapper scrolls and the page/cards stay put.
-    // `-mr-2 pr-2` parks the thin scrollbar in the column gutter so it
-    // doesn't sit on the panel's cream surface. `scrollbar-gutter: stable`
-    // keeps the column width steady whether or not a thumb is showing.
-    // z-30 < the sub-navbar's z-40 so the horizontal slide-out tucks
-    // behind the sub-navbar background cleanly.
+    // This sticky wrapper owns vertical scroll so expanded filters do not
+    // move the listing grid; z-30 keeps the rail below the desktop subnav.
     return (
       <div className='sticky top-[calc(var(--navbar-h)+var(--listings-subnav-h))] z-30 -mr-2 max-h-[calc(100svh-var(--navbar-h)-var(--listings-subnav-h))] overflow-y-auto pr-2 pb-4 [scrollbar-gutter:stable] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-[#d6c2a8]/70 [&::-webkit-scrollbar-track]:bg-transparent'>
         {panel}
@@ -558,22 +544,28 @@ export default function FilterBar({
         <Button
           type='button'
           variant='outline'
-          className='h-auto rounded-full border-[#c9b39a] bg-white/78 px-4 py-2.5 text-[0.7rem] font-semibold uppercase tracking-[0.14em] text-[#6f5947] shadow-[0_10px_26px_rgba(97,71,42,0.14)] backdrop-blur-sm hover:bg-white'
+          aria-label='Filter gowns'
+          className='h-auto shrink-0 gap-1.5 rounded-full border-[#c9b39a] bg-white/78 px-3 py-2 text-[#6f5947] backdrop-blur-sm hover:bg-white'
         >
-          <SlidersHorizontal data-icon='inline-start' />
-          Filter gowns
+          <SlidersHorizontal />
+          <FilterCountBadge count={activeCount} />
         </Button>
       </SheetTrigger>
       <SheetContent
         side='right'
-        className='w-full max-w-sm overflow-y-auto border-[#d9c9b6] bg-[#fdf8f1] p-3 shadow-[0_24px_70px_rgba(74,52,30,0.22)] sm:max-w-sm'
+        className='w-full max-w-sm border-[#d9c9b6] bg-[#fdf8f1] px-3 pt-12 pb-3 shadow-[0_24px_70px_rgba(74,52,30,0.22)] sm:max-w-sm'
       >
-        <SheetHeader className='px-1 pb-0'>
-          <SheetTitle className='font-display text-xl text-[#3d2f24]'>
-            Refine listings
-          </SheetTitle>
-        </SheetHeader>
-        {panel}
+        <SheetTitle className='sr-only'>Filters</SheetTitle>
+        <div className='min-h-0 flex-1 overflow-y-auto'>{panel}</div>
+        {activeCount > 0 && (
+          <SheetFooter className='px-1 pt-2'>
+            <SheetClose asChild>
+              <Button type='button' className={`${PRIMARY_CTA_CLASS} h-12`}>
+                Apply Filters
+              </Button>
+            </SheetClose>
+          </SheetFooter>
+        )}
       </SheetContent>
     </Sheet>
   );
