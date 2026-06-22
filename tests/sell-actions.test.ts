@@ -216,6 +216,28 @@ describe("createListing", () => {
     expect(mockUpload).toHaveBeenCalledTimes(3);
   });
 
+  it("rejects a contact_phone containing letters (shared optionalPhoneSchema)", async () => {
+    const capture = { payload: {} as unknown };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture),
+    });
+
+    const fd = baseFormData();
+    fd.set("contact_phone", "555-CALL-NOW");
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", "data:image/jpeg;base64,abc");
+
+    const result = await createListing(fd);
+
+    expect(result).toEqual({
+      error: "Leave phone blank, or enter a valid phone number.",
+    });
+    expect(mockUpload).not.toHaveBeenCalled();
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
   it("returns an error and does not insert when 0 image slots provided", async () => {
     const capture = { payload: {} as unknown };
     mockGetAuthClient.mockResolvedValue({

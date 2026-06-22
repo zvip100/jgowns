@@ -13,7 +13,7 @@ import {
   type GownCategoryId,
   type ServerActionErrorResult,
 } from "@/lib/types";
-import { imageSlotFormKeys } from "@/lib/utils";
+import { imageSlotFormKeys, optionalPhoneSchema } from "@/lib/utils";
 import { getAuthClient, type SupabaseServer } from "@/lib/actions/auth";
 import { deleteListingImages } from "@/lib/actions/images";
 
@@ -21,18 +21,6 @@ const CATEGORY_IDS = GOWN_CATEGORIES.map((c) => c.id) as [
   GownCategoryId,
   ...GownCategoryId[],
 ];
-
-/** Optional phone: empty → undefined; otherwise digits only, 7–15 (E.164-style cap). */
-const contactPhoneField = z.preprocess(
-  (val) => {
-    if (val === undefined || val === null || val === "") return undefined;
-    if (typeof val !== "string") return val;
-
-    const digits = val.replace(/\D/g, "");
-    return digits.length === 0 ? undefined : digits;
-  },
-  z.union([z.undefined(), z.string().min(7).max(15)]),
-);
 
 const listingInputSchema = z
   .object({
@@ -46,7 +34,7 @@ const listingInputSchema = z
     category: z.enum(CATEGORY_IDS),
     price: z.coerce.number(),
     contact_email: z.email(),
-    contact_phone: contactPhoneField,
+    contact_phone: optionalPhoneSchema,
     status: z.enum(["active", "sold", "removed"]).default("active"),
   })
   .refine((data) => isValidSizePair(data.category, data.size_group, data.size), {

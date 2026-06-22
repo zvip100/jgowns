@@ -33,6 +33,7 @@ No in-app transactions yet. Stripe is planned but **not implemented** — do not
 ## Agent Behavior
 
 - **Do only what's asked.** No extra changes, no unsolicited refactors, no unrequested suggestions. Exception: if a fix obviously applies to a sibling file (e.g. `LoginForm` ↔ `RegisterForm`), flag it and offer — but do not apply until approved.
+- **Flag duplication proactively.** The moment you copy a non-trivial block, long class string, or piece of logic into a _second_ place — or make the same edit to a sibling file a second time — stop and either extract it or note it for extraction in your summary. Don't let duplication pile up silently across edits. Still defer the extraction itself until the shared shape has stabilized (no premature abstraction); surface it early, don't necessarily abstract it early.
 - **Clarify before acting** on anything ambiguous or underspecified.
 - **Confirm before destructive changes** (deleting files, removing logic, breaking APIs).
 - **When multiple valid approaches exist**, list them briefly and wait for approval before writing code.
@@ -139,6 +140,7 @@ src/lib/actions/
 - Every action file starts with `"use server";` on line 1. No exceptions.
 - Group by domain — not by individual function. `listings-search.ts` is wrong; `listings.ts` is right.
 - Validate all input (e.g. with zod) before touching the DB or any external service.
+- **Validation rejects, it doesn't silently coerce.** Reject invalid input with a clear error rather than stripping/transforming it into something valid (e.g. don't `replace(/\D/g,"")` a phone so letters just vanish — validate the raw value, _then_ normalize). Silent coercion hides mistakes from the user and lets garbage through.
 - Call `revalidateTag` / `redirect` from inside the action after a successful mutation.
 - Export only server actions and their types/schemas. No UI, no client utilities.
 
@@ -241,6 +243,7 @@ Before writing any Next.js-related code:
 
 - No over-engineering, no premature abstraction. Write the simplest code that correctly solves the problem.
 - Use `loading.tsx` and `error.tsx` at appropriate route segments. Wrap deferred data in `<Suspense>`.
+- **Dynamic reads need an enclosing Suspense boundary (Cache Components).** Reading `searchParams`, `cookies()`, or `headers()` makes a component dynamic; under Cache Components it must render inside a `<Suspense>` boundary so a static shell can stream — otherwise the build fails with _"Uncached data was accessed outside of `<Suspense>`."_ A route `loading.tsx` **counts as that boundary**, so a page in a segment that has one (e.g. `(main)/` → `browse`) can `await searchParams` right at the top. A segment with **no** `loading.tsx` and no ancestor boundary (e.g. `(auth)/`) must add an explicit `<Suspense>`; since a component can't sit inside a `<Suspense>` it renders itself, put the `await` in a small async child of that boundary.
 - No dead code, no commented-out blocks, no unexplained `TODO`s.
 - Test suites must cover every exported function from the module on the first pass. Confirm every export is tested before reporting done.
 - Before flagging a legacy-data issue (e.g. stale enum values, old column formats), check migration history in `src/supabase/migrations/`. If a migration already resolved it, the finding is not actionable.
@@ -277,8 +280,9 @@ Categories: `decision`, `completed`, `never`.
 
 ### Rules
 
-- **Append-only.** Never modify or delete existing entries.
+- **Append-only.** Never modify or delete existing entries — except to correct your own same-session entries (see **Same-session upkeep** below).
 - **Only the user can delete entries** — and only when explicitly asked. Remove exactly what's pointed to, nothing else.
+- **Same-session upkeep.** Before wrapping up, re-check the entries you appended _this session_. If later same-session work changed a path, name, or behavior one of them describes, correct that entry in place **without asking** — it's your own just-written note. This applies to same-session entries only; entries from earlier sessions still require explicit user authorization to modify or delete.
 - Never add conflicting entries. If a previous decision is being superseded, flag it to the user and ask them to explicitly delete the old one first.
 - No paragraphs, no long explanations. One line per entry.
 

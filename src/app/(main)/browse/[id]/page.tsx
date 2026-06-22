@@ -1,12 +1,14 @@
-import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { ChevronLeft, Mail, Phone } from "lucide-react";
+
+import { ImageViewer } from "@/components/ImageViewer";
 import { browseHrefFromBack } from "@/lib/browse-url";
 import { fetchListingWithFallback } from "@/lib/listings-queries";
 import { GOWN_CATEGORIES } from "@/lib/types";
 import { cn, isValidUUID } from "@/lib/utils";
-import { notFound } from "next/navigation";
-import Link from "next/link";
-import { ChevronLeft, Mail, Phone } from "lucide-react";
-import { ImageViewer } from "@/components/ImageViewer";
+
+import type { Metadata } from "next";
 
 export async function generateMetadata({
   params,

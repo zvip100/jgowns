@@ -1,6 +1,7 @@
-import type { Metadata } from 'next';
-import AuthPanel from '../AuthPanel';
+import AuthScreen from '../AuthScreen';
 import LoginForm from './LoginForm';
+
+import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Sign In',
@@ -8,10 +9,17 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
-export default function LoginPage() {
+export default function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
   return (
-    <AuthPanel title="Welcome Back" subtitle="Sign in to manage your listings">
-      <LoginForm />
-    </AuthPanel>
+    <AuthScreen
+      title="Welcome Back"
+      subtitle="Sign in to manage your listings"
+      searchParams={searchParams}
+      renderForm={(next) => <LoginForm next={next} />}
+    />
   );
 }
