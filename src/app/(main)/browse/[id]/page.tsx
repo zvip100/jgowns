@@ -2,11 +2,12 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, Mail, Phone } from "lucide-react";
 
-import { ImageViewer } from "@/components/ImageViewer";
 import { browseHrefFromBack } from "@/lib/browse-url";
 import { fetchListingWithFallback } from "@/lib/listings-queries";
 import { GOWN_CATEGORIES } from "@/lib/types";
 import { cn, isValidUUID } from "@/lib/utils";
+
+import { ImageViewer } from "./ImageViewer";
 
 import type { Metadata } from "next";
 
@@ -190,7 +191,7 @@ export default async function ListingPage({
               tabIndex={sold ? -1 : undefined}
               aria-label='Email the seller'
               className={cn(
-                'flex w-full items-center justify-center gap-2 rounded-full border border-[#b58d5f]/70 bg-[linear-gradient(180deg,#c49a68,#a67841)] py-3 text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)]',
+                'flex w-full items-center justify-center gap-2 rounded-full border border-[#b58d5f]/70 gold-gradient py-3 text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)]',
                 sold
                   ? 'pointer-events-none opacity-40 grayscale'
                   : 'hover:-translate-y-0.5 hover:brightness-105',

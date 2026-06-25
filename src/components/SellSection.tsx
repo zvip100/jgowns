@@ -53,7 +53,7 @@ export default function SellSection() {
           <div className="mt-7 flex flex-wrap items-center gap-4">
             <Button
               asChild
-              className="h-12 rounded-full border border-[#b58d5f]/70 bg-[linear-gradient(180deg,#c49a68,#a67841)] px-6 text-xs font-semibold uppercase tracking-[0.14em] text-white shadow-[0_14px_30px_rgba(106,74,39,0.28)] transition hover:-translate-y-0.5 hover:brightness-105"
+              className="h-12 rounded-full border border-[#b58d5f]/70 gold-gradient px-6 text-xs font-semibold uppercase tracking-[0.14em] text-white shadow-[0_14px_30px_rgba(106,74,39,0.28)] transition hover:-translate-y-0.5 hover:brightness-105"
             >
               <Link href="/dashboard/new">
                 <Plus data-icon="inline-start" />

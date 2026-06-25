@@ -50,6 +50,13 @@ export function formatBrowseParamList(values: string[]): string {
   return [...new Set(values.map((s) => s.trim()).filter(Boolean))].join(",");
 }
 
+/** Toggle `value` in a filter-param list (add if absent, remove if present). */
+export function toggleParamValue(list: string[], value: string): string[] {
+  return list.includes(value)
+    ? list.filter((v) => v !== value)
+    : [...list, value];
+}
+
 export function canonicalBrowseQueryString(params: URLSearchParams): string {
   const canonical = new URLSearchParams();
 

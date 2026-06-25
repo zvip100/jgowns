@@ -1,6 +1,7 @@
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import ListingsGridWrap from "@/components/ListingsGridWrap";
+
+import ListingsGridWrap from "./ListingsGridWrap";
 
 const STAGGER = [
   {

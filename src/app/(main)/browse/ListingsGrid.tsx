@@ -1,7 +1,5 @@
 import { SearchX } from "lucide-react";
 
-import GownCard from "@/components/GownCard";
-import ListingsGridWrap from "@/components/ListingsGridWrap";
 import {
   Empty,
   EmptyDescription,
@@ -15,6 +13,9 @@ import type {
   Listing,
   ListingReadError,
 } from "@/lib/types";
+
+import GownCard from "./GownCard";
+import ListingsGridWrap from "./ListingsGridWrap";
 
 type ListingsGridProps = {
   listings: Listing[] | null;

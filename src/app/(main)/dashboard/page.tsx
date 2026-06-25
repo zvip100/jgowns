@@ -117,7 +117,7 @@ export default async function DashboardPage() {
         </div>
         <Button
           asChild
-          className="h-11 rounded-full border border-[#b58d5f]/70 bg-[linear-gradient(180deg,#c49a68,#a67841)] px-5 text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)] transition hover:-translate-y-0.5 hover:brightness-105"
+          className="h-11 rounded-full border border-[#b58d5f]/70 gold-gradient px-5 text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)] transition hover:-translate-y-0.5 hover:brightness-105"
         >
           <Link href="/dashboard/new">
             <Plus data-icon="inline-start" />

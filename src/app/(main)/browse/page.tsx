@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { Suspense } from "react";
 
-import BrowseCategoryNav from "@/components/BrowseCategoryNav";
-import BrowseListings from "@/components/BrowseListings";
-import ListingsLayout from "@/components/ListingsLayout";
-import ListingsSkeleton from "@/components/ListingsSkeleton";
 import type { PageSearchParams } from "@/lib/types";
 import { fetchPriceBounds } from "@/lib/listings-queries";
+
+import BrowseCategoryNav from "./BrowseCategoryNav";
+import BrowseListings from "./BrowseListings";
+import ListingsLayout from "./ListingsLayout";
+import ListingsSkeleton from "./ListingsSkeleton";
 
 export const metadata: Metadata = {
   title: "Browse Modest Gowns",

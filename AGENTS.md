@@ -176,6 +176,8 @@ src/lib/actions/
 | Constants             | SCREAMING_SNAKE_CASE | `MAX_UPLOAD_SIZE`               |
 | Boolean vars / props  | `is` / `has` prefix  | `isLoading`, `hasError`         |
 
+A file holding one component is PascalCase (`ListingCard.tsx`). A module that bundles several small related leaf components is a kebab-case barrel exporting them as named exports (`auth-form.tsx`, `filter-controls.tsx`).
+
 Never abbreviate identifiers: `UUID_REGEX` not `UUID_RE`, `MAX_FILE_SIZE` not `MAX_SZ`.
 
 ---
@@ -228,6 +230,7 @@ Before writing any Next.js-related code:
 - Keep component APIs minimal — only props that are actually needed.
 - Use `lucide-react` icons as UI visual elements — including error pages, not-found pages, and empty states. Never use emojis as visual replacements for icons.
 - Before writing a new button or link style, check what already exists in the app and reuse it.
+- **Colocate route-specific components and hooks in their route segment, not the global folders.** A component or hook used only within one route segment lives in that segment (e.g. `src/app/(main)/browse/`, mirroring `src/app/(auth)/`) and is imported relatively. `src/components/` and `src/hooks/` are for genuinely shared / cross-route pieces only. When a component's last out-of-segment consumer disappears, relocate it into the owning segment.
 
 ### Tailwind / CSS
 
@@ -282,7 +285,7 @@ Categories: `decision`, `completed`, `never`.
 
 - **Append-only.** Never modify or delete existing entries — except to correct your own same-session entries (see **Same-session upkeep** below).
 - **Only the user can delete entries** — and only when explicitly asked. Remove exactly what's pointed to, nothing else.
-- **Same-session upkeep.** Before wrapping up, re-check the entries you appended _this session_. If later same-session work changed a path, name, or behavior one of them describes, correct that entry in place **without asking** — it's your own just-written note. This applies to same-session entries only; entries from earlier sessions still require explicit user authorization to modify or delete.
+- **Same-session upkeep.** Before wrapping up, re-check the entries you appended _this session_. If later same-session work changed a path, name, or behavior one of them describes, correct that entry in place **without asking** — it's your own just-written note. This applies to same-session entries only; entries from earlier sessions still require explicit user authorization to modify or delete. "Session" means the continuous working conversation, not a calendar day — a date rollover mid-session does not turn this session's entries into earlier-session entries.
 - Never add conflicting entries. If a previous decision is being superseded, flag it to the user and ask them to explicitly delete the old one first.
 - No paragraphs, no long explanations. One line per entry.
 

@@ -6,6 +6,7 @@ import {
   formatBrowseParamList,
   parseBrowseParamList,
   toPageSearchParams,
+  toggleParamValue,
 } from "@/lib/browse-params";
 
 describe("browse-params", () => {
@@ -64,6 +65,38 @@ describe("browse-params", () => {
 
     it("filters out empty strings", () => {
       expect(formatBrowseParamList(["a", "", "b"])).toBe("a,b");
+    });
+  });
+
+  describe("toggleParamValue", () => {
+    it("adds a value that is absent", () => {
+      expect(toggleParamValue(["a", "b"], "c")).toEqual(["a", "b", "c"]);
+    });
+
+    it("removes a value that is present", () => {
+      expect(toggleParamValue(["a", "b", "c"], "b")).toEqual(["a", "c"]);
+    });
+
+    it("adds to an empty list", () => {
+      expect(toggleParamValue([], "a")).toEqual(["a"]);
+    });
+
+    it("removes the only value, yielding an empty list", () => {
+      expect(toggleParamValue(["a"], "a")).toEqual([]);
+    });
+
+    it("preserves order of the remaining values when adding", () => {
+      expect(toggleParamValue(["a:8", "a:10"], "a:12")).toEqual([
+        "a:8",
+        "a:10",
+        "a:12",
+      ]);
+    });
+
+    it("does not mutate the input list", () => {
+      const input = ["a", "b"];
+      toggleParamValue(input, "c");
+      expect(input).toEqual(["a", "b"]);
     });
   });
 

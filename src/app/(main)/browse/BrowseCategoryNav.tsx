@@ -19,7 +19,7 @@ const chipIdle =
   "border-[#e0cfb6] bg-white/50 text-[#6a5544] hover:border-[#c9a880] hover:bg-white/85 hover:text-[#3f3023]";
 
 const chipActive =
-  "border-[#a67841] bg-[linear-gradient(180deg,#c49a68,#a67841)] text-white [text-shadow:0_1px_0_rgba(74,49,21,0.2)]";
+  "border-[#a67841] gold-gradient text-white [text-shadow:0_1px_0_rgba(74,49,21,0.2)]";
 
 function hrefForCategory(
   resolved: PageSearchParams,

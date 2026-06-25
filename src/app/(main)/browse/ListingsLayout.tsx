@@ -4,11 +4,15 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "next/navigation";
 import { ChevronDown, SlidersHorizontal } from "lucide-react";
 
-import FilterBar from "@/components/FilterBar";
-import FilterCountBadge from "@/components/FilterCountBadge";
 import { Button } from "@/components/ui/button";
 import { countActiveBrowseFilters } from "@/lib/browse-params";
 import { cn } from "@/lib/utils";
+
+import FilterBar from "./FilterBar";
+import FilterCountBadge from "./FilterCountBadge";
+
+const STICKY_BAR_CHROME =
+  "border-[#d5c4b0] bg-[rgba(252,246,236,0.82)] shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] backdrop-blur-lg";
 
 type ListingsLayoutProps = {
   minBound: number;
@@ -70,8 +74,7 @@ export default function ListingsLayout({
         ref={mobileStickyRef}
         className={cn(
           "sticky top-(--navbar-h) z-40 -mx-4 border-b border-transparent px-4 pt-3 pb-2 transition-[background-color,border-color,box-shadow,backdrop-filter] duration-200 ease-out sm:-mx-6 sm:px-6 lg:hidden",
-          mobileStuck &&
-          "border-[#d5c4b0] bg-[rgba(252,246,236,0.82)] shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] backdrop-blur-lg"
+          mobileStuck && STICKY_BAR_CHROME
         )}
       >
         <div className='flex items-center gap-3'>
@@ -83,7 +86,12 @@ export default function ListingsLayout({
       {/* Sticky outer keeps the subnav pinned; full-width inner lets its background
           cover the sliding rail while content stays aligned to the page frame. */}
       <div className='sticky top-(--navbar-h) z-40 hidden lg:block'>
-        <div className='relative left-1/2 -ml-[50vw] w-screen border-b border-[#d5c4b0] bg-[rgba(252,246,236,0.82)] shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] backdrop-blur-lg'>
+        <div
+          className={cn(
+            "relative left-1/2 -ml-[50vw] w-screen border-b",
+            STICKY_BAR_CHROME,
+          )}
+        >
           <div className='mx-auto flex h-(--listings-subnav-h) w-full max-w-375 min-w-0 items-center gap-4 px-4 sm:px-6 lg:px-10'>
             {!railOpen && (
               <Button
