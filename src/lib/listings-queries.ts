@@ -157,6 +157,16 @@ export async function fetchListingsPage(
   let totalPages = totalPagesFromCount(totalCount, pageSize);
 
   if (error) {
+    console.error("[listings-queries] Failed to load listings page", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+      filters,
+      page: safePage,
+      pageSize,
+    });
+
     if (safePage > 1) {
       const countResult = await fetchFilteredListingsCount(filters);
       if (!countResult.error) {
@@ -172,16 +182,6 @@ export async function fetchListingsPage(
         };
       }
     }
-
-    console.error("[listings-queries] Failed to load listings page", {
-      message: error.message,
-      details: error.details,
-      hint: error.hint,
-      code: error.code,
-      filters,
-      page: safePage,
-      pageSize,
-    });
 
     return {
       listings: null,

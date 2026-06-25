@@ -55,6 +55,7 @@ export default function BrowseCategoryNav({
         <Link
           href={hrefForCategory(searchParams, null)}
           scroll={false}
+          aria-current={!current ? "page" : undefined}
           className={cn(chipBase, !current ? chipActive : chipIdle)}
         >
           All
@@ -67,6 +68,7 @@ export default function BrowseCategoryNav({
               key={cat.id}
               href={hrefForCategory(searchParams, cat.id)}
               scroll={false}
+              aria-current={active ? "page" : undefined}
               className={cn(chipBase, active ? chipActive : chipIdle)}
             >
               {cat.label}

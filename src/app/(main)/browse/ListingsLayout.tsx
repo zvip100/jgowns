@@ -136,12 +136,12 @@ export default function ListingsLayout({
             shrink-wrap the rail and remove sticky's scroll room. */}
         <aside
           id='listings-filter-rail'
-          aria-hidden={!railOpen}
+          inert={!railOpen}
           className={cn(
             "hidden min-w-0 lg:block lg:overflow-x-clip lg:transition-[opacity,transform] lg:duration-700 lg:ease-[cubic-bezier(0.22,1,0.36,1)]",
             railOpen
               ? "lg:opacity-100"
-              : "lg:pointer-events-none lg:opacity-0 lg:-translate-x-72"
+              : "lg:opacity-0 lg:-translate-x-72"
           )}
         >
           <FilterBar
