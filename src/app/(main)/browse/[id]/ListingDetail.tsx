@@ -74,7 +74,7 @@ export function ListingDetail({
           </p>
           {isSetOnly && (
             <p className='mt-2 text-sm text-[#7d6652]'>
-              Sold as a set of {sizes.length} gowns — not available
+              Sold as a set — not available
               individually.
             </p>
           )}

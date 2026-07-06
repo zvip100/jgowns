@@ -79,22 +79,6 @@ function baseFormData(sizes: SizeEntry[] = DEFAULT_SIZES): FormData {
   return fd;
 }
 
-/** Creates a thenable Supabase-style result that can be `await`ed. */
-function thenableResult(value: { error: null | { message: string } }) {
-  return {
-    ...value,
-    then(
-      resolve: (v: typeof value) => unknown,
-      _reject?: (e: unknown) => unknown,
-    ) {
-      return Promise.resolve(value).then(resolve, _reject);
-    },
-    catch(reject: (e: unknown) => unknown) {
-      return Promise.resolve(value).catch(reject);
-    },
-  };
-}
-
 const CREATED_LISTING_ID = "created-listing-1";
 
 type CreateCapture = { payload: unknown; variantRows?: unknown };
@@ -135,78 +119,39 @@ function makeCreateSupabase(
   };
 }
 
-type ExistingSizeRow = {
-  id: string;
-  size: string;
-  size_group: string;
-  price: number;
-  sort_order: number;
-};
-
 type UpdateCapture = {
   payload: unknown;
-  variantInsert?: unknown;
-  variantUpdates?: unknown[];
-  variantDeleteIds?: unknown;
+  variants?: unknown;
 };
 
 function makeUpdateSupabase(
   existingImageUrls: string[],
   updateCapture: UpdateCapture,
   updateResult: { error: null | { message: string } } = { error: null },
-  existingSizes: ExistingSizeRow[] = [
-    { id: "var-8", size: "8", size_group: "adult", price: 800, sort_order: 0 },
-  ],
 ) {
   const maybeSingle = vi.fn().mockResolvedValue({
-    data: {
-      user_id: "user-123",
-      image_urls: existingImageUrls,
-      sizes: existingSizes,
-    },
+    data: { user_id: "user-123", image_urls: existingImageUrls },
     error: null,
   });
 
-  const innerEq = vi.fn().mockReturnValue(thenableResult(updateResult));
-  const outerEq = vi.fn().mockReturnValue({ eq: innerEq });
+  // updateListing now hands the listing row + full variant set to an atomic
+  // RPC; the delete/update/insert diff runs server-side (covered by the SQL
+  // smoke test), so the unit test asserts the payload the RPC receives.
+  const rpc = vi
+    .fn()
+    .mockImplementation(
+      (_fn: string, args: { p_listing: unknown; p_variants: unknown }) => {
+        updateCapture.payload = args.p_listing;
+        updateCapture.variants = args.p_variants;
+        return Promise.resolve(updateResult);
+      },
+    );
 
-  const updateFn = vi.fn().mockImplementation((payload: unknown) => {
-    updateCapture.payload = payload;
-    return { eq: outerEq };
-  });
-
-  const sizesInsert = vi.fn().mockImplementation((rows: unknown) => {
-    updateCapture.variantInsert = rows;
-    return Promise.resolve({ error: null });
-  });
-  const sizesDeleteIn = vi.fn().mockImplementation((_col: string, ids: unknown) => {
-    updateCapture.variantDeleteIds = ids;
-    return Promise.resolve({ error: null });
-  });
-  const sizesDelete = vi.fn().mockReturnValue({ in: sizesDeleteIn });
-  const sizesUpdate = vi.fn().mockImplementation((patch: unknown) => {
-    updateCapture.variantUpdates = [
-      ...(updateCapture.variantUpdates ?? []),
-      patch,
-    ];
-    return { eq: vi.fn().mockResolvedValue({ error: null }) };
-  });
-
-  let listingsCallCount = 0;
-  const from = vi.fn().mockImplementation((table: string) => {
-    if (table === "listing_sizes") {
-      return { insert: sizesInsert, delete: sizesDelete, update: sizesUpdate };
-    }
-    listingsCallCount++;
-    if (listingsCallCount === 1) {
-      return {
-        select: vi.fn().mockReturnThis(),
-        eq: vi.fn().mockReturnThis(),
-        maybeSingle,
-      };
-    }
-    return { update: updateFn };
-  });
+  const from = vi.fn().mockImplementation(() => ({
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle,
+  }));
 
   return {
     storage: {
@@ -216,9 +161,8 @@ function makeUpdateSupabase(
       }),
     },
     from,
-    _sizesInsert: sizesInsert,
-    _sizesUpdate: sizesUpdate,
-    _sizesDelete: sizesDelete,
+    rpc,
+    _rpc: rpc,
   };
 }
 
@@ -757,15 +701,12 @@ describe("updateListing", () => {
     expect(mockUpdateTag).not.toHaveBeenCalled();
   });
 
-  it("diffs variants: updates changed prices, inserts new sizes, deletes removed ones", async () => {
+  it("hands the full desired variant set to the atomic RPC", async () => {
     const capture: UpdateCapture = { payload: {} };
     mockGetAuthClient.mockResolvedValue({
       ok: true,
       user: { id: "user-123" },
-      supabase: makeUpdateSupabase([OLD_URL_0], capture, { error: null }, [
-        { id: "var-8", size: "8", size_group: "adult", price: 800, sort_order: 0 },
-        { id: "var-10", size: "10", size_group: "adult", price: 850, sort_order: 1 },
-      ]),
+      supabase: makeUpdateSupabase([OLD_URL_0], capture),
     });
 
     const fd = baseFormData([
@@ -777,10 +718,9 @@ describe("updateListing", () => {
 
     try { await updateListing(LISTING_ID, fd); } catch { /* redirect */ }
 
-    expect(capture.variantDeleteIds).toEqual(["var-10"]);
-    expect(capture.variantUpdates).toEqual([{ price: 825, sort_order: 0 }]);
-    expect(capture.variantInsert).toEqual([
-      { size: "12", size_group: "adult", price: 900, sort_order: 1, listing_id: LISTING_ID },
+    expect(capture.variants).toEqual([
+      { size: "8", size_group: "adult", price: 825, sort_order: 0 },
+      { size: "12", size_group: "adult", price: 900, sort_order: 1 },
     ]);
     expect(mockUpdateTag).toHaveBeenCalledWith(`listing:${LISTING_ID}`);
   });
@@ -790,10 +730,7 @@ describe("updateListing", () => {
     mockGetAuthClient.mockResolvedValue({
       ok: true,
       user: { id: "user-123" },
-      supabase: makeUpdateSupabase([OLD_URL_0], capture, { error: null }, [
-        { id: "var-8", size: "8", size_group: "adult", price: 800, sort_order: 0 },
-        { id: "var-10", size: "10", size_group: "adult", price: 850, sort_order: 1 },
-      ]),
+      supabase: makeUpdateSupabase([OLD_URL_0], capture),
     });
 
     const fd = baseFormData();
@@ -811,14 +748,14 @@ describe("updateListing", () => {
 
     try { await updateListing(LISTING_ID, fd); } catch { /* redirect */ }
 
-    expect(capture.variantUpdates).toEqual([
-      { price: 1200, sort_order: 0 },
-      { price: 1200, sort_order: 1 },
+    expect(capture.variants).toEqual([
+      { size: "8", size_group: "adult", price: 1200, sort_order: 0 },
+      { size: "10", size_group: "adult", price: 1200, sort_order: 1 },
     ]);
     expect(mockUpdateTag).toHaveBeenCalledWith(`listing:${LISTING_ID}`);
   });
 
-  it("performs no variant writes when the submitted sizes match the stored ones", async () => {
+  it("sends the edit through the atomic RPC and invalidates tags", async () => {
     const capture: UpdateCapture = { payload: {} };
     const supabase = makeUpdateSupabase([OLD_URL_0], capture);
     mockGetAuthClient.mockResolvedValue({
@@ -834,9 +771,13 @@ describe("updateListing", () => {
 
     try { await updateListing(LISTING_ID, fd); } catch { /* redirect */ }
 
-    expect(supabase._sizesInsert).not.toHaveBeenCalled();
-    expect(supabase._sizesUpdate).not.toHaveBeenCalled();
-    expect(supabase._sizesDelete).not.toHaveBeenCalled();
+    expect(supabase._rpc).toHaveBeenCalledWith(
+      "update_listing_with_variants",
+      expect.objectContaining({ p_listing_id: LISTING_ID }),
+    );
+    expect(capture.variants).toEqual([
+      { size: "8", size_group: "adult", price: 800, sort_order: 0 },
+    ]);
     expect(mockUpdateTag).toHaveBeenCalledWith("listings");
   });
 });

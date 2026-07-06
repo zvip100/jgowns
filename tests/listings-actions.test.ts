@@ -29,32 +29,21 @@ type UpdateResult = {
 };
 
 function makeSupabase(
-  listingResult: UpdateResult = { data: [{ id: LISTING_ID }], error: null },
   sizesResult: UpdateResult = { data: [{ id: SIZE_ID }], error: null },
+  rpcResult: { error: null | { message: string } } = { error: null },
 ) {
-  const listingChain = {
-    update: vi.fn().mockReturnThis(),
-    eq: vi.fn().mockReturnThis(),
-    select: vi.fn().mockResolvedValue(listingResult),
-  };
   const sizesChain = {
     update: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     select: vi.fn().mockResolvedValue(sizesResult),
-    then: undefined as unknown,
   };
-  // markListingSold awaits the sizes update chain directly (no .select()).
-  const sizesThenable = Object.assign(sizesChain, {
-    then: (resolve: (v: UpdateResult) => unknown) =>
-      Promise.resolve(sizesResult).then(resolve),
-  });
+  const rpc = vi.fn().mockResolvedValue(rpcResult);
 
   return {
-    from: vi.fn().mockImplementation((table: string) =>
-      table === "listing_sizes" ? sizesThenable : listingChain,
-    ),
-    _listingChain: listingChain,
+    from: vi.fn().mockReturnValue(sizesChain),
+    rpc,
     _sizesChain: sizesChain,
+    _rpc: rpc,
   };
 }
 
@@ -83,16 +72,9 @@ describe("markListingSold", () => {
     const result = await markListingSold(LISTING_ID);
 
     expect(result).toEqual({});
-    expect(supabase._listingChain.update).toHaveBeenCalledWith({
-      status: "sold",
+    expect(supabase._rpc).toHaveBeenCalledWith("mark_listing_sold", {
+      p_listing_id: LISTING_ID,
     });
-    expect(supabase._sizesChain.update).toHaveBeenCalledWith({
-      status: "sold",
-    });
-    expect(supabase._sizesChain.eq).toHaveBeenCalledWith(
-      "listing_id",
-      LISTING_ID,
-    );
     expect(mockUpdateTag).toHaveBeenCalledWith(`listing:${LISTING_ID}`);
     expect(mockUpdateTag).toHaveBeenCalledWith("listings");
   });
@@ -114,7 +96,9 @@ describe("markListingSold", () => {
   });
 
   it("returns 'Listing not found' when no row matches", async () => {
-    const supabase = makeSupabase({ data: [], error: null });
+    const supabase = makeSupabase(undefined, {
+      error: { message: "Listing not found" },
+    });
     mockGetAuthClient.mockResolvedValue({
       ok: true,
       supabase,
@@ -162,10 +146,7 @@ describe("markSizeSold", () => {
   });
 
   it("returns 'Size not found' when no row matches (wrong owner or id)", async () => {
-    const supabase = makeSupabase(
-      { data: [{ id: LISTING_ID }], error: null },
-      { data: [], error: null },
-    );
+    const supabase = makeSupabase({ data: [], error: null });
     mockGetAuthClient.mockResolvedValue({
       ok: true,
       supabase,

@@ -962,7 +962,7 @@ describe("useListingFormSubmit", () => {
       expect(rowSetterValues()).toEqual([]);
     });
 
-    it("unchecking 'set only' clears the per-size prices for re-entry", () => {
+    it("unchecking 'set only' leaves the per-size prices intact", () => {
       hookState.overrides.set(STATE_ROWS, makeTwoRows());
       const submit = useListingFormSubmit({
         slots: [makeSlot()],
@@ -975,12 +975,7 @@ describe("useListingFormSubmit", () => {
         (call) => call.index === STATE_SELL_ONLY_AS_SET,
       );
       expect(setOnlyCalls.map((c) => c.value)).toEqual([false]);
-
-      const [rowsUpdate] = rowSetterValues() as RowsUpdater[];
-      expect(rowsUpdate(makeTwoRows())).toEqual([
-        { key: "row-0", size: "8", size_group: "adult", price: "" },
-        { key: "row-1", size: "10", size_group: "adult", price: "" },
-      ]);
+      expect(rowSetterValues()).toEqual([]);
     });
 
     it("checking 'set only' leaves the size rows untouched", () => {
