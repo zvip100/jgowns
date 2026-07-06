@@ -11,25 +11,55 @@ import {
   GOWN_CATEGORIES,
   type GownCategoryId,
   type ListingFormData,
+  type ListingSizeInput,
+  type ListingSizeRowState,
+  type SellMode,
   type SizeGroupSlug,
   type ImageSlotState,
 } from "@/lib/types";
 
+/** Scalar form fields — size rows and set pricing live in their own state. */
+type ListingScalarFormData = Partial<Omit<ListingFormData, "sizes">>;
+
+export type ListingSizesController = {
+  rows: ListingSizeRowState[];
+  updateRow: (
+    key: string,
+    patch: Partial<Omit<ListingSizeRowState, "key">>,
+  ) => void;
+  addRow: () => void;
+  removeRow: (key: string) => void;
+  sellOnlyAsSet: boolean;
+  setSellOnlyAsSet: (value: boolean) => void;
+  bundlePrice: string;
+  setBundlePrice: (value: string) => void;
+};
+
+/** The seller only sees rows + a checkbox + an optional set price; the enum is computed. */
+export function deriveSellMode(
+  rowCount: number,
+  sellOnlyAsSet: boolean,
+  bundlePrice: string,
+): SellMode {
+  if (rowCount < 2) return "individual";
+  if (sellOnlyAsSet) return "set_only";
+  return bundlePrice.trim() ? "either" : "individual";
+}
+
 function buildInitialForm(
   initial?: Partial<ListingFormData>,
-): Partial<ListingFormData> {
-  const base: Partial<ListingFormData> = {
+): ListingScalarFormData {
+  const { sizes: _sizes, ...rest } = initial ?? {};
+  const base: ListingScalarFormData = {
     title: "",
     description: "",
-    size: "",
     color: "",
     location: "",
     condition: undefined,
-    price: undefined,
     contact_email: "",
     contact_phone: "",
     status: "active",
-    ...initial,
+    ...rest,
   };
   const raw = base.category;
   const category =
@@ -42,14 +72,45 @@ function buildInitialForm(
   };
 }
 
+function buildInitialRows(
+  initial?: Partial<ListingFormData>,
+): ListingSizeRowState[] {
+  const sizes = initial?.sizes ?? [];
+  if (sizes.length === 0) {
+    return [{ key: "row-0", size: "", size_group: null, price: "" }];
+  }
+  // Set-only variants store the shared set price, not a per-size price, so the
+  // (hidden) price inputs start blank — unchecking "set only" forces re-entry.
+  const isSetOnly = initial?.sell_mode === "set_only";
+  return sizes.map((entry: ListingSizeInput, i) => ({
+    key: `row-${i}`,
+    size: entry.size,
+    size_group: entry.size_group,
+    price: isSetOnly ? "" : String(entry.price ?? ""),
+  }));
+}
+
+/** Stable serialization of the size/pricing state for no-op edit detection. */
+function sizeStateSnapshot(
+  rows: ListingSizeRowState[],
+  sellOnlyAsSet: boolean,
+  bundlePrice: string,
+): string {
+  return JSON.stringify({
+    rows: rows.map((r) => [r.size_group, r.size, r.price]),
+    sellOnlyAsSet,
+    bundlePrice: bundlePrice.trim(),
+  });
+}
+
 /** True if any form field differs from the values the form loaded with. */
 function listingFormChanged(
-  current: Partial<ListingFormData>,
-  baseline: Partial<ListingFormData>,
+  current: ListingScalarFormData,
+  baseline: ListingScalarFormData,
 ): boolean {
   const keys = new Set([...Object.keys(current), ...Object.keys(baseline)]);
   for (const key of keys) {
-    const k = key as keyof ListingFormData;
+    const k = key as keyof ListingScalarFormData;
     if ((current[k] ?? "") !== (baseline[k] ?? "")) return true;
   }
   return false;
@@ -84,27 +145,28 @@ export function useListingFormSubmit({
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [form, setForm] = useState<Partial<ListingFormData>>(() =>
+  const [form, setForm] = useState<ListingScalarFormData>(() =>
     buildInitialForm(initial),
+  );
+  const [sizeRows, setSizeRows] = useState<ListingSizeRowState[]>(() =>
+    buildInitialRows(initial),
+  );
+  const [sellOnlyAsSet, setSellOnlyAsSetState] = useState(
+    initial?.sell_mode === "set_only",
+  );
+  const [bundlePrice, setBundlePrice] = useState(
+    initial?.bundle_price != null ? String(initial.bundle_price) : "",
   );
 
   const initialFormRef = useRef(form);
+  const initialSizeSnapshotRef = useRef(
+    sizeStateSnapshot(sizeRows, sellOnlyAsSet, bundlePrice),
+  );
   const originalImageUrlsRef = useRef(initial?.image_urls ?? []);
 
   const setField = useCallback(
-    (key: keyof ListingFormData, value: string | number) => {
+    (key: keyof ListingScalarFormData, value: string | number) => {
       setForm((f) => ({ ...f, [key]: value }));
-    },
-    [],
-  );
-
-  const setSizeSelection = useCallback(
-    (selection: { size: string; sizeGroup: SizeGroupSlug }) => {
-      setForm((f) => ({
-        ...f,
-        size: selection.size,
-        size_group: selection.sizeGroup,
-      }));
     },
     [],
   );
@@ -113,24 +175,71 @@ export function useListingFormSubmit({
     const category = GOWN_CATEGORIES.some((c) => c.id === value)
       ? (value as GownCategoryId)
       : null;
-    setForm((f) => {
-      const keepSize =
-        category &&
-        f.size &&
-        f.size_group &&
-        isValidSizePair(category, f.size_group, f.size);
-      return {
-        ...f,
-        category,
-        size: keepSize ? f.size : "",
-        size_group: keepSize ? f.size_group : undefined,
-      };
-    });
+    setForm((f) => ({ ...f, category }));
+    setSizeRows((rows) =>
+      rows.map((row) => {
+        const keepSize =
+          category &&
+          row.size &&
+          row.size_group &&
+          isValidSizePair(category, row.size_group, row.size);
+        return keepSize ? row : { ...row, size: "", size_group: null };
+      }),
+    );
   }, []);
 
   const setContactPhone = useCallback((value: string) => {
     setForm((f) => ({ ...f, contact_phone: digitsOnlyPhone(value) }));
   }, []);
+
+  const updateRow = useCallback(
+    (key: string, patch: Partial<Omit<ListingSizeRowState, "key">>) => {
+      setSizeRows((rows) =>
+        rows.map((row) => (row.key === key ? { ...row, ...patch } : row)),
+      );
+    },
+    [],
+  );
+
+  const addRow = useCallback(() => {
+    setSizeRows((rows) => [
+      ...rows,
+      { key: crypto.randomUUID(), size: "", size_group: null, price: "" },
+    ]);
+  }, []);
+
+  const removeRow = useCallback(
+    (key: string) => {
+      if (sizeRows.length <= 1) return;
+      const next = sizeRows.filter((row) => row.key !== key);
+      setSizeRows(next);
+      if (next.length === 1) {
+        setSellOnlyAsSetState(false);
+        setBundlePrice("");
+      }
+    },
+    [sizeRows],
+  );
+
+  // Unchecking "set only" clears the per-size prices so the seller must
+  // re-enter them before selling individually (they weren't stored per size).
+  const setSellOnlyAsSet = useCallback((value: boolean) => {
+    setSellOnlyAsSetState(value);
+    if (!value) {
+      setSizeRows((rows) => rows.map((row) => ({ ...row, price: "" })));
+    }
+  }, []);
+
+  const sizesController: ListingSizesController = {
+    rows: sizeRows,
+    updateRow,
+    addRow,
+    removeRow,
+    sellOnlyAsSet,
+    setSellOnlyAsSet,
+    bundlePrice,
+    setBundlePrice,
+  };
 
   const handleSubmit = useCallback(async () => {
     setError("");
@@ -139,6 +248,8 @@ export function useListingFormSubmit({
     if (
       listingId &&
       !listingFormChanged(form, initialFormRef.current) &&
+      sizeStateSnapshot(sizeRows, sellOnlyAsSet, bundlePrice) ===
+        initialSizeSnapshotRef.current &&
       !listingImagesChanged(slots, originalImageUrlsRef.current)
     ) {
       router.push("/dashboard");
@@ -150,17 +261,67 @@ export function useListingFormSubmit({
     try {
       if (
         !form.title?.trim() ||
-        !form.size ||
-        !form.size_group ||
         !form.location ||
         !form.condition ||
-        form.price == null ||
-        Number.isNaN(form.price) ||
         !form.contact_email?.trim() ||
         !form.category ||
         !GOWN_CATEGORIES.some((c) => c.id === form.category)
       ) {
         throw new Error("Please fill in all required fields.");
+      }
+
+      const seenSizes = new Set<string>();
+      for (const row of sizeRows) {
+        if (!row.size || !row.size_group) {
+          throw new Error("Choose a size for every row.");
+        }
+        const sizeKey = `${row.size_group}:${row.size}`;
+        if (seenSizes.has(sizeKey)) {
+          throw new Error("Each size can only be added once.");
+        }
+        seenSizes.add(sizeKey);
+      }
+
+      const sellMode = deriveSellMode(
+        sizeRows.length,
+        sellOnlyAsSet,
+        bundlePrice,
+      );
+      const bundle = bundlePrice.trim() ? Number(bundlePrice) : null;
+
+      if (sellMode === "set_only") {
+        if (bundle == null || Number.isNaN(bundle) || bundle <= 0) {
+          throw new Error("Enter the price for the complete set.");
+        }
+      }
+
+      // Set-only variants carry no per-size price — the server stamps each one
+      // with the shared set price. Every other mode needs a price per size.
+      const sizes: {
+        size: string;
+        size_group: SizeGroupSlug | null;
+        price?: number;
+      }[] = sizeRows.map((row) => {
+        if (sellMode === "set_only") {
+          return { size: row.size, size_group: row.size_group };
+        }
+        const price = Number(row.price);
+        if (!row.price.trim() || Number.isNaN(price) || price <= 0) {
+          throw new Error("Enter a price for every size.");
+        }
+        return { size: row.size, size_group: row.size_group, price };
+      });
+
+      if (sellMode === "either") {
+        if (bundle == null || Number.isNaN(bundle) || bundle <= 0) {
+          throw new Error("Enter a valid price for all sizes together.");
+        }
+        const individualTotal = sizes.reduce((sum, s) => sum + (s.price ?? 0), 0);
+        if (bundle >= individualTotal) {
+          throw new Error(
+            "The price for all sizes together should be less than the sizes priced individually.",
+          );
+        }
       }
 
       const activeSlots = slots.filter((s) => s.imageFile || s.existingUrl);
@@ -172,13 +333,16 @@ export function useListingFormSubmit({
 
       formData.set("title", form.title.trim());
       formData.set("description", form.description?.trim() || "");
-      formData.set("size", String(form.size));
-      formData.set("size_group", String(form.size_group));
       formData.set("color", form.color?.trim() || "");
       formData.set("location", String(form.location));
       formData.set("condition", String(form.condition));
       formData.set("category", String(form.category));
-      formData.set("price", String(form.price));
+      formData.set("sizes", JSON.stringify(sizes));
+      formData.set("sell_mode", sellMode);
+      formData.set(
+        "bundle_price",
+        sellMode === "individual" || bundle == null ? "" : String(bundle),
+      );
       formData.set("contact_email", form.contact_email.trim());
       formData.set("contact_phone", form.contact_phone?.trim() || "");
       formData.set("status", String(form.status ?? "active"));
@@ -214,14 +378,23 @@ export function useListingFormSubmit({
     } finally {
       setLoading(false);
     }
-  }, [form, listingId, slots, resolveUploadFile, router]);
+  }, [
+    form,
+    listingId,
+    sizeRows,
+    sellOnlyAsSet,
+    bundlePrice,
+    slots,
+    resolveUploadFile,
+    router,
+  ]);
 
   return {
     form,
     setField,
-    setSizeSelection,
     setCategory,
     setContactPhone,
+    sizesController,
     loading,
     error,
     handleSubmit,

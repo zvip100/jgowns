@@ -56,17 +56,23 @@ function makeBlur(tag: string): string {
   return `data:image/jpeg;base64,${tag}`;
 }
 
-function baseFormData(): FormData {
+type SizeEntry = { size: string; size_group: string; price: number };
+
+const DEFAULT_SIZES: SizeEntry[] = [
+  { size: "8", size_group: "adult", price: 800 },
+];
+
+function baseFormData(sizes: SizeEntry[] = DEFAULT_SIZES): FormData {
   const fd = new FormData();
   fd.set("title", "Beautiful Gown");
   fd.set("description", "A lovely gown");
-  fd.set("size", "8");
-  fd.set("size_group", "adult");
   fd.set("color", "Ivory");
   fd.set("location", "Borough Park");
   fd.set("condition", "Brand New");
   fd.set("category", "bridal");
-  fd.set("price", "800");
+  fd.set("sizes", JSON.stringify(sizes));
+  fd.set("sell_mode", "individual");
+  fd.set("bundle_price", "");
   fd.set("contact_email", "seller@example.com");
   fd.set("contact_phone", "");
   fd.set("status", "active");
@@ -89,10 +95,26 @@ function thenableResult(value: { error: null | { message: string } }) {
   };
 }
 
-function makeCreateSupabase(insertCapture: { payload: unknown }) {
-  const insertFn = vi.fn().mockImplementation((payload: unknown) => {
+const CREATED_LISTING_ID = "created-listing-1";
+
+type CreateCapture = { payload: unknown; variantRows?: unknown };
+
+function makeCreateSupabase(
+  insertCapture: CreateCapture,
+  opts: { sizesInsertError?: { message: string } } = {},
+) {
+  const single = vi
+    .fn()
+    .mockResolvedValue({ data: { id: CREATED_LISTING_ID }, error: null });
+  const listingsInsert = vi.fn().mockImplementation((payload: unknown) => {
     insertCapture.payload = payload;
-    return Promise.resolve({ error: null });
+    return { select: vi.fn().mockReturnValue({ single }) };
+  });
+  const listingsDeleteEq = vi.fn().mockResolvedValue({ error: null });
+  const listingsDelete = vi.fn().mockReturnValue({ eq: listingsDeleteEq });
+  const sizesInsert = vi.fn().mockImplementation((rows: unknown) => {
+    insertCapture.variantRows = rows;
+    return Promise.resolve({ error: opts.sizesInsertError ?? null });
   });
 
   return {
@@ -102,19 +124,46 @@ function makeCreateSupabase(insertCapture: { payload: unknown }) {
         getPublicUrl: mockGetPublicUrl,
       }),
     },
-    from: vi.fn().mockReturnValue({
-      insert: insertFn,
-    }),
+    from: vi.fn().mockImplementation((table: string) =>
+      table === "listing_sizes"
+        ? { insert: sizesInsert }
+        : { insert: listingsInsert, delete: listingsDelete },
+    ),
+    _sizesInsert: sizesInsert,
+    _listingsDelete: listingsDelete,
+    _listingsDeleteEq: listingsDeleteEq,
   };
 }
 
+type ExistingSizeRow = {
+  id: string;
+  size: string;
+  size_group: string;
+  price: number;
+  sort_order: number;
+};
+
+type UpdateCapture = {
+  payload: unknown;
+  variantInsert?: unknown;
+  variantUpdates?: unknown[];
+  variantDeleteIds?: unknown;
+};
+
 function makeUpdateSupabase(
   existingImageUrls: string[],
-  updateCapture: { payload: unknown },
+  updateCapture: UpdateCapture,
   updateResult: { error: null | { message: string } } = { error: null },
+  existingSizes: ExistingSizeRow[] = [
+    { id: "var-8", size: "8", size_group: "adult", price: 800, sort_order: 0 },
+  ],
 ) {
   const maybeSingle = vi.fn().mockResolvedValue({
-    data: { user_id: "user-123", image_urls: existingImageUrls },
+    data: {
+      user_id: "user-123",
+      image_urls: existingImageUrls,
+      sizes: existingSizes,
+    },
     error: null,
   });
 
@@ -126,10 +175,30 @@ function makeUpdateSupabase(
     return { eq: outerEq };
   });
 
-  let callCount = 0;
-  const from = vi.fn().mockImplementation(() => {
-    callCount++;
-    if (callCount === 1) {
+  const sizesInsert = vi.fn().mockImplementation((rows: unknown) => {
+    updateCapture.variantInsert = rows;
+    return Promise.resolve({ error: null });
+  });
+  const sizesDeleteIn = vi.fn().mockImplementation((_col: string, ids: unknown) => {
+    updateCapture.variantDeleteIds = ids;
+    return Promise.resolve({ error: null });
+  });
+  const sizesDelete = vi.fn().mockReturnValue({ in: sizesDeleteIn });
+  const sizesUpdate = vi.fn().mockImplementation((patch: unknown) => {
+    updateCapture.variantUpdates = [
+      ...(updateCapture.variantUpdates ?? []),
+      patch,
+    ];
+    return { eq: vi.fn().mockResolvedValue({ error: null }) };
+  });
+
+  let listingsCallCount = 0;
+  const from = vi.fn().mockImplementation((table: string) => {
+    if (table === "listing_sizes") {
+      return { insert: sizesInsert, delete: sizesDelete, update: sizesUpdate };
+    }
+    listingsCallCount++;
+    if (listingsCallCount === 1) {
       return {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
@@ -147,6 +216,9 @@ function makeUpdateSupabase(
       }),
     },
     from,
+    _sizesInsert: sizesInsert,
+    _sizesUpdate: sizesUpdate,
+    _sizesDelete: sizesDelete,
   };
 }
 
@@ -342,6 +414,197 @@ describe("createListing", () => {
     const payload = capture.payload as Record<string, unknown>;
     expect(payload.image_blur_data_urls).toEqual(["", ""]);
   });
+
+  it("inserts variant rows in canonical order with sort_order and listing_id", async () => {
+    const capture: CreateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture),
+    });
+
+    const fd = baseFormData([
+      { size: "12", size_group: "adult", price: 900 },
+      { size: "8", size_group: "adult", price: 800 },
+    ]);
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    try { await createListing(fd); } catch { /* redirect */ }
+
+    expect(capture.variantRows).toEqual([
+      { size: "8", size_group: "adult", price: 800, sort_order: 0, listing_id: CREATED_LISTING_ID },
+      { size: "12", size_group: "adult", price: 900, sort_order: 1, listing_id: CREATED_LISTING_ID },
+    ]);
+    const payload = capture.payload as Record<string, unknown>;
+    expect(payload.sell_mode).toBe("individual");
+    expect(payload.bundle_price).toBeNull();
+  });
+
+  it("rejects duplicate sizes without uploading", async () => {
+    const capture: CreateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture),
+    });
+
+    const fd = baseFormData([
+      { size: "8", size_group: "adult", price: 800 },
+      { size: "8", size_group: "adult", price: 850 },
+    ]);
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    const result = await createListing(fd);
+
+    expect(result).toEqual({ error: "Each size can only be added once." });
+    expect(mockUpload).not.toHaveBeenCalled();
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("rejects set_only without a bundle price", async () => {
+    const capture: CreateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture),
+    });
+
+    const fd = baseFormData([
+      { size: "8", size_group: "adult", price: 800 },
+      { size: "10", size_group: "adult", price: 850 },
+    ]);
+    fd.set("sell_mode", "set_only");
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    const result = await createListing(fd);
+
+    expect(result).toEqual({ error: "Enter the price for the complete set." });
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("stamps the set price onto every variant for set_only (no per-size price)", async () => {
+    const capture: CreateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture),
+    });
+
+    const fd = baseFormData();
+    fd.set(
+      "sizes",
+      JSON.stringify([
+        { size: "8", size_group: "adult" },
+        { size: "10", size_group: "adult" },
+      ]),
+    );
+    fd.set("sell_mode", "set_only");
+    fd.set("bundle_price", "1500");
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    try { await createListing(fd); } catch { /* redirect */ }
+
+    expect(capture.variantRows).toEqual([
+      { size: "8", size_group: "adult", price: 1500, sort_order: 0, listing_id: CREATED_LISTING_ID },
+      { size: "10", size_group: "adult", price: 1500, sort_order: 1, listing_id: CREATED_LISTING_ID },
+    ]);
+    const payload = capture.payload as Record<string, unknown>;
+    expect(payload.sell_mode).toBe("set_only");
+    expect(payload.bundle_price).toBe(1500);
+  });
+
+  it("rejects an individual size that is missing a price", async () => {
+    const capture: CreateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture),
+    });
+
+    const fd = baseFormData();
+    fd.set("sizes", JSON.stringify([{ size: "8", size_group: "adult" }]));
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    const result = await createListing(fd);
+
+    expect(result).toEqual({ error: "Enter a price for every size." });
+    expect(mockUpload).not.toHaveBeenCalled();
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("rejects a bundle price when selling individually", async () => {
+    const capture: CreateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture),
+    });
+
+    const fd = baseFormData();
+    fd.set("bundle_price", "500");
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    const result = await createListing(fd);
+
+    expect(result).toEqual({
+      error: "A set price is only allowed when selling sizes together.",
+    });
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("stores sell_mode and bundle_price on the listing for 'either'", async () => {
+    const capture: CreateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture),
+    });
+
+    const fd = baseFormData([
+      { size: "8", size_group: "adult", price: 800 },
+      { size: "10", size_group: "adult", price: 850 },
+    ]);
+    fd.set("sell_mode", "either");
+    fd.set("bundle_price", "1500");
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    try { await createListing(fd); } catch { /* redirect */ }
+
+    const payload = capture.payload as Record<string, unknown>;
+    expect(payload.sell_mode).toBe("either");
+    expect(payload.bundle_price).toBe(1500);
+  });
+
+  it("deletes the listing row and images when the variant insert fails", async () => {
+    const capture: CreateCapture = { payload: {} };
+    const supabase = makeCreateSupabase(capture, {
+      sizesInsertError: { message: "variant insert failed" },
+    });
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase,
+    });
+
+    const fd = baseFormData();
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    const result = await createListing(fd);
+
+    expect(result).toEqual({ error: "variant insert failed" });
+    expect(supabase._listingsDelete).toHaveBeenCalled();
+    expect(supabase._listingsDeleteEq).toHaveBeenCalledWith("id", CREATED_LISTING_ID);
+    expect(mockDeleteListingImages).toHaveBeenCalled();
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
 });
 
 describe("updateListing", () => {
@@ -492,5 +755,88 @@ describe("updateListing", () => {
 
     expect(result).toEqual({ error: "Invalid existing image URL." });
     expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("diffs variants: updates changed prices, inserts new sizes, deletes removed ones", async () => {
+    const capture: UpdateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeUpdateSupabase([OLD_URL_0], capture, { error: null }, [
+        { id: "var-8", size: "8", size_group: "adult", price: 800, sort_order: 0 },
+        { id: "var-10", size: "10", size_group: "adult", price: 850, sort_order: 1 },
+      ]),
+    });
+
+    const fd = baseFormData([
+      { size: "8", size_group: "adult", price: 825 },
+      { size: "12", size_group: "adult", price: 900 },
+    ]);
+    fd.set("existing_url_0", OLD_URL_0);
+    fd.set("blur_0", makeBlur("blur0"));
+
+    try { await updateListing(LISTING_ID, fd); } catch { /* redirect */ }
+
+    expect(capture.variantDeleteIds).toEqual(["var-10"]);
+    expect(capture.variantUpdates).toEqual([{ price: 825, sort_order: 0 }]);
+    expect(capture.variantInsert).toEqual([
+      { size: "12", size_group: "adult", price: 900, sort_order: 1, listing_id: LISTING_ID },
+    ]);
+    expect(mockUpdateTag).toHaveBeenCalledWith(`listing:${LISTING_ID}`);
+  });
+
+  it("stamps the set price onto every variant when switching to set_only", async () => {
+    const capture: UpdateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeUpdateSupabase([OLD_URL_0], capture, { error: null }, [
+        { id: "var-8", size: "8", size_group: "adult", price: 800, sort_order: 0 },
+        { id: "var-10", size: "10", size_group: "adult", price: 850, sort_order: 1 },
+      ]),
+    });
+
+    const fd = baseFormData();
+    fd.set(
+      "sizes",
+      JSON.stringify([
+        { size: "8", size_group: "adult" },
+        { size: "10", size_group: "adult" },
+      ]),
+    );
+    fd.set("sell_mode", "set_only");
+    fd.set("bundle_price", "1200");
+    fd.set("existing_url_0", OLD_URL_0);
+    fd.set("blur_0", makeBlur("blur0"));
+
+    try { await updateListing(LISTING_ID, fd); } catch { /* redirect */ }
+
+    expect(capture.variantUpdates).toEqual([
+      { price: 1200, sort_order: 0 },
+      { price: 1200, sort_order: 1 },
+    ]);
+    expect(mockUpdateTag).toHaveBeenCalledWith(`listing:${LISTING_ID}`);
+  });
+
+  it("performs no variant writes when the submitted sizes match the stored ones", async () => {
+    const capture: UpdateCapture = { payload: {} };
+    const supabase = makeUpdateSupabase([OLD_URL_0], capture);
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase,
+    });
+
+    const fd = baseFormData();
+    fd.set("title", "Beautiful Gown (edited)");
+    fd.set("existing_url_0", OLD_URL_0);
+    fd.set("blur_0", makeBlur("blur0"));
+
+    try { await updateListing(LISTING_ID, fd); } catch { /* redirect */ }
+
+    expect(supabase._sizesInsert).not.toHaveBeenCalled();
+    expect(supabase._sizesUpdate).not.toHaveBeenCalled();
+    expect(supabase._sizesDelete).not.toHaveBeenCalled();
+    expect(mockUpdateTag).toHaveBeenCalledWith("listings");
   });
 });

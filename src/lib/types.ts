@@ -3,13 +3,12 @@ export type Listing = {
   user_id: string;
   title: string;
   description: string | null;
-  size: string;
-  size_group: SizeGroupSlug;
   color: string | null;
   location: string | null;
   condition: GownCondition;
   category: GownCategoryId | null;
-  price: number;
+  sell_mode: SellMode;
+  bundle_price: number | null;
   image_urls: string[];
   image_blur_data_urls: string[];
   contact_email: string;
@@ -18,21 +17,38 @@ export type Listing = {
   created_at: string;
 };
 
+export const SELL_MODES = ['individual', 'set_only', 'either'] as const;
+export type SellMode = (typeof SELL_MODES)[number];
+
+/** One physical gown (size variant) belonging to a listing. */
+export type ListingSize = {
+  id: string;
+  listing_id: string;
+  size: string;
+  size_group: SizeGroupSlug;
+  price: number;
+  status: 'available' | 'sold';
+  sort_order: number;
+  created_at: string;
+};
+
+export type ListingWithSizes = Listing & { sizes: ListingSize[] };
+
 /** Error shape returned from listing read helpers (Supabase failures, etc.). */
 export type ListingReadError = { message: string } | null;
 
 export type ListingByIdResult = {
-  listing: Listing | null;
+  listing: ListingWithSizes | null;
   error: ListingReadError;
 };
 
 export type ListingsListResult = {
-  listings: Listing[] | null;
+  listings: ListingWithSizes[] | null;
   error: ListingReadError;
 };
 
 export type ListingsPageResult = {
-  listings: Listing[] | null;
+  listings: ListingWithSizes[] | null;
   totalCount: number;
   page: number;
   pageSize: number;
@@ -45,7 +61,28 @@ export type PriceBounds = {
   maxBound: number;
 };
 
-export type ListingFormData = Omit<Listing, 'id' | 'user_id' | 'created_at'>;
+/**
+ * One size entry as submitted from the listing form (no DB identity yet).
+ * `price` is omitted for set-only listings — the server stamps each variant
+ * with the shared set price.
+ */
+export type ListingSizeInput = {
+  size: string;
+  size_group: SizeGroupSlug;
+  price?: number;
+};
+
+export type ListingFormData = Omit<Listing, 'id' | 'user_id' | 'created_at'> & {
+  sizes: ListingSizeInput[];
+};
+
+/** Client-side state for one size row in the listing form. */
+export type ListingSizeRowState = {
+  key: string;
+  size: string;
+  size_group: SizeGroupSlug | null;
+  price: string;
+};
 
 /** Client-side state for one image slot in the listing form. */
 export type ImageSlotState = {

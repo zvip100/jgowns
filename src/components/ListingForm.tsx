@@ -9,8 +9,8 @@ import {
   type GownCondition,
   type ListingFormData,
 } from '@/lib/types';
-import { CategorySizeSelect } from '@/components/CategorySizeSelect';
 import { ListingPhotoField } from '@/components/ListingPhotoField';
+import { ListingSizesField } from '@/components/ListingSizesField';
 import { FormFieldGrid } from '@/components/form/FormFieldGrid';
 import { FormSection } from '@/components/form/FormSection';
 import { InputGroupField } from '@/components/form/InputGroupField';
@@ -43,9 +43,9 @@ export default function ListingForm({
   const {
     form,
     setField,
-    setSizeSelection,
     setCategory,
     setContactPhone,
+    sizesController,
     loading,
     error,
     handleSubmit,
@@ -106,12 +106,6 @@ export default function ListingForm({
             options={toSelectOptions(GOWN_CONDITIONS)}
             onChange={(v) => setField('condition', v as GownCondition)}
           />
-          <CategorySizeSelect
-            category={form.category ?? null}
-            size={form.size || ''}
-            sizeGroup={form.size_group ?? null}
-            onChange={setSizeSelection}
-          />
           <SelectField
             id="color"
             label="Color"
@@ -129,18 +123,12 @@ export default function ListingForm({
             options={toSelectOptions(LOCATIONS)}
             onChange={(v) => setField('location', v)}
           />
-          <InputGroupField
-            id="price"
-            label="Asking Price"
-            required
-            leading="$"
-            type="number"
-            inputMode="decimal"
-            placeholder="500"
-            value={form.price ?? ''}
-            onChange={(e) => setField('price', parseFloat(e.target.value))}
-          />
         </FormFieldGrid>
+
+        <ListingSizesField
+          category={form.category ?? null}
+          controller={sizesController}
+        />
 
         <ListingPhotoField
           slots={slots}

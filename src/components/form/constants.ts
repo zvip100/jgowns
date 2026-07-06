@@ -3,6 +3,10 @@ export const FORM_LABEL_CLASS =
 
 export const FORM_CONTROL_CLASS = 'bg-card';
 
+/** Italic muted hint under a field (e.g. "One photo required"). */
+export const FORM_HINT_CLASS =
+  'text-[0.80rem] font-light italic tracking-wide text-muted-foreground/80';
+
 export const FORM_SELECT_TRIGGER_CLASS = 'h-8 w-full bg-card';
 
 export const FORM_FIELD_PAIR_GRID_CLASS =

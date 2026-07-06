@@ -32,6 +32,7 @@ import { fetchListingWithFallback } from "@/lib/listings-queries";
 const ID_PUBLIC_HIT    = "11111111-1111-1111-1111-111111111111";
 const ID_SESSION_HIT   = "22222222-2222-2222-2222-222222222222";
 const ID_PUBLIC_ERROR  = "33333333-3333-3333-3333-333333333333";
+const ID_SORTED_SIZES  = "44444444-4444-4444-4444-444444444444";
 
 describe("fetchListingWithFallback", () => {
   beforeEach(() => {
@@ -40,7 +41,7 @@ describe("fetchListingWithFallback", () => {
   });
 
   it("returns the listing when the public query finds it", async () => {
-    const listing = { id: ID_PUBLIC_HIT, title: "Test Gown", price: 500 };
+    const listing = { id: ID_PUBLIC_HIT, title: "Test Gown", sizes: [] };
     anonMaybeSingle.mockResolvedValue({ data: listing, error: null });
 
     const result = await fetchListingWithFallback(ID_PUBLIC_HIT);
@@ -50,8 +51,29 @@ describe("fetchListingWithFallback", () => {
     expect(sessionMaybeSingle).not.toHaveBeenCalled();
   });
 
+  it("orders embedded sizes by sort_order then size", async () => {
+    const sizeRow = (id: string, size: string, sort_order: number) => ({
+      id,
+      size,
+      sort_order,
+      status: "available",
+    });
+    anonMaybeSingle.mockResolvedValue({
+      data: {
+        id: ID_SORTED_SIZES,
+        title: "Test Gown",
+        sizes: [sizeRow("c", "12", 2), sizeRow("a", "8", 0), sizeRow("b", "10", 1)],
+      },
+      error: null,
+    });
+
+    const result = await fetchListingWithFallback(ID_SORTED_SIZES);
+
+    expect(result.listing?.sizes.map((s) => s.size)).toEqual(["8", "10", "12"]);
+  });
+
   it("falls back to session query when the public query returns no listing", async () => {
-    const listing = { id: ID_SESSION_HIT, title: "Test Gown", price: 500 };
+    const listing = { id: ID_SESSION_HIT, title: "Test Gown", sizes: [] };
     anonMaybeSingle.mockResolvedValue({ data: null, error: null });
     sessionMaybeSingle.mockResolvedValue({ data: listing, error: null });
 

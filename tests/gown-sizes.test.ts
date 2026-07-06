@@ -11,6 +11,7 @@ import {
   isAdultGownCategory,
   isValidSizeForCategory,
   isValidSizePair,
+  sizeOptionIndex,
 } from "@/lib/gown-sizes";
 
 describe("gown-sizes", () => {
@@ -255,6 +256,20 @@ describe("gown-sizes", () => {
       const groups = getSizeSelectGroups("bridal");
       const adultGroup = groups.find((g) => g.label === "Adult formal");
       expect(adultGroup?.options.length).toBe(19);
+    });
+  });
+
+  describe("sizeOptionIndex", () => {
+    it("orders sizes by their canonical category position", () => {
+      const size8 = sizeOptionIndex("bridal", "adult", "8");
+      const size10 = sizeOptionIndex("bridal", "adult", "10");
+      const junior = sizeOptionIndex("bridal", "junior", "J10");
+      expect(size8).toBeLessThan(size10);
+      expect(junior).toBeLessThan(size8);
+    });
+
+    it("returns -1 for a size that is not valid in the category", () => {
+      expect(sizeOptionIndex("bridal", "kids", "8")).toBe(-1);
     });
   });
 });

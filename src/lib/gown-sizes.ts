@@ -179,6 +179,17 @@ export function findSizeOption(
   );
 }
 
+/** Canonical position of a size within its category's options (drives variant sort_order). */
+export function sizeOptionIndex(
+  category: GownCategoryId,
+  sizeGroup: SizeGroupSlug,
+  size: string,
+): number {
+  return getSizeOptionsForCategory(category).findIndex(
+    (o) => o.sizeGroup === sizeGroup && o.value === size,
+  );
+}
+
 export function isValidSizePair(
   category: GownCategoryId,
   sizeGroup: SizeGroupSlug,

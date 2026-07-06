@@ -8,17 +8,18 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { browseQueryString } from "@/lib/browse-url";
+import { decodeSizeFilterToken } from "@/lib/gown-sizes";
 import type {
   BrowseFilters,
-  Listing,
   ListingReadError,
+  ListingWithSizes,
 } from "@/lib/types";
 
 import GownCard from "./GownCard";
 import ListingsGridWrap from "./ListingsGridWrap";
 
 type ListingsGridProps = {
-  listings: Listing[] | null;
+  listings: ListingWithSizes[] | null;
   error: ListingReadError | null;
   totalCount: number;
   page: number;
@@ -60,10 +61,19 @@ export default function ListingsGrid({
     );
   }
 
+  const matchedSizePairs = (filters.size ?? [])
+    .map((token) => decodeSizeFilterToken(token))
+    .filter((p): p is NonNullable<typeof p> => p !== null);
+
   return (
     <ListingsGridWrap>
-      {(listings ?? []).map((listing: Listing) => (
-        <GownCard key={listing.id} listing={listing} backQuery={backQuery} />
+      {(listings ?? []).map((listing) => (
+        <GownCard
+          key={listing.id}
+          listing={listing}
+          backQuery={backQuery}
+          matchedSizePairs={matchedSizePairs}
+        />
       ))}
     </ListingsGridWrap>
   );

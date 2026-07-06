@@ -4,9 +4,11 @@ import { Eye, Pencil } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import MarkSizeSoldButton from '@/components/MarkSizeSoldButton';
 import MarkSoldButton from '@/components/MarkSoldButton';
+import { sortListingSizes } from '@/lib/listing-variants';
 import { blurProps } from '@/lib/utils';
-import { GOWN_CATEGORIES, type Listing } from '@/lib/types';
+import { GOWN_CATEGORIES, type Listing, type ListingWithSizes } from '@/lib/types';
 
 const statusStyles: Record<Listing['status'], string> = {
   active: 'bg-[#e8f4ec] text-[#2d7a4f]',
@@ -14,7 +16,15 @@ const statusStyles: Record<Listing['status'], string> = {
   removed: 'bg-[#fef4e0] text-[#8a6a30]',
 };
 
-export default function ListingRow({ listing }: { listing: Listing }) {
+export default function ListingRow({
+  listing,
+}: {
+  listing: ListingWithSizes;
+}) {
+  const sizes = sortListingSizes(listing.sizes);
+  const isSetOnly = listing.sell_mode === 'set_only';
+  const showPerSizeSold =
+    listing.status === 'active' && !isSetOnly && sizes.length > 1;
   const category = GOWN_CATEGORIES.find((c) => c.id === listing.category)?.label;
   const href = `/browse/${listing.id}?from=dash`;
 
@@ -52,13 +62,41 @@ export default function ListingRow({ listing }: { listing: Listing }) {
             {listing.status}
           </Badge>
         </div>
-        <p className="mt-1 text-sm text-(--muted-ink)">
-          Size {listing.size}
-          <span className="mx-2 text-(--line)">·</span>
-          <span className="font-semibold text-(--ink)">
-            ${listing.price.toLocaleString()}
-          </span>
-        </p>
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-(--muted-ink)">
+          {sizes.map((s) => {
+            const sizeSold = s.status === 'sold';
+            return (
+              <span key={s.id} className="inline-flex items-center gap-1.5">
+                <span className={sizeSold ? 'line-through opacity-60' : ''}>
+                  Size {s.size}
+                  {!isSetOnly && (
+                    <>
+                      <span className="mx-1.5 text-(--line)">·</span>
+                      <span className="font-semibold text-(--ink)">
+                        ${s.price.toLocaleString()}
+                      </span>
+                    </>
+                  )}
+                </span>
+                {showPerSizeSold && !sizeSold && (
+                  <MarkSizeSoldButton
+                    listingId={listing.id}
+                    sizeId={s.id}
+                    size={s.size}
+                  />
+                )}
+              </span>
+            );
+          })}
+        </div>
+        {listing.bundle_price != null && (
+          <p className="mt-1 text-xs text-(--muted-ink)">
+            {listing.sell_mode === 'set_only' ? 'Set price' : 'Bundle price'}{' '}
+            <span className="font-semibold text-(--ink)">
+              ${listing.bundle_price.toLocaleString()}
+            </span>
+          </p>
+        )}
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
