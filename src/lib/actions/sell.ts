@@ -108,76 +108,6 @@ type VariantRow = {
   sort_order: number;
 };
 
-type ExistingVariant = {
-  id: string;
-  size: string;
-  size_group: (typeof SIZE_GROUPS)[number];
-  price: number;
-  sort_order: number;
-};
-
-/**
- * Diff submitted sizes against stored variants and apply the changes.
- * Kept variants preserve their status; the inserted-row count is the
- * future per-variant billing hook.
- */
-async function syncListingSizes(
-  supabase: SupabaseServer,
-  listingId: string,
-  existing: ExistingVariant[],
-  desired: VariantRow[],
-): Promise<string | null> {
-  const byKey = new Map(existing.map((v) => [`${v.size_group}:${v.size}`, v]));
-  const toInsert: (VariantRow & { listing_id: string })[] = [];
-  const toUpdate: { id: string; price: number; sort_order: number }[] = [];
-  const keptKeys = new Set<string>();
-
-  for (const row of desired) {
-    const key = `${row.size_group}:${row.size}`;
-    keptKeys.add(key);
-    const current = byKey.get(key);
-    if (!current) {
-      toInsert.push({ ...row, listing_id: listingId });
-    } else if (
-      current.price !== row.price ||
-      current.sort_order !== row.sort_order
-    ) {
-      toUpdate.push({
-        id: current.id,
-        price: row.price,
-        sort_order: row.sort_order,
-      });
-    }
-  }
-
-  const toDeleteIds = existing
-    .filter((v) => !keptKeys.has(`${v.size_group}:${v.size}`))
-    .map((v) => v.id);
-
-  if (toDeleteIds.length > 0) {
-    const { error } = await supabase
-      .from("listing_sizes")
-      .delete()
-      .in("id", toDeleteIds);
-    if (error) return error.message;
-  }
-
-  for (const change of toUpdate) {
-    const { error } = await supabase
-      .from("listing_sizes")
-      .update({ price: change.price, sort_order: change.sort_order })
-      .eq("id", change.id);
-    if (error) return error.message;
-  }
-
-  if (toInsert.length > 0) {
-    const { error } = await supabase.from("listing_sizes").insert(toInsert);
-    if (error) return error.message;
-  }
-
-  return null;
-}
-
 /**
  * Submitted sizes in canonical category order, with sort_order assigned.
  * Set-only variants mirror the one bundle price so the variant-level browse
@@ -440,7 +370,7 @@ export async function updateListing(
 
   const { data: existing, error: existingError } = await supabase
     .from("listings")
-    .select("user_id, image_urls, sizes:listing_sizes(id, size, size_group, price, sort_order)")
+    .select("user_id, image_urls")
     .eq("id", id)
     .maybeSingle();
 
@@ -449,8 +379,6 @@ export async function updateListing(
   if (existing.user_id !== user.id) return { error: "Not authorized" };
 
   const oldImageUrls: string[] = existing.image_urls ?? [];
-  // Supabase embeds are untyped; the select above matches ExistingVariant.
-  const existingVariants = (existing.sizes ?? []) as ExistingVariant[];
 
   let shouldRedirect = false;
   const newlyUploadedUrls: string[] = [];
@@ -501,11 +429,14 @@ export async function updateListing(
 
     const payload = listingRowPayload(parsed, nextImageUrls, nextBlurUrls);
 
-    const { error: dbError } = await supabase
-      .from("listings")
-      .update(payload)
-      .eq("id", id)
-      .eq("user_id", user.id);
+    const { error: dbError } = await supabase.rpc(
+      "update_listing_with_variants",
+      {
+        p_listing_id: id,
+        p_listing: payload,
+        p_variants: variantRowsPayload(parsed),
+      },
+    );
 
     if (dbError) {
       if (newlyUploadedUrls.length > 0) {
@@ -524,24 +455,15 @@ export async function updateListing(
       return { error: dbError.message };
     }
 
-    // The listing row is committed from here on: finish image cleanup and
-    // refresh caches even if the variant sync below fails.
+    // The listing row and its variants are now committed atomically; it's safe
+    // to drop the images this edit orphaned and refresh caches.
     const orphans = oldImageUrls.filter((u) => !nextImageUrls.includes(u));
     if (orphans.length > 0) {
       await deleteListingImages(orphans);
     }
 
-    const variantError = await syncListingSizes(
-      supabase,
-      id,
-      existingVariants,
-      variantRowsPayload(parsed),
-    );
-
     updateTag(`listing:${id}`);
     updateTag("listings");
-
-    if (variantError) return { error: variantError };
 
     shouldRedirect = true;
   } catch (e) {

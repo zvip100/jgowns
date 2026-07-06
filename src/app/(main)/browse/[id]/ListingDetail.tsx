@@ -116,7 +116,7 @@ export function ListingDetail({
                               : 'text-[#8a6232]',
                           )}
                         >
-                          ${s.price.toLocaleString()}
+                          {formatPrice(s.price)}
                         </td>
                         <td
                           className={cn(

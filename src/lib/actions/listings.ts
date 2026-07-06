@@ -18,27 +18,16 @@ export async function markListingSold(
 
   const auth = await getAuthClient();
   if (!auth.ok) return { error: auth.error };
-  const { supabase, user } = auth;
+  const { supabase } = auth;
 
-  const { data: updated, error } = await supabase
-    .from("listings")
-    .update({ status: "sold" })
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .select("id");
+  const { error } = await supabase.rpc("mark_listing_sold", {
+    p_listing_id: id,
+  });
 
   if (error) return { error: error.message };
-  if (!updated?.length) return { error: "Listing not found" };
-
-  const { error: sizesError } = await supabase
-    .from("listing_sizes")
-    .update({ status: "sold" })
-    .eq("listing_id", id);
 
   updateTag(`listing:${id}`);
   updateTag("listings");
-
-  if (sizesError) return { error: sizesError.message };
   return {};
 }
 

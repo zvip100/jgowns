@@ -131,3 +131,123 @@ create policy "Sellers can delete own listing sizes" on listing_sizes
 create policy "Public image access" on storage.objects for select using (bucket_id = 'gown-images');
 create policy "Auth users can upload images" on storage.objects for insert with check (bucket_id = 'gown-images' and auth.role() = 'authenticated');
 create policy "Users can delete own images" on storage.objects for delete using (bucket_id = 'gown-images' and auth.uid() = owner);
+
+-- Atomic "mark listing sold": flip the listing status and all of its size
+-- variants in one transaction, so a mid-way failure can't leave the listing
+-- sold while some variants stay available.
+create or replace function mark_listing_sold(p_listing_id uuid)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_uid uuid := (select auth.uid());
+  v_count int;
+begin
+  if v_uid is null then
+    raise exception 'Not authenticated' using errcode = '28000';
+  end if;
+
+  update public.listings
+     set status = 'sold'
+   where id = p_listing_id and user_id = v_uid;
+
+  get diagnostics v_count = row_count;
+  if v_count = 0 then
+    raise exception 'Listing not found' using errcode = 'P0002';
+  end if;
+
+  update public.listing_sizes
+     set status = 'sold'
+   where listing_id = p_listing_id;
+end;
+$$;
+
+grant execute on function mark_listing_sold(uuid) to authenticated;
+
+-- Atomic listing edit: update the shared listing row and reconcile its size
+-- variants (delete removed, re-price/re-order kept ones while preserving their
+-- status, insert new ones) in a single transaction. Image upload and cleanup
+-- stay in the server action because storage writes can't participate in the
+-- database transaction.
+create or replace function update_listing_with_variants(
+  p_listing_id uuid,
+  p_listing jsonb,
+  p_variants jsonb
+)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_uid uuid := (select auth.uid());
+  v_owner uuid;
+begin
+  if v_uid is null then
+    raise exception 'Not authenticated' using errcode = '28000';
+  end if;
+
+  select user_id into v_owner from public.listings where id = p_listing_id;
+
+  if v_owner is null then
+    raise exception 'Listing not found' using errcode = 'P0002';
+  end if;
+  if v_owner <> v_uid then
+    raise exception 'Not authorized' using errcode = '42501';
+  end if;
+
+  update public.listings set
+    title                = p_listing->>'title',
+    description          = p_listing->>'description',
+    color                = p_listing->>'color',
+    location             = p_listing->>'location',
+    condition            = p_listing->>'condition',
+    category             = p_listing->>'category',
+    sell_mode            = p_listing->>'sell_mode',
+    bundle_price         = (p_listing->>'bundle_price')::numeric,
+    image_urls           = array(select jsonb_array_elements_text(p_listing->'image_urls')),
+    image_blur_data_urls = array(select jsonb_array_elements_text(p_listing->'image_blur_data_urls')),
+    contact_email        = p_listing->>'contact_email',
+    contact_phone        = p_listing->>'contact_phone',
+    status               = p_listing->>'status'
+  where id = p_listing_id;
+
+  -- Remove variants that are no longer submitted.
+  delete from public.listing_sizes ls
+   where ls.listing_id = p_listing_id
+     and not exists (
+       select 1
+         from jsonb_to_recordset(p_variants)
+           as d(size text, size_group text, price numeric, sort_order int)
+        where d.size_group = ls.size_group and d.size = ls.size
+     );
+
+  -- Re-price / re-order kept variants; their sold/available status is preserved.
+  update public.listing_sizes ls set
+    price      = d.price,
+    sort_order = d.sort_order
+  from jsonb_to_recordset(p_variants)
+    as d(size text, size_group text, price numeric, sort_order int)
+  where ls.listing_id = p_listing_id
+    and d.size_group = ls.size_group
+    and d.size = ls.size
+    and (ls.price is distinct from d.price
+         or ls.sort_order is distinct from d.sort_order);
+
+  -- Insert newly added variants (status defaults to 'available').
+  insert into public.listing_sizes (listing_id, size, size_group, price, sort_order)
+  select p_listing_id, d.size, d.size_group, d.price, d.sort_order
+    from jsonb_to_recordset(p_variants)
+      as d(size text, size_group text, price numeric, sort_order int)
+   where not exists (
+     select 1 from public.listing_sizes ls
+      where ls.listing_id = p_listing_id
+        and ls.size_group = d.size_group
+        and ls.size = d.size
+   );
+end;
+$$;
+
+grant execute on function update_listing_with_variants(uuid, jsonb, jsonb) to authenticated;

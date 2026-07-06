@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -p 5000",
     "test": "vitest run",
-    "postinstall": "npx skills install"
+    "skills": "npx skills install"
   },
   "dependencies": {
     "@google-cloud/vision": "^5.3.6",

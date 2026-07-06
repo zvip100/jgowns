@@ -221,13 +221,8 @@ export function useListingFormSubmit({
     [sizeRows],
   );
 
-  // Unchecking "set only" clears the per-size prices so the seller must
-  // re-enter them before selling individually (they weren't stored per size).
   const setSellOnlyAsSet = useCallback((value: boolean) => {
     setSellOnlyAsSetState(value);
-    if (!value) {
-      setSizeRows((rows) => rows.map((row) => ({ ...row, price: "" })));
-    }
   }, []);
 
   const sizesController: ListingSizesController = {
