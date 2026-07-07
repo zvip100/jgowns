@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { useSearchParams } from "next/navigation";
 import { ChevronDown, SlidersHorizontal } from "lucide-react";
 
@@ -37,6 +38,25 @@ export default function ListingsLayout({
   const params = useSearchParams();
 
   const activeFilterCount = countActiveBrowseFilters(params);
+
+  /**
+   * Snap the layout to its final state and let the View Transitions API
+   * animate the difference (cards glide, rail slides in — see globals.css).
+   * `flushSync` commits the React update inside the callback so the browser
+   * snapshots the correct "after" state. Falls back to an instant toggle.
+   */
+  const toggleRail = (open: boolean) => {
+    if (
+      !document.startViewTransition ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      setRailOpen(open);
+      return;
+    }
+    document.startViewTransition(() => {
+      flushSync(() => setRailOpen(open));
+    });
+  };
 
   // Detect when the mobile bar sticks so chrome appears only while pinned.
   useEffect(() => {
@@ -86,20 +106,24 @@ export default function ListingsLayout({
       {/* Sticky outer keeps the subnav pinned; full-width inner lets its background
           cover the sliding rail while content stays aligned to the page frame. */}
       <div className='sticky top-(--navbar-h) z-40 hidden lg:block'>
+        {/* The transition name sits on the blurred element itself — naming an
+            ancestor isolates the subtree and kills the backdrop-filter frost. */}
         <div
           className={cn(
             "relative left-1/2 -ml-[50vw] w-screen border-b",
             STICKY_BAR_CHROME,
           )}
+          style={{ viewTransitionName: "browse-subnav" }}
         >
           <div className='mx-auto flex h-(--listings-subnav-h) w-full max-w-375 min-w-0 items-center gap-4 px-4 sm:px-6 lg:px-10'>
             {!railOpen && (
               <Button
                 type='button'
                 variant='outline'
-                onClick={() => setRailOpen(true)}
+                onClick={() => toggleRail(true)}
                 aria-expanded={false}
                 aria-controls='listings-filter-rail'
+                style={{ viewTransitionName: "rail-toggle" }}
                 className='group/sub-toggle h-auto w-72 shrink-0 justify-between rounded-full border-[#c9b39a] bg-white/85 px-4 py-2.5 text-[0.66rem] font-semibold uppercase tracking-[0.13em] text-[#6f5947] shadow-[0_10px_26px_rgba(97,71,42,0.14)] backdrop-blur-sm hover:bg-white'
               >
                 <span className='inline-flex items-center gap-2'>
@@ -122,27 +146,26 @@ export default function ListingsLayout({
         </div>
       </div>
 
-      {/* `overflow-x: clip` hides the rail animation without creating the
-          scroll container that would break the FilterBar sticky anchor. */}
+      {/* `overflow-x: clip` hides the collapsed rail's content without creating
+          the scroll container that would break the FilterBar sticky anchor. */}
       <div
         className={cn(
-          "lg:grid lg:transition-[grid-template-columns,column-gap] lg:duration-700 lg:ease-[cubic-bezier(0.22,1,0.36,1)] lg:pt-0",
+          "lg:grid lg:pt-0",
           railOpen
             ? "lg:gap-x-6 xl:gap-x-7 lg:grid-cols-[18rem_minmax(0,1fr)]"
             : "lg:gap-x-0 lg:grid-cols-[0_minmax(0,1fr)]"
         )}
       >
-        {/* Animate the stretched aside itself; an inner wrapper would
-            shrink-wrap the rail and remove sticky's scroll room. */}
+        {/* Keep the aside itself stretched; an inner wrapper would shrink-wrap
+            the rail and remove sticky's scroll room. */}
         <aside
           id='listings-filter-rail'
           inert={!railOpen}
           className={cn(
-            "hidden min-w-0 lg:block lg:overflow-x-clip lg:transition-[opacity,transform] lg:duration-700 lg:ease-[cubic-bezier(0.22,1,0.36,1)]",
-            railOpen
-              ? "lg:opacity-100"
-              : "lg:opacity-0 lg:-translate-x-72"
+            "hidden min-w-0 lg:block lg:overflow-x-clip",
+            railOpen ? "lg:opacity-100" : "lg:opacity-0"
           )}
+          style={{ viewTransitionName: railOpen ? "filter-rail" : "none" }}
         >
           <FilterBar
             variant='rail'
