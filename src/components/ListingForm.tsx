@@ -9,8 +9,8 @@ import {
   type GownCondition,
   type ListingFormData,
 } from '@/lib/types';
-import { CategorySizeSelect } from '@/components/CategorySizeSelect';
 import { ListingPhotoField } from '@/components/ListingPhotoField';
+import { ListingSizesField } from '@/components/ListingSizesField';
 import { FormFieldGrid } from '@/components/form/FormFieldGrid';
 import { FormSection } from '@/components/form/FormSection';
 import { InputGroupField } from '@/components/form/InputGroupField';
@@ -22,6 +22,7 @@ import { TextInputField } from '@/components/form/TextInputField';
 import { TextareaField } from '@/components/form/TextareaField';
 import { useListingFormSubmit } from '@/hooks/useListingFormSubmit';
 import { useListingImageSlots } from '@/hooks/useListingImageSlots';
+import { PRIMARY_CTA_CLASS } from '@/lib/styles';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FieldError, FieldGroup } from '@/components/ui/field';
@@ -42,9 +43,9 @@ export default function ListingForm({
   const {
     form,
     setField,
-    setSizeSelection,
     setCategory,
     setContactPhone,
+    sizesController,
     loading,
     error,
     handleSubmit,
@@ -105,12 +106,6 @@ export default function ListingForm({
             options={toSelectOptions(GOWN_CONDITIONS)}
             onChange={(v) => setField('condition', v as GownCondition)}
           />
-          <CategorySizeSelect
-            category={form.category ?? null}
-            size={form.size || ''}
-            sizeGroup={form.size_group ?? null}
-            onChange={setSizeSelection}
-          />
           <SelectField
             id="color"
             label="Color"
@@ -128,18 +123,12 @@ export default function ListingForm({
             options={toSelectOptions(LOCATIONS)}
             onChange={(v) => setField('location', v)}
           />
-          <InputGroupField
-            id="price"
-            label="Asking Price"
-            required
-            leading="$"
-            type="number"
-            inputMode="decimal"
-            placeholder="500"
-            value={form.price ?? ''}
-            onChange={(e) => setField('price', parseFloat(e.target.value))}
-          />
         </FormFieldGrid>
+
+        <ListingSizesField
+          category={form.category ?? null}
+          controller={sizesController}
+        />
 
         <ListingPhotoField
           slots={slots}
@@ -189,7 +178,7 @@ export default function ListingForm({
         <Button
           type="submit"
           disabled={loading || slots.some((s) => s.optimizing)}
-          className="h-12 w-full rounded-full border border-[#b58d5f]/70 bg-[linear-gradient(180deg,#c49a68,#a67841)] text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)] transition hover:-translate-y-0.5 hover:brightness-105 disabled:translate-y-0 disabled:opacity-50"
+          className={`${PRIMARY_CTA_CLASS} h-12 disabled:translate-y-0`}
         >
           {loading ? 'Saving…' : isEdit ? 'Update Listing' : 'Publish Listing'}
         </Button>

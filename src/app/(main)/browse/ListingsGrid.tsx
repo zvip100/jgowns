@@ -1,7 +1,5 @@
 import { SearchX } from "lucide-react";
 
-import GownCard from "@/components/GownCard";
-import ListingsGridWrap from "@/components/ListingsGridWrap";
 import {
   Empty,
   EmptyDescription,
@@ -10,14 +8,18 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { browseQueryString } from "@/lib/browse-url";
+import { decodeSizeFilterToken } from "@/lib/gown-sizes";
 import type {
   BrowseFilters,
-  Listing,
   ListingReadError,
+  ListingWithSizes,
 } from "@/lib/types";
 
+import GownCard from "./GownCard";
+import ListingsGridWrap from "./ListingsGridWrap";
+
 type ListingsGridProps = {
-  listings: Listing[] | null;
+  listings: ListingWithSizes[] | null;
   error: ListingReadError | null;
   totalCount: number;
   page: number;
@@ -36,7 +38,7 @@ export default function ListingsGrid({
   if (error) {
     return (
       <div className='rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700'>
-        Could not load gowns right now. {error.message}
+        Could not load gowns right now. Please try again in a moment.
       </div>
     );
   }
@@ -59,10 +61,19 @@ export default function ListingsGrid({
     );
   }
 
+  const matchedSizePairs = (filters.size ?? [])
+    .map((token) => decodeSizeFilterToken(token))
+    .filter((p): p is NonNullable<typeof p> => p !== null);
+
   return (
     <ListingsGridWrap>
-      {(listings ?? []).map((listing: Listing) => (
-        <GownCard key={listing.id} listing={listing} backQuery={backQuery} />
+      {(listings ?? []).map((listing) => (
+        <GownCard
+          key={listing.id}
+          listing={listing}
+          backQuery={backQuery}
+          matchedSizePairs={matchedSizePairs}
+        />
       ))}
     </ListingsGridWrap>
   );

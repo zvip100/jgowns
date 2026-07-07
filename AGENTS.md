@@ -36,12 +36,13 @@ No in-app transactions yet. Stripe is planned but **not implemented** — do not
 - **Flag duplication proactively.** The moment you copy a non-trivial block, long class string, or piece of logic into a _second_ place — or make the same edit to a sibling file a second time — stop and either extract it or note it for extraction in your summary. Don't let duplication pile up silently across edits. Still defer the extraction itself until the shared shape has stabilized (no premature abstraction); surface it early, don't necessarily abstract it early.
 - **Clarify before acting** on anything ambiguous or underspecified.
 - **Confirm before destructive changes** (deleting files, removing logic, breaking APIs).
-- **When multiple valid approaches exist**, list them briefly and wait for approval before writing code.
+- **When multiple valid approaches exist**, list them briefly and wait for approval before writing code. Survey the real option space first — don't artificially cap at two, and don't lead with the heaviest solution. Include the lighter/simpler alternatives with each one's trade-off, even when you have a recommendation.
 - **Always choose the simplest, cleanest, best-practice solution.** Don't over-engineer.
 - **Responses mirror the task.** Simple question → short answer. Complex task → full but concise. No filler phrases.
 - **No over-commenting.** A single JSDoc-style comment above a complex function is fine. Never comment above random lines, never write paragraph-style comments in code. If a file being modified has excessive comments, remove or trim them as part of the task.
 - **Code review / suggestion evaluation:** Compile all findings into a single list before editing any file. Wait for explicit "apply all" or selective approval. Never auto-apply a finding the moment it is identified.
 - **Search exhaustiveness:** When asked to update "all" occurrences of something, search the full codebase before reporting done. Do not stop at the first match.
+- **User-facing copy** (labels, hints, banners, empty states) is concise, professional, modern e-commerce English for a US audience: direct address, a short bold lead plus at most one supporting sentence, no parenthetical qualifiers or hedging. Example: "Sell as a complete set only" — not "Sell only as a complete set (not individually)".
 - **Metadata descriptions:** Never write "on JGowns" in metadata `description` fields — the site name already appears in the title template.
 - **`noindex`** applied to a page requires explicit justification. Do not apply it to registration, new-listing, or other discovery pages without instruction. When unsure, ask.
 
@@ -142,6 +143,7 @@ src/lib/actions/
 - Validate all input (e.g. with zod) before touching the DB or any external service.
 - **Validation rejects, it doesn't silently coerce.** Reject invalid input with a clear error rather than stripping/transforming it into something valid (e.g. don't `replace(/\D/g,"")` a phone so letters just vanish — validate the raw value, _then_ normalize). Silent coercion hides mistakes from the user and lets garbage through.
 - Call `revalidateTag` / `redirect` from inside the action after a successful mutation.
+- **Atomic multi-writes use a Postgres RPC.** supabase-js talks to stateless PostgREST and can't hold a transaction across `.from()` calls, so any mutation that writes multiple rows/tables and must be all-or-nothing (a parent row + its children, a status cascade) goes in a `security invoker` plpgsql function with `set search_path = ''` and `grant execute … to authenticated`, called via `supabase.rpc(...)` — never sequence the writes client-side and hope they all land. The function lives in a new migration **and** is folded into `schema.sql` (§9); changing its logic means a new `create or replace` migration + a `schema.sql` edit. Storage side effects (image upload/delete) can't join the DB transaction — keep them in the action as compensating steps that run **after** the RPC commits.
 - Export only server actions and their types/schemas. No UI, no client utilities.
 
 **Read-only data fetchers** (server-side only, never called from the client) live in `src/lib/queries/`, grouped by domain. Currently `src/lib/` may have flat query files — as the project grows, move them into this folder.
@@ -175,6 +177,8 @@ src/lib/actions/
 | Types & interfaces    | PascalCase           | `ListingFilters`, `UserProfile` |
 | Constants             | SCREAMING_SNAKE_CASE | `MAX_UPLOAD_SIZE`               |
 | Boolean vars / props  | `is` / `has` prefix  | `isLoading`, `hasError`         |
+
+A file holding one component is PascalCase (`ListingCard.tsx`). A module that bundles several small related leaf components is a kebab-case barrel exporting them as named exports (`auth-form.tsx`, `filter-controls.tsx`).
 
 Never abbreviate identifiers: `UUID_REGEX` not `UUID_RE`, `MAX_FILE_SIZE` not `MAX_SZ`.
 
@@ -227,7 +231,8 @@ Before writing any Next.js-related code:
 - If the same JSX shape appears in two or more places, extract a component.
 - Keep component APIs minimal — only props that are actually needed.
 - Use `lucide-react` icons as UI visual elements — including error pages, not-found pages, and empty states. Never use emojis as visual replacements for icons.
-- Before writing a new button or link style, check what already exists in the app and reuse it.
+- Before writing any new UI style — button, link, banner, hint, notice, or anything else — check what already exists in the app and reuse it if possible. Only introduce a new style when nothing existing fits.
+- **Colocate route-specific components and hooks in their route segment, not the global folders.** A component or hook used only within one route segment lives in that segment (e.g. `src/app/(main)/browse/`, mirroring `src/app/(auth)/`) and is imported relatively. `src/components/` and `src/hooks/` are for genuinely shared / cross-route pieces only. When a component's last out-of-segment consumer disappears, relocate it into the owning segment.
 
 ### Tailwind / CSS
 
@@ -247,6 +252,7 @@ Before writing any Next.js-related code:
 - No dead code, no commented-out blocks, no unexplained `TODO`s.
 - Test suites must cover every exported function from the module on the first pass. Confirm every export is tested before reporting done.
 - Before flagging a legacy-data issue (e.g. stale enum values, old column formats), check migration history in `src/supabase/migrations/`. If a migration already resolved it, the finding is not actionable.
+- Every migration added to `src/supabase/migrations/` must also be folded into `src/supabase/schema.sql` — that file is the maintained fresh-install snapshot of the current schema, not a historical artifact. A migration without the matching schema.sql edit is incomplete.
 - All auth and contact form inputs must carry the correct `autocomplete` attribute: `email`, `new-password`, `current-password`, `tel`, etc.
 
 ---
@@ -282,9 +288,9 @@ Categories: `decision`, `completed`, `never`.
 
 - **Append-only.** Never modify or delete existing entries — except to correct your own same-session entries (see **Same-session upkeep** below).
 - **Only the user can delete entries** — and only when explicitly asked. Remove exactly what's pointed to, nothing else.
-- **Same-session upkeep.** Before wrapping up, re-check the entries you appended _this session_. If later same-session work changed a path, name, or behavior one of them describes, correct that entry in place **without asking** — it's your own just-written note. This applies to same-session entries only; entries from earlier sessions still require explicit user authorization to modify or delete.
+- **Same-session upkeep.** Before wrapping up, re-check the entries you appended _this session_. If later same-session work changed a path, name, or behavior one of them describes, correct that entry in place **without asking** — it's your own just-written note. This applies to same-session entries only; entries from earlier sessions still require explicit user authorization to modify or delete. "Session" means the continuous working conversation, not a calendar day — a date rollover mid-session does not turn this session's entries into earlier-session entries.
 - Never add conflicting entries. If a previous decision is being superseded, flag it to the user and ask them to explicitly delete the old one first.
-- No paragraphs, no long explanations. One line per entry.
+- One entry = one line (no internal line breaks or blank lines between parts of an entry). Keep routine entries concise. For a significant architectural decision, a longer, information-dense single line is expected and encouraged — capture the chosen approach, the key rationale, and why the main alternatives were rejected, so the decision is defensible later without re-deriving it.
 
 ---
 

@@ -17,7 +17,7 @@ import DashboardPageSkeleton from '@/components/DashboardPageSkeleton';
 import ListingRow from '@/components/ListingRow';
 
 import type { Metadata } from 'next';
-import type { Listing } from '@/lib/types';
+import type { ListingWithSizes } from '@/lib/types';
 
 export const metadata: Metadata = {
   title: "My Listings",
@@ -28,18 +28,19 @@ export const metadata: Metadata = {
 async function DashboardCollectionSummary({
   listingsPromise,
 }: {
-  listingsPromise: Promise<Listing[]>;
+  listingsPromise: Promise<ListingWithSizes[]>;
 }) {
   const listings = await listingsPromise;
+  const gownCount = listings.reduce((sum, l) => sum + l.sizes.length, 0);
 
-  if (listings.length === 0) return 'Curate your collection';
-  return `${listings.length} gown${listings.length === 1 ? '' : 's'} in your collection`;
+  if (gownCount === 0) return 'Curate your collection';
+  return `${gownCount} gown${gownCount === 1 ? '' : 's'} in your collection`;
 }
 
 async function DashboardContent({
   listingsPromise,
 }: {
-  listingsPromise: Promise<Listing[]>;
+  listingsPromise: Promise<ListingWithSizes[]>;
 }) {
   const listings = await listingsPromise;
   const hasListings = listings.length > 0;
@@ -88,13 +89,13 @@ export default async function DashboardPage() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  async function fetchUserListings(): Promise<Listing[]> {
+  async function fetchUserListings(): Promise<ListingWithSizes[]> {
     const { data } = await supabase
       .from('listings')
-      .select('*')
+      .select('*, sizes:listing_sizes(*)')
       .eq('user_id', user!.id)
       .order('created_at', { ascending: false });
-    return (data ?? []) as Listing[];
+    return (data ?? []) as ListingWithSizes[];
   }
 
   const listingsPromise = fetchUserListings();
@@ -117,7 +118,7 @@ export default async function DashboardPage() {
         </div>
         <Button
           asChild
-          className="h-11 rounded-full border border-[#b58d5f]/70 bg-[linear-gradient(180deg,#c49a68,#a67841)] px-5 text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)] transition hover:-translate-y-0.5 hover:brightness-105"
+          className="h-11 rounded-full border border-[#b58d5f]/70 gold-gradient px-5 text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)] transition hover:-translate-y-0.5 hover:brightness-105"
         >
           <Link href="/dashboard/new">
             <Plus data-icon="inline-start" />

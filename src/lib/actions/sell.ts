@@ -5,10 +5,11 @@ import { updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { isValidSizePair } from "@/lib/gown-sizes";
+import { isValidSizePair, sizeOptionIndex } from "@/lib/gown-sizes";
 import {
   GOWN_CATEGORIES,
   MAX_LISTING_IMAGES,
+  SELL_MODES,
   SIZE_GROUPS,
   type GownCategoryId,
   type ServerActionErrorResult,
@@ -22,27 +23,113 @@ const CATEGORY_IDS = GOWN_CATEGORIES.map((c) => c.id) as [
   ...GownCategoryId[],
 ];
 
+const sizeEntrySchema = z.object({
+  size: z.string().trim().min(1),
+  size_group: z.enum(SIZE_GROUPS),
+  // Omitted for set-only listings; required for every other mode (see superRefine).
+  price: z.coerce.number().positive().optional(),
+});
+
 const listingInputSchema = z
   .object({
     title: z.string().trim().min(4),
     description: z.string().trim().optional(),
-    size: z.string().trim().min(1),
-    size_group: z.enum(SIZE_GROUPS),
     color: z.string().trim().optional(),
     location: z.string().trim().min(1),
     condition: z.string().trim().min(1),
     category: z.enum(CATEGORY_IDS),
-    price: z.coerce.number(),
+    sizes: z.array(sizeEntrySchema).min(1),
+    sell_mode: z.enum(SELL_MODES).default("individual"),
+    bundle_price: z.coerce.number().positive().optional(),
     contact_email: z.email(),
     contact_phone: optionalPhoneSchema,
     status: z.enum(["active", "sold", "removed"]).default("active"),
   })
-  .refine((data) => isValidSizePair(data.category, data.size_group, data.size), {
-    message: "Size is not valid for this category.",
-    path: ["size"],
+  .superRefine((data, ctx) => {
+    const seen = new Set<string>();
+    for (const [i, entry] of data.sizes.entries()) {
+      if (!isValidSizePair(data.category, entry.size_group, entry.size)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["sizes", i, "size"],
+          message: "Size is not valid for this category.",
+        });
+      }
+      const key = `${entry.size_group}:${entry.size}`;
+      if (seen.has(key)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["sizes", i, "size"],
+          message: "Each size can only be added once.",
+        });
+      }
+      seen.add(key);
+    }
+    if (data.sell_mode !== "individual" && data.sizes.length < 2) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["sell_mode"],
+        message: "Set pricing requires at least two sizes.",
+      });
+    }
+    if (data.sell_mode !== "set_only") {
+      for (const [i, entry] of data.sizes.entries()) {
+        if (entry.price == null) {
+          ctx.addIssue({
+            code: "custom",
+            path: ["sizes", i, "price"],
+            message: "Enter a price for every size.",
+          });
+        }
+      }
+    }
+    if (data.sell_mode === "individual" && data.bundle_price != null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["bundle_price"],
+        message: "A set price is only allowed when selling sizes together.",
+      });
+    }
+    if (data.sell_mode === "set_only" && data.bundle_price == null) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["bundle_price"],
+        message: "Enter the price for the complete set.",
+      });
+    }
   });
 
 type ParsedListing = z.infer<typeof listingInputSchema>;
+
+type VariantRow = {
+  size: string;
+  size_group: (typeof SIZE_GROUPS)[number];
+  price: number;
+  sort_order: number;
+};
+
+/**
+ * Submitted sizes in canonical category order, with sort_order assigned.
+ * Set-only variants mirror the one bundle price so the variant-level browse
+ * price filter can treat the set as a single-priced item; every other mode
+ * keeps its own per-size price.
+ */
+function variantRowsPayload(parsed: ParsedListing): VariantRow[] {
+  const setPrice =
+    parsed.sell_mode === "set_only" ? parsed.bundle_price : null;
+  return [...parsed.sizes]
+    .sort(
+      (a, b) =>
+        sizeOptionIndex(parsed.category, a.size_group, a.size) -
+        sizeOptionIndex(parsed.category, b.size_group, b.size),
+    )
+    .map((entry, i) => ({
+      size: entry.size,
+      size_group: entry.size_group,
+      price: setPrice ?? entry.price ?? 0,
+      sort_order: i,
+    }));
+}
 
 type ImageSlot = {
   file: File | null;
@@ -66,20 +153,32 @@ function zodListingFormErrorMessage(e: z.ZodError): string {
   if (e.issues.some((issue) => issue.path[0] === "contact_phone")) {
     return "Leave phone blank, or enter a valid phone number.";
   }
+  const custom = e.issues.find((issue) => issue.code === "custom");
+  if (custom?.message) return custom.message;
   return "Please fill in all required fields.";
+}
+
+/** `sizes` travels as a JSON string; invalid JSON is passed through so zod rejects it. */
+function rawSizesFromFormData(value: FormDataEntryValue | null): unknown {
+  if (typeof value !== "string") return undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
 }
 
 function rawListingFieldsFromFormData(formData: FormData) {
   return {
     title: formData.get("title"),
     description: strOrUndefined(formData.get("description")),
-    size: formData.get("size"),
-    size_group: formData.get("size_group"),
     color: strOrUndefined(formData.get("color")),
     location: formData.get("location"),
     condition: formData.get("condition"),
     category: formData.get("category"),
-    price: formData.get("price"),
+    sizes: rawSizesFromFormData(formData.get("sizes")),
+    sell_mode: strOrUndefined(formData.get("sell_mode")),
+    bundle_price: strOrUndefined(formData.get("bundle_price")),
     contact_email: formData.get("contact_email"),
     contact_phone: strOrUndefined(formData.get("contact_phone")),
     status: strOrUndefined(formData.get("status")),
@@ -94,13 +193,12 @@ function listingRowPayload(
   return {
     title: parsed.title,
     description: parsed.description ?? null,
-    size: parsed.size,
-    size_group: parsed.size_group,
     color: parsed.color ?? null,
     location: parsed.location,
     condition: parsed.condition,
     category: parsed.category,
-    price: parsed.price,
+    sell_mode: parsed.sell_mode,
+    bundle_price: parsed.bundle_price ?? null,
     image_urls,
     image_blur_data_urls,
     contact_email: parsed.contact_email,
@@ -224,10 +322,27 @@ export async function createListing(
       user_id: user.id,
     };
 
-    const { error: dbError } = await supabase.from("listings").insert(payload);
-    if (dbError) {
+    const { data: created, error: dbError } = await supabase
+      .from("listings")
+      .insert(payload)
+      .select("id")
+      .single();
+    if (dbError || !created) {
       await deleteListingImages(uploadedUrls);
-      return { error: dbError.message };
+      return { error: dbError?.message ?? "Failed to create listing." };
+    }
+
+    const variantRows = variantRowsPayload(parsed).map((row) => ({
+      ...row,
+      listing_id: created.id as string,
+    }));
+    const { error: sizesError } = await supabase
+      .from("listing_sizes")
+      .insert(variantRows);
+    if (sizesError) {
+      await supabase.from("listings").delete().eq("id", created.id);
+      await deleteListingImages(uploadedUrls);
+      return { error: sizesError.message };
     }
 
     updateTag("listings");
@@ -314,11 +429,14 @@ export async function updateListing(
 
     const payload = listingRowPayload(parsed, nextImageUrls, nextBlurUrls);
 
-    const { error: dbError } = await supabase
-      .from("listings")
-      .update(payload)
-      .eq("id", id)
-      .eq("user_id", user.id);
+    const { error: dbError } = await supabase.rpc(
+      "update_listing_with_variants",
+      {
+        p_listing_id: id,
+        p_listing: payload,
+        p_variants: variantRowsPayload(parsed),
+      },
+    );
 
     if (dbError) {
       if (newlyUploadedUrls.length > 0) {
@@ -337,13 +455,15 @@ export async function updateListing(
       return { error: dbError.message };
     }
 
-    updateTag(`listing:${id}`);
-    updateTag("listings");
-
+    // The listing row and its variants are now committed atomically; it's safe
+    // to drop the images this edit orphaned and refresh caches.
     const orphans = oldImageUrls.filter((u) => !nextImageUrls.includes(u));
     if (orphans.length > 0) {
       await deleteListingImages(orphans);
     }
+
+    updateTag(`listing:${id}`);
+    updateTag("listings");
 
     shouldRedirect = true;
   } catch (e) {

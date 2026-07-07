@@ -1,20 +1,26 @@
-import type { Listing } from '@/lib/types';
+import type { ListingWithSizes } from '@/lib/types';
 
 const labelClass =
   'text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-(--muted-ink)';
 
-export default function DashboardStats({ listings }: { listings: Listing[] }) {
-  const total = listings.length;
-  const active = listings.filter((l) => l.status === 'active').length;
-  const sold = listings.filter((l) => l.status === 'sold').length;
-  const value = listings
-    .filter((l) => l.status === 'active')
-    .reduce((sum, l) => sum + (l.price ?? 0), 0);
+export default function DashboardStats({
+  listings,
+}: {
+  listings: ListingWithSizes[];
+}) {
+  const activeListings = listings.filter((l) => l.status === 'active');
+  const availableGowns = activeListings.flatMap((l) =>
+    l.sizes.filter((s) => s.status === 'available'),
+  );
+  const soldGowns = listings
+    .flatMap((l) => l.sizes)
+    .filter((s) => s.status === 'sold').length;
+  const value = availableGowns.reduce((sum, s) => sum + (s.price ?? 0), 0);
 
   const tiles = [
-    { label: 'Listed', value: total },
-    { label: 'Active', value: active, live: true },
-    { label: 'Sold', value: sold },
+    { label: 'Listings', value: listings.length },
+    { label: 'Available Gowns', value: availableGowns.length, live: true },
+    { label: 'Sold Gowns', value: soldGowns },
     { label: 'Inventory', value: `$${value.toLocaleString()}` },
   ];
 

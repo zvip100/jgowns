@@ -24,7 +24,7 @@ const sizeGroupTriggerClass =
   'py-2 px-2.5 text-sm font-normal text-foreground hover:bg-muted/40 hover:no-underline [&[data-state=open]]:bg-muted/50';
 
 const sizeOptionClass =
-  'inline-flex min-w-[2.25rem] items-center justify-center rounded-md border border-input bg-background px-2 py-1 text-xs font-medium transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 data-[active=true]:border-primary data-[active=true]:bg-primary data-[active=true]:text-primary-foreground';
+  'inline-flex min-w-[2.25rem] items-center justify-center rounded-md border border-input bg-background px-2 py-1 text-xs font-medium transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring/50 data-[active=true]:border-primary data-[active=true]:bg-primary data-[active=true]:text-primary-foreground disabled:cursor-not-allowed disabled:opacity-35 disabled:hover:bg-background';
 
 function sizeGroupId(label: string, index: number) {
   return label ? label.toLowerCase().replace(/\s+/g, '-') : `group-${index}`;
@@ -35,6 +35,10 @@ type CategorySizeSelectProps = {
   size: string;
   sizeGroup: SizeGroupSlug | null;
   onChange: (selection: { size: string; sizeGroup: SizeGroupSlug }) => void;
+  /** Unique control id when several selects render together (defaults to `size-picker`). */
+  id?: string;
+  /** Sizes taken by other rows — shown but not selectable. */
+  disabledSizes?: readonly { sizeGroup: SizeGroupSlug; size: string }[];
 };
 
 export function CategorySizeSelect({
@@ -42,7 +46,12 @@ export function CategorySizeSelect({
   size,
   sizeGroup,
   onChange,
+  id = 'size-picker',
+  disabledSizes,
 }: CategorySizeSelectProps) {
+  const disabledKeys = new Set(
+    (disabledSizes ?? []).map((p) => `${p.sizeGroup}:${p.size}`),
+  );
   const groups = category ? getSizeSelectGroups(category) : [];
   const [pickerOpen, setPickerOpen] = useState(false);
   const [openGroup, setOpenGroup] = useState('');
@@ -75,10 +84,10 @@ export function CategorySizeSelect({
   const displayValue = size;
 
   return (
-    <FormField id="size-picker" label="Size" required>
+    <FormField id={id} label="Size" required>
       <div ref={rootRef} className="relative">
         <button
-          id="size-picker"
+          id={id}
           type="button"
           disabled={disabled}
           aria-haspopup="listbox"
@@ -127,6 +136,9 @@ export function CategorySizeSelect({
                         {group.options.map((o) => {
                           const isActive =
                             size === o.value && sizeGroup === o.sizeGroup;
+                          const isTaken =
+                            !isActive &&
+                            disabledKeys.has(`${o.sizeGroup}:${o.value}`);
                           return (
                             <button
                               key={`${o.sizeGroup}-${o.value}`}
@@ -134,6 +146,7 @@ export function CategorySizeSelect({
                               role="option"
                               aria-selected={isActive}
                               data-active={isActive}
+                              disabled={isTaken}
                               onClick={() => {
                                 onChange({
                                   size: o.value,

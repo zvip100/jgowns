@@ -1,7 +1,5 @@
 import { redirect } from "next/navigation";
 
-import BrowsePagination from "@/components/BrowsePagination";
-import ListingsGrid from "@/components/ListingsGrid";
 import { parseBrowseFilters } from "@/lib/browse-filters";
 import {
   browsePageRedirectTarget,
@@ -10,6 +8,9 @@ import {
 import { browseHref } from "@/lib/browse-url";
 import { fetchListingsPage } from "@/lib/listings-queries";
 import type { PageSearchParams } from "@/lib/types";
+
+import BrowsePagination from "./BrowsePagination";
+import ListingsGrid from "./ListingsGrid";
 
 export default async function BrowseListings({
   searchParams,

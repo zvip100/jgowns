@@ -21,13 +21,10 @@ export default function MarkSoldButton({
 
   const onClick = () => {
     setError(null);
-    
+
     start(async () => {
-      try {
-        await markListingSold(id);
-      } catch (e) {
-        setError(e instanceof Error ? e.message : 'Failed to mark sold');
-      }
+      const result = await markListingSold(id);
+      if (result?.error) setError(result.error);
     });
   };
 

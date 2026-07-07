@@ -26,9 +26,12 @@
   --sold: #a02238;
   --focus-ring: rgba(179, 133, 76, 0.42);
 
+  /* Brand gold gradient — single source for every gold CTA/pill/badge surface. */
+  --gold-gradient: linear-gradient(180deg, #c49a68, #a67841);
+
   /* Sticky navbar offset */
-  --navbar-h: 4.5625rem;
-  /* 73px — mobile */
+  --navbar-h: 4.8125rem;
+  /* 77px — mobile */
 
   /* Listings page secondary nav strip (sits flush below --navbar-h on lg+).
      Used by FilterBar's rail variant to offset its sticky `top` so the rail
@@ -80,6 +83,10 @@
     --navbar-h: 4.8125rem;
     /* 77px — desktop */
   }
+}
+
+@utility gold-gradient {
+  background-image: var(--gold-gradient);
 }
 
 @layer base {

@@ -22,6 +22,18 @@ export const BROWSE_PARAM_ORDER = [
   ...BROWSE_PAGINATION_PARAMS,
 ] as const;
 
+/** Count active filter categories: a multi-value filter (e.g. 5 sizes) is 1, and
+ *  minPrice + maxPrice collapse into a single price-range category. */
+export function countActiveBrowseFilters(
+  params: Pick<URLSearchParams, "has">,
+): number {
+  const count = BROWSE_FILTER_PARAMS.filter(
+    (k) => k !== "minPrice" && k !== "maxPrice" && params.has(k),
+  ).length;
+  const hasPriceRange = params.has("minPrice") || params.has("maxPrice");
+  return count + (hasPriceRange ? 1 : 0);
+}
+
 /** Split a browse filter param into discrete values (comma-separated or repeated keys). */
 export function parseBrowseParamList(
   value: string | string[] | null | undefined,
@@ -36,6 +48,13 @@ export function parseBrowseParamList(
 /** Encode multiple filter values for a single query param. */
 export function formatBrowseParamList(values: string[]): string {
   return [...new Set(values.map((s) => s.trim()).filter(Boolean))].join(",");
+}
+
+/** Toggle `value` in a filter-param list (add if absent, remove if present). */
+export function toggleParamValue(list: string[], value: string): string[] {
+  return list.includes(value)
+    ? list.filter((v) => v !== value)
+    : [...list, value];
 }
 
 export function canonicalBrowseQueryString(params: URLSearchParams): string {

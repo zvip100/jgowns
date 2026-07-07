@@ -4,7 +4,8 @@ import Image from 'next/image';
 import { ImagePlus, Loader2, ShieldCheck, X } from 'lucide-react';
 import { useDropzone } from 'react-dropzone';
 
-import { FORM_LABEL_CLASS } from '@/components/form/constants';
+import { FORM_HINT_CLASS, FORM_LABEL_CLASS } from '@/components/form/constants';
+import { FormInfoBanner } from '@/components/form/FormInfoBanner';
 import { Button } from '@/components/ui/button';
 import { FieldDescription, FieldError } from '@/components/ui/field';
 import { cn } from '@/lib/utils';
@@ -175,7 +176,7 @@ export function ListingPhotoField({
   return (
     <div className="flex flex-col gap-3">
       <span className={FORM_LABEL_CLASS}>Photos *</span>
-      <FieldDescription className="-mt-2 text-[0.80rem] font-light italic tracking-wide text-muted-foreground/80">
+      <FieldDescription className={cn('-mt-2', FORM_HINT_CLASS)}>
         One photo required (full-length front view).
       </FieldDescription>
       <div className="grid grid-cols-3 gap-3 sm:gap-5">
@@ -189,15 +190,9 @@ export function ListingPhotoField({
           />
         ))}
       </div>
-      <div className="flex items-center gap-2.5 rounded-lg border border-accent/20 bg-accent/10 px-3 py-2">
-        <ShieldCheck
-          className="size-4 shrink-0 text-(--accent-deep)"
-          aria-hidden
-        />
-        <p className="text-[0.78rem] leading-snug text-(--accent-deep)">
-          Faces are automatically blurred to protect privacy.
-        </p>
-      </div>
+      <FormInfoBanner icon={ShieldCheck}>
+        Faces are automatically blurred to protect privacy.
+      </FormInfoBanner>
     </div>
   );
 }

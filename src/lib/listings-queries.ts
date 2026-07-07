@@ -4,20 +4,44 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { BROWSE_PAGE_SIZE, totalPagesFromCount } from "@/lib/browse-pagination";
 import { decodeSizeFilterToken } from "@/lib/gown-sizes";
+import { sortListingSizes } from "@/lib/listing-variants";
 import type { BrowseFilters } from "@/lib/types";
 import { anonClient } from "@/lib/supabase/anon";
 import { createClient } from "@/lib/supabase/server";
 import type {
-  Listing,
   ListingByIdResult,
   ListingReadError,
   ListingsPageResult,
+  ListingWithSizes,
   PriceBounds,
 } from "@/lib/types";
+
+// Widened to `string` so supabase-js skips literal select-string type
+// inference, which exceeds TS instantiation depth on the embed syntax.
+const LISTING_WITH_SIZES_SELECT: string = "*, sizes:listing_sizes(*)";
+
+/**
+ * Browse select: `sizes` carries every variant for display; the aliased
+ * `matched_sizes` inner join only exists so variant-level filters
+ * (availability, size, price) decide whether the listing appears at all.
+ */
+const BROWSE_LISTINGS_SELECT: string = `${LISTING_WITH_SIZES_SELECT}, matched_sizes:listing_sizes!inner(id)`;
+const BROWSE_COUNT_SELECT: string = "id, matched_sizes:listing_sizes!inner(id)";
 
 function applyListingsCachePolicy() {
   cacheLife({ stale: 60, revalidate: 3600, expire: 86400 });
   cacheTag("listings");
+}
+
+function withSortedSizes(row: unknown): ListingWithSizes {
+  const { matched_sizes: _matched, sizes, ...rest } = row as Record<
+    string,
+    unknown
+  >;
+  // Supabase embeds are untyped; the select strings above match ListingWithSizes.
+  const listing = rest as ListingWithSizes;
+  listing.sizes = sortListingSizes((sizes ?? []) as ListingWithSizes["sizes"]);
+  return listing;
 }
 
 function normalizeId(id: unknown): string | null {
@@ -34,7 +58,7 @@ async function selectListingById(
 ): Promise<ListingByIdResult> {
   const { data: listing, error } = await supabase
     .from("listings")
-    .select("*")
+    .select(LISTING_WITH_SIZES_SELECT)
     .eq("id", normalizedId)
     .maybeSingle();
 
@@ -52,19 +76,27 @@ async function selectListingById(
     return { listing: null, error: { message: error.message } };
   }
 
-  return { listing: listing as Listing | null, error: null };
+  return {
+    listing: listing ? withSortedSizes(listing) : null,
+    error: null,
+  };
 }
 
+/**
+ * Variant-level filters (availability, size, price) target the
+ * `matched_sizes` inner join: a listing matches when at least one available
+ * variant satisfies all of them at once.
+ */
 function applyBrowseFilters<
   Q extends {
     eq: (column: string, value: string) => Q;
     in: (column: string, values: string[]) => Q;
-    or: (filters: string) => Q;
+    or: (filters: string, options?: { referencedTable?: string }) => Q;
     gte: (column: string, value: number) => Q;
     lte: (column: string, value: number) => Q;
   },
 >(query: Q, filters: BrowseFilters): Q {
-  let next = query;
+  let next = query.eq("matched_sizes.status", "available");
 
   if (filters.category) next = next.eq("category", filters.category);
 
@@ -75,15 +107,15 @@ function applyBrowseFilters<
 
     if (pairs.length === 1) {
       next = next
-        .eq("size_group", pairs[0].sizeGroup)
-        .eq("size", pairs[0].size);
+        .eq("matched_sizes.size_group", pairs[0].sizeGroup)
+        .eq("matched_sizes.size", pairs[0].size);
     } else if (pairs.length > 1) {
       const orFilter = pairs
         .map(
           (p) => `and(size_group.eq.${p.sizeGroup},size.eq.${p.size})`,
         )
         .join(",");
-      next = next.or(orFilter);
+      next = next.or(orFilter, { referencedTable: "matched_sizes" });
     }
   }
 
@@ -101,10 +133,10 @@ function applyBrowseFilters<
     next = next.eq("condition", filters.cond);
   }
   if (Number.isFinite(filters.minPrice)) {
-    next = next.gte("price", filters.minPrice as number);
+    next = next.gte("matched_sizes.price", filters.minPrice as number);
   }
   if (Number.isFinite(filters.maxPrice)) {
-    next = next.lte("price", filters.maxPrice as number);
+    next = next.lte("matched_sizes.price", filters.maxPrice as number);
   }
 
   return next;
@@ -116,7 +148,7 @@ async function fetchFilteredListingsCount(
   const countQuery = applyBrowseFilters(
     anonClient
       .from("listings")
-      .select("*", { count: "exact", head: true })
+      .select(BROWSE_COUNT_SELECT, { count: "exact", head: true })
       .eq("status", "active"),
     filters,
   );
@@ -145,7 +177,7 @@ export async function fetchListingsPage(
   const query = applyBrowseFilters(
     anonClient
       .from("listings")
-      .select("*", { count: "exact" })
+      .select(BROWSE_LISTINGS_SELECT, { count: "exact" })
       .eq("status", "active")
       .order("created_at", { ascending: false }),
     filters,
@@ -157,6 +189,16 @@ export async function fetchListingsPage(
   let totalPages = totalPagesFromCount(totalCount, pageSize);
 
   if (error) {
+    console.error("[listings-queries] Failed to load listings page", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+      filters,
+      page: safePage,
+      pageSize,
+    });
+
     if (safePage > 1) {
       const countResult = await fetchFilteredListingsCount(filters);
       if (!countResult.error) {
@@ -173,16 +215,6 @@ export async function fetchListingsPage(
       }
     }
 
-    console.error("[listings-queries] Failed to load listings page", {
-      message: error.message,
-      details: error.details,
-      hint: error.hint,
-      code: error.code,
-      filters,
-      page: safePage,
-      pageSize,
-    });
-
     return {
       listings: null,
       totalCount,
@@ -194,7 +226,7 @@ export async function fetchListingsPage(
   }
 
   return {
-    listings: listings as Listing[] | null,
+    listings: (listings ?? []).map(withSortedSizes),
     totalCount,
     page: safePage,
     pageSize,
@@ -246,9 +278,10 @@ export async function fetchPriceBounds(): Promise<PriceBounds> {
   applyListingsCachePolicy();
 
   const { data, error } = await anonClient
-    .from("listings")
-    .select("price")
-    .eq("status", "active")
+    .from("listing_sizes")
+    .select("price, listing:listings!inner(status)")
+    .eq("status", "available")
+    .eq("listing.status", "active")
     .order("price", { ascending: true });
 
   if (error) {

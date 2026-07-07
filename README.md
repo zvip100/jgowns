@@ -32,16 +32,18 @@ npm install
 Copy the environment variables file and fill in your keys:
 
 ```bash
-cp .env.example .env.local
+cp .env.local.example .env.local
 ```
 
 Required environment variables:
 
 ```
 NEXT_PUBLIC_SUPABASE_URL=
-NEXT_PUBLIC_SUPABASE_ANON_KEY=
-SUPABASE_SERVICE_ROLE_KEY=
-GOOGLE_CLOUD_VISION_API_KEY=
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=
+NEXT_PUBLIC_SITE_URL=
+GOOGLE_CLOUD_PROJECT_ID=
+GOOGLE_CLOUD_CLIENT_EMAIL=
+GOOGLE_CLOUD_PRIVATE_KEY=
 ```
 
 Run the development server:
@@ -51,6 +53,14 @@ npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000).
+
+### Agent skills (local dev only)
+
+Install the local agent skills once after cloning:
+
+```bash
+npm run skills
+```
 
 ## Project Structure
 
