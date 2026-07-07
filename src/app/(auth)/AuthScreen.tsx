@@ -17,11 +17,13 @@ const AUTH_ERROR_MESSAGES: Record<string, string> = {
 type AuthScreenBodyProps = {
   searchParams: Promise<AuthSearchParams>;
   renderForm: (next: string) => ReactNode;
+  hasGoogleAuth: boolean;
 };
 
 async function AuthScreenBody({
   searchParams,
   renderForm,
+  hasGoogleAuth,
 }: AuthScreenBodyProps) {
   const { next, error } = await searchParams;
   const redirectTo = safePostAuthPath(next);
@@ -35,12 +37,16 @@ async function AuthScreenBody({
           <AlertDescription>{errorMessage}</AlertDescription>
         </Alert>
       )}
-      <GoogleAuthButton next={redirectTo} />
-      <div className="flex items-center gap-3 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9a8369]">
-        <span className="h-px flex-1 bg-[#e0d4c2]" />
-        or
-        <span className="h-px flex-1 bg-[#e0d4c2]" />
-      </div>
+      {hasGoogleAuth && (
+        <>
+          <GoogleAuthButton next={redirectTo} />
+          <div className="flex items-center gap-3 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9a8369]">
+            <span className="h-px flex-1 bg-[#e0d4c2]" />
+            or
+            <span className="h-px flex-1 bg-[#e0d4c2]" />
+          </div>
+        </>
+      )}
       {renderForm(redirectTo)}
     </>
   );
@@ -51,6 +57,7 @@ type AuthScreenProps = {
   subtitle: string;
   searchParams: Promise<AuthSearchParams>;
   renderForm: (next: string) => ReactNode;
+  hasGoogleAuth?: boolean;
 };
 
 export default function AuthScreen({
@@ -58,6 +65,7 @@ export default function AuthScreen({
   subtitle,
   searchParams,
   renderForm,
+  hasGoogleAuth = true,
 }: AuthScreenProps) {
   return (
     <div className="mx-auto mt-12 max-w-md sm:mt-20">
@@ -68,7 +76,11 @@ export default function AuthScreen({
         </div>
         <div className="flex flex-col gap-5">
           <Suspense fallback={null}>
-            <AuthScreenBody searchParams={searchParams} renderForm={renderForm} />
+            <AuthScreenBody
+              searchParams={searchParams}
+              renderForm={renderForm}
+              hasGoogleAuth={hasGoogleAuth}
+            />
           </Suspense>
         </div>
       </div>

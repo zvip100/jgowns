@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { safePostAuthPath } from "@/lib/auth-redirect";
+import { DEFAULT_POST_AUTH_PATH, safePostAuthPath } from "@/lib/auth-redirect";
 import { createClient } from "@/lib/supabase/server";
 import { optionalPhoneSchema } from "@/lib/utils";
 
@@ -24,8 +24,16 @@ export type SignUpResult =
   | { success: true; message: string }
   | { error: string };
 export type GoogleAuthState = { error: string | null };
+export type RequestPasswordResetInput = { email: string };
+export type RequestPasswordResetResult =
+  | { success: true; message: string }
+  | { error: string };
+export type UpdatePasswordInput = { password: string };
 
 const SIGN_UP_SUCCESS_MESSAGE = "Check your email to confirm your account!";
+const RESET_EMAIL_SENT_MESSAGE =
+  "Check your email for a link to reset your password.";
+const RESET_PASSWORD_PATH = "/reset-password";
 
 const signInSchema = z.object({
   email: z.email(),
@@ -124,6 +132,52 @@ export async function signUp(input: SignUpInput): Promise<SignUpResult> {
   }
 
   return { success: true, message: SIGN_UP_SUCCESS_MESSAGE };
+}
+
+export async function requestPasswordReset(
+  input: RequestPasswordResetInput,
+): Promise<RequestPasswordResetResult> {
+  const parsed = z.email().safeParse(input.email);
+  if (!parsed.success) return { error: "Please enter a valid email address." };
+
+  const supabase = await createClient();
+  const origin = await getRequestOrigin();
+
+  const { error } = await supabase.auth.resetPasswordForEmail(parsed.data, {
+    redirectTo: `${origin}/api/auth/callback?next=${encodeURIComponent(RESET_PASSWORD_PATH)}`,
+  });
+
+  if (error) {
+    console.error("Password reset request failed:", error.message);
+    return { error: error.message };
+  }
+
+  return { success: true, message: RESET_EMAIL_SENT_MESSAGE };
+}
+
+export async function updatePassword(
+  input: UpdatePasswordInput,
+): Promise<ServerActionErrorResult> {
+  const parsed = z.string().min(6).safeParse(input.password);
+  if (!parsed.success) {
+    return { error: "Password must be at least 6 characters." };
+  }
+
+  const auth = await getAuthClient();
+  if (!auth.ok) {
+    return { error: "Your reset link is invalid or expired. Request a new one." };
+  }
+
+  const { error } = await auth.supabase.auth.updateUser({
+    password: parsed.data,
+  });
+  if (error) {
+    console.error("Password update failed:", error.message);
+    return { error: error.message };
+  }
+
+  revalidatePath("/", "layout");
+  redirect(DEFAULT_POST_AUTH_PATH);
 }
 
 export async function signInWithGoogle(

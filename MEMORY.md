@@ -58,6 +58,8 @@ Categories: `decision` | `completed` | `never`
 
 - [07-03-2026] completed: Size-count affordances — GownCard shows a top-right frosted `Layers`+N chip (count of AVAILABLE sizes, only when >1; absolute image overlay so card height is unchanged; aria-label on badge, aria-hidden icon). Listing detail `<dl>` gains a first "Total / N gowns" row (count of ALL variants, when >1). ListingRow also hides per-size prices AND per-size "mark sold" for set_only (it stores the mirrored set price, not real per-size prices).
 
+- [07-06-2026] completed: Password reset end-to-end — backend: requestPasswordReset (resetPasswordForEmail, redirectTo=/api/auth/callback?next=/reset-password) + updatePassword (getAuthClient guard → updateUser → revalidatePath+redirect /dashboard) in actions/auth.ts; callback route needed no change (exchangeCodeForSession handles recovery codes). Frontend: /forgot-password (email → ForgotPasswordForm, green success alert like register) + /reset-password (new-password → ResetPasswordForm, unstable_rethrow) pages reuse AuthScreen via new hasGoogleAuth={false} prop (hides Google button + divider); LoginForm gains "Forgot your password? Reset it" AuthAltLink; both pages noindex like login. Branded "Reset Password" email template pasted into Supabase dashboard (same shell as Confirm signup); Gmail SMTP via app password is the active sender.
+
 ## Never
 
 - [05-28-2026] never: Do not add runtime legacy/backfill/migration-bridge logic (inferring missing fields, aliasing old formats, guessing from partial data) unless the user explicitly asks. Assume the DB and APIs are on the current schema.
