@@ -15,6 +15,13 @@ vi.mock("@/lib/actions/listings", () => ({
   markSizeSold: mockMarkSizeSold,
   removeListing: mockRemoveListing,
 }));
+vi.mock("@/components/ConfirmActionButton", () => ({
+  default: (props: {
+    ariaLabel: string;
+    buttonLabel?: string;
+    description: string;
+  }) => `${props.ariaLabel}|${props.buttonLabel ?? ""}|${props.description}`,
+}));
 
 import MarkSizeSoldButton from "@/components/MarkSizeSoldButton";
 import MarkSoldButton from "@/components/MarkSoldButton";
@@ -29,12 +36,29 @@ describe("dashboard listing action buttons", () => {
       React.createElement(MarkSoldButton, {
         id: LISTING_ID,
         status: "active",
+        hasMultipleSizes: false,
       }),
     );
 
     expect(html).toContain("Mark Sold");
-    expect(html).toContain("aria-label=\"Mark as sold\"");
+    expect(html).toContain("Mark as sold");
+    expect(html).toContain("This will mark the listing as sold.");
+    expect(html).not.toContain("all sizes");
     expect(mockMarkListingSold).not.toHaveBeenCalled();
+  });
+
+  it("uses concise all-sizes copy for multi-size listing sold confirmation", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(MarkSoldButton, {
+        id: LISTING_ID,
+        status: "active",
+        hasMultipleSizes: true,
+      }),
+    );
+
+    expect(html).toContain(
+      "This will mark the listing and all sizes as sold.",
+    );
   });
 
   it("does not render mark-sold for listings that are not active", () => {
@@ -42,6 +66,7 @@ describe("dashboard listing action buttons", () => {
       React.createElement(MarkSoldButton, {
         id: LISTING_ID,
         status: "sold",
+        hasMultipleSizes: false,
       }),
     );
 
@@ -54,7 +79,7 @@ describe("dashboard listing action buttons", () => {
     );
 
     expect(html).toContain("Remove");
-    expect(html).toContain("aria-label=\"Remove listing\"");
+    expect(html).toContain("Remove listing");
     expect(mockRemoveListing).not.toHaveBeenCalled();
   });
 
@@ -67,7 +92,7 @@ describe("dashboard listing action buttons", () => {
       }),
     );
 
-    expect(html).toContain("aria-label=\"Mark size 8 as sold\"");
+    expect(html).toContain("Mark size 8 as sold");
     expect(mockMarkSizeSold).not.toHaveBeenCalled();
   });
 });

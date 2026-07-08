@@ -7,19 +7,27 @@ import { markListingSold } from '@/lib/actions/listings';
 
 import type { Listing } from '@/lib/types';
 
+type MarkSoldButtonProps = {
+  id: string;
+  status: Listing['status'];
+  hasMultipleSizes: boolean;
+};
+
 export default function MarkSoldButton({
   id,
   status,
-}: {
-  id: string;
-  status: Listing['status'];
-}) {
+  hasMultipleSizes,
+}: MarkSoldButtonProps) {
   if (status !== 'active') return null;
 
   return (
     <ConfirmActionButton
       title="Mark listing as sold?"
-      description="This will mark the full listing and every size in it as sold."
+      description={
+        hasMultipleSizes
+          ? 'This will mark the listing and all sizes as sold.'
+          : 'This will mark the listing as sold.'
+      }
       confirmLabel="Mark Sold"
       pendingLabel="Marking sold..."
       ariaLabel="Mark as sold"

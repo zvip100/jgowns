@@ -101,7 +101,11 @@ export default function ListingRow({
       </div>
 
       <div className="flex shrink-0 items-center gap-1">
-        <MarkSoldButton id={listing.id} status={listing.status} />
+        <MarkSoldButton
+          id={listing.id}
+          status={listing.status}
+          hasMultipleSizes={sizes.length > 1}
+        />
         <RemoveListingButton id={listing.id} />
         <Button asChild variant="ghost" size="sm">
           <Link href={href} aria-label="View listing">
