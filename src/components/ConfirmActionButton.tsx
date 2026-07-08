@@ -8,7 +8,7 @@ import ConfirmActionDialog from '@/components/ConfirmActionDialog';
 import type { LucideIcon } from 'lucide-react';
 import type { ServerActionErrorResult } from '@/lib/types';
 
-type DashboardActionConfirmButtonProps = {
+type ConfirmActionButtonProps = {
   title: string;
   description: string;
   confirmLabel: string;
@@ -22,7 +22,7 @@ type DashboardActionConfirmButtonProps = {
   onConfirm: () => Promise<ServerActionErrorResult>;
 };
 
-export default function DashboardActionConfirmButton({
+export default function ConfirmActionButton({
   title,
   description,
   confirmLabel,
@@ -34,7 +34,7 @@ export default function DashboardActionConfirmButton({
   triggerClassName,
   triggerStyle = 'button',
   onConfirm,
-}: DashboardActionConfirmButtonProps) {
+}: ConfirmActionButtonProps) {
   return (
     <ConfirmActionDialog
       title={title}

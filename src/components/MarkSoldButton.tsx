@@ -2,7 +2,7 @@
 
 import { CheckCircle2 } from 'lucide-react';
 
-import DashboardActionConfirmButton from '@/components/DashboardActionConfirmButton';
+import ConfirmActionButton from '@/components/ConfirmActionButton';
 import { markListingSold } from '@/lib/actions/listings';
 
 import type { Listing } from '@/lib/types';
@@ -17,7 +17,7 @@ export default function MarkSoldButton({
   if (status !== 'active') return null;
 
   return (
-    <DashboardActionConfirmButton
+    <ConfirmActionButton
       title="Mark listing as sold?"
       description="This will mark the full listing and every size in it as sold."
       confirmLabel="Mark Sold"

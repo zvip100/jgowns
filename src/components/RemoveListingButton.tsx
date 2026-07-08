@@ -2,7 +2,7 @@
 
 import { Trash2 } from 'lucide-react';
 
-import DashboardActionConfirmButton from '@/components/DashboardActionConfirmButton';
+import ConfirmActionButton from '@/components/ConfirmActionButton';
 import { removeListing } from '@/lib/actions/listings';
 
 type RemoveListingButtonProps = {
@@ -11,7 +11,7 @@ type RemoveListingButtonProps = {
 
 export default function RemoveListingButton({ id }: RemoveListingButtonProps) {
   return (
-    <DashboardActionConfirmButton
+    <ConfirmActionButton
       title="Remove listing?"
       description="This will remove the listing from browse and your dashboard. It will not permanently delete the database record."
       confirmLabel="Remove"
