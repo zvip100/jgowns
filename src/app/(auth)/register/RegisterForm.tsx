@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useLayoutEffect } from 'react';
-import { unstable_rethrow } from 'next/navigation';
 
 import { signUp } from '@/lib/actions/auth';
 import { Alert, AlertDescription } from '@/components/ui/alert';
@@ -46,7 +45,6 @@ export default function RegisterForm({ next }: RegisterFormProps) {
         setMsg(result.message);
       }
     } catch (err) {
-      unstable_rethrow(err);
       setIsError(true);
       setMsg(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {

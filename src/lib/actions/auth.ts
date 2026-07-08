@@ -24,11 +24,11 @@ export type SignUpResult =
   | { success: true; message: string }
   | { error: string };
 export type GoogleAuthState = { error: string | null };
-export type RequestPasswordResetInput = { email: string };
+export type RequestPasswordResetInput = { email: string; next?: string };
 export type RequestPasswordResetResult =
   | { success: true; message: string }
   | { error: string };
-export type UpdatePasswordInput = { password: string };
+export type UpdatePasswordInput = { password: string; next?: string };
 
 const SIGN_UP_SUCCESS_MESSAGE = "Check your email to confirm your account!";
 const RESET_EMAIL_SENT_MESSAGE =
@@ -143,8 +143,14 @@ export async function requestPasswordReset(
   const supabase = await createClient();
   const origin = await getRequestOrigin();
 
+  const safeNext = safePostAuthPath(input.next);
+  const resetPath =
+    safeNext === DEFAULT_POST_AUTH_PATH
+      ? RESET_PASSWORD_PATH
+      : `${RESET_PASSWORD_PATH}?next=${encodeURIComponent(safeNext)}`;
+
   const { error } = await supabase.auth.resetPasswordForEmail(parsed.data, {
-    redirectTo: `${origin}/api/auth/callback?next=${encodeURIComponent(RESET_PASSWORD_PATH)}`,
+    redirectTo: `${origin}/api/auth/callback?next=${encodeURIComponent(resetPath)}`,
   });
 
   if (error) {
@@ -177,7 +183,7 @@ export async function updatePassword(
   }
 
   revalidatePath("/", "layout");
-  redirect(DEFAULT_POST_AUTH_PATH);
+  redirect(safePostAuthPath(input.next));
 }
 
 export async function signInWithGoogle(

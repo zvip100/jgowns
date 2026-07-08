@@ -364,6 +364,29 @@ describe("requestPasswordReset", () => {
     });
   });
 
+  it("nests a safe next under the reset-password callback target", async () => {
+    mockResetPasswordForEmail.mockResolvedValue({ error: null });
+
+    await requestPasswordReset({ email: "a@b.com", next: "/dashboard/new" });
+
+    const nestedNext = encodeURIComponent(
+      `/reset-password?next=${encodeURIComponent("/dashboard/new")}`,
+    );
+    expect(mockResetPasswordForEmail).toHaveBeenCalledWith("a@b.com", {
+      redirectTo: `${ORIGIN}/api/auth/callback?next=${nestedNext}`,
+    });
+  });
+
+  it("drops an unsafe next and pins the callback to /reset-password", async () => {
+    mockResetPasswordForEmail.mockResolvedValue({ error: null });
+
+    await requestPasswordReset({ email: "a@b.com", next: "https://evil.com" });
+
+    expect(mockResetPasswordForEmail).toHaveBeenCalledWith("a@b.com", {
+      redirectTo: `${ORIGIN}/api/auth/callback?next=%2Freset-password`,
+    });
+  });
+
   it("rejects an invalid email before calling Supabase", async () => {
     const result = await requestPasswordReset({ email: "not-an-email" });
 
@@ -393,6 +416,29 @@ describe("updatePassword", () => {
 
     expect(mockUpdateUser).toHaveBeenCalledWith({ password: "secret6" });
     expect(mockRevalidatePath).toHaveBeenCalledWith("/", "layout");
+    expect(mockRedirect).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("redirects to a safe next path on success", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+    mockUpdateUser.mockResolvedValue({ error: null });
+
+    await expect(
+      updatePassword({ password: "secret6", next: "/dashboard/new" }),
+    ).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(mockUpdateUser).toHaveBeenCalledWith({ password: "secret6" });
+    expect(mockRedirect).toHaveBeenCalledWith("/dashboard/new");
+  });
+
+  it("ignores an unsafe next and falls back to /dashboard", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+    mockUpdateUser.mockResolvedValue({ error: null });
+
+    await expect(
+      updatePassword({ password: "secret6", next: "https://evil.com" }),
+    ).rejects.toThrow("NEXT_REDIRECT");
+
     expect(mockRedirect).toHaveBeenCalledWith("/dashboard");
   });
 

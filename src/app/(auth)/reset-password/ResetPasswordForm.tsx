@@ -23,7 +23,7 @@ export default function ResetPasswordForm({ next }: ResetPasswordFormProps) {
     setError('');
     setLoading(true);
     try {
-      const result = await updatePassword({ password });
+      const result = await updatePassword({ password, next });
       if (result?.error) setError(result.error);
     } catch (err) {
       unstable_rethrow(err);

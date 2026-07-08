@@ -171,7 +171,7 @@ export default function ListingsLayout({
             variant='rail'
             minBound={minBound}
             maxBound={maxBound}
-            onCollapseRail={() => setRailOpen(false)}
+            onCollapseRail={() => toggleRail(false)}
           />
         </aside>
 

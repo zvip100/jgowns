@@ -43,8 +43,9 @@ No in-app transactions yet. Stripe is planned but **not implemented** — do not
 - **Code review / suggestion evaluation:** Compile all findings into a single list before editing any file. Wait for explicit "apply all" or selective approval. Never auto-apply a finding the moment it is identified.
 - **Search exhaustiveness:** When asked to update "all" occurrences of something, search the full codebase before reporting done. Do not stop at the first match.
 - **User-facing copy** (labels, hints, banners, empty states) is concise, professional, modern e-commerce English for a US audience: direct address, a short bold lead plus at most one supporting sentence, no parenthetical qualifiers or hedging. Example: "Sell as a complete set only" — not "Sell only as a complete set (not individually)".
+- **Never run `git commit` or `git push`.** The developer commits personally. When asked "to commit," prepare the tree (stage files, split hunks if needed) and suggest message(s) in the `/commit-msg` format — then stop. Never add a `Co-Authored-By` trailer or any other automated trailer to anything in this repo.
 - **Metadata descriptions:** Never write "on JGowns" in metadata `description` fields — the site name already appears in the title template.
-- **`noindex`** applied to a page requires explicit justification. Do not apply it to registration, new-listing, or other discovery pages without instruction. When unsure, ask.
+- **`noindex`** applied to a page requires explicit justification. Auth utility pages (login, forgot-password, reset-password) are noindex by default; registration, new-listing, and other discovery pages are indexed — do not noindex them without instruction. When unsure, ask.
 
 ---
 
@@ -254,6 +255,8 @@ Before writing any Next.js-related code:
 - Before flagging a legacy-data issue (e.g. stale enum values, old column formats), check migration history in `src/supabase/migrations/`. If a migration already resolved it, the finding is not actionable.
 - Every migration added to `src/supabase/migrations/` must also be folded into `src/supabase/schema.sql` — that file is the maintained fresh-install snapshot of the current schema, not a historical artifact. A migration without the matching schema.sql edit is incomplete.
 - All auth and contact form inputs must carry the correct `autocomplete` attribute: `email`, `new-password`, `current-password`, `tel`, etc.
+- Supabase auth email templates (confirm signup, reset password, etc.) are versioned in `docs/email-templates/*.html` — one file per template, sharing the same branded shell (inline-styled table layout, cream/gold palette, `{{ .ConfirmationURL }}` as both button and plain fallback link). Edit the file first, then paste into the dashboard; the dashboard copy is a deployment, not the source.
+- **Verify layout/visual changes with a real render before reporting done.** Use the `playwright` MCP server (drives Edge) against the dev server on `localhost:3000`: navigate, interact to reach the state under test (click, scroll), screenshot, and check console errors. Check at least one desktop and one narrow width for responsive work. Fallback if the MCP is unavailable: `"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --headless --disable-gpu --window-size=1440,900 --screenshot=<out.png> <url>` — static screenshot only, no interaction.
 
 ---
 

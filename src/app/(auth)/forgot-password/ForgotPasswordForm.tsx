@@ -28,7 +28,7 @@ export default function ForgotPasswordForm({ next }: ForgotPasswordFormProps) {
     setIsError(false);
     setLoading(true);
     try {
-      const result = await requestPasswordReset({ email });
+      const result = await requestPasswordReset({ email, next });
       if ('error' in result) {
         setIsError(true);
         setMsg(result.error);

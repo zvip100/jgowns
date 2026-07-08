@@ -277,13 +277,25 @@ export async function fetchPriceBounds(): Promise<PriceBounds> {
   "use cache";
   applyListingsCachePolicy();
 
-  const { data, error } = await anonClient
-    .from("listing_sizes")
-    .select("price, listing:listings!inner(status)")
-    .eq("status", "available")
-    .eq("listing.status", "active")
-    .order("price", { ascending: true });
+  // Ordered limit(1) queries instead of fetching all rows: PostgREST caps
+  // responses at max_rows (1000), which would silently truncate the data
+  // and corrupt the max bound as the table grows.
+  const boundsQuery = (ascending: boolean) =>
+    anonClient
+      .from("listing_sizes")
+      .select("price, listing:listings!inner(status)")
+      .eq("status", "available")
+      .eq("listing.status", "active")
+      .order("price", { ascending })
+      .limit(1)
+      .maybeSingle();
 
+  const [minResult, maxResult] = await Promise.all([
+    boundsQuery(true),
+    boundsQuery(false),
+  ]);
+
+  const error = minResult.error ?? maxResult.error;
   if (error) {
     console.error("[listings-queries] Failed to load price bounds", {
       message: error.message,
@@ -294,16 +306,15 @@ export async function fetchPriceBounds(): Promise<PriceBounds> {
     return { minBound: 0, maxBound: 10000 };
   }
 
-  const prices = (data ?? [])
-    .map((row) => Number(row.price))
-    .filter((value) => Number.isFinite(value));
+  const minPrice = Number(minResult.data?.price);
+  const maxPrice = Number(maxResult.data?.price);
 
-  if (prices.length === 0) {
+  if (!Number.isFinite(minPrice) || !Number.isFinite(maxPrice)) {
     return { minBound: 0, maxBound: 10000 };
   }
 
-  const min = Math.floor(Math.min(...prices));
-  const max = Math.ceil(Math.max(...prices));
+  const min = Math.floor(minPrice);
+  const max = Math.ceil(maxPrice);
   const safeMax = max <= min ? min + 1000 : max;
 
   return { minBound: Math.max(0, min), maxBound: safeMax };
