@@ -84,10 +84,14 @@ export default function ConfirmActionDialog({
           <AlertDialogDescription>{description}</AlertDialogDescription>
         </AlertDialogHeader>
         {error && (
-          <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <p
+            role="alert"
+            aria-live="polite"
+            className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          >
             {error}
           </p>
-        )}
+        )
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
           <Button
