@@ -94,6 +94,7 @@ export default async function DashboardPage() {
       .from('listings')
       .select('*, sizes:listing_sizes(*)')
       .eq('user_id', user!.id)
+      .neq('status', 'removed')
       .order('created_at', { ascending: false });
     return (data ?? []) as ListingWithSizes[];
   }

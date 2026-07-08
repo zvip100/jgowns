@@ -31,6 +31,30 @@ export async function markListingSold(
   return {};
 }
 
+export async function removeListing(
+  id: string,
+): Promise<ServerActionErrorResult> {
+  if (!id || typeof id !== "string") return { error: "Invalid listing id" };
+
+  const auth = await getAuthClient();
+  if (!auth.ok) return { error: auth.error };
+  const { supabase, user } = auth;
+
+  const { data: updated, error } = await supabase
+    .from("listings")
+    .update({ status: "removed" })
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .select("id");
+
+  if (error) return { error: error.message };
+  if (!updated?.length) return { error: "Listing not found" };
+
+  updateTag(`listing:${id}`);
+  updateTag("listings");
+  return {};
+}
+
 /** Mark a single size variant sold; the listing stays active. */
 export async function markSizeSold(
   listingId: string,

@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import MarkSizeSoldButton from '@/components/MarkSizeSoldButton';
 import MarkSoldButton from '@/components/MarkSoldButton';
+import RemoveListingButton from '@/components/RemoveListingButton';
 import { sortListingSizes } from '@/lib/listing-variants';
 import { blurProps } from '@/lib/utils';
 import { GOWN_CATEGORIES, type Listing, type ListingWithSizes } from '@/lib/types';
@@ -101,6 +102,7 @@ export default function ListingRow({
 
       <div className="flex shrink-0 items-center gap-1">
         <MarkSoldButton id={listing.id} status={listing.status} />
+        <RemoveListingButton id={listing.id} />
         <Button asChild variant="ghost" size="sm">
           <Link href={href} aria-label="View listing">
             <Eye data-icon="inline-start" />
