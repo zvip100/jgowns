@@ -273,6 +273,52 @@ export const fetchListingWithFallback = cache(
   },
 );
 
+type SitemapListing = { id: string; created_at: string };
+
+const SITEMAP_PAGE_SIZE = 1000;
+
+/**
+ * Active listing ids + timestamps for the sitemap. Paginated because PostgREST
+ * caps a single response at max_rows (1000); a plain select would silently
+ * truncate the sitemap as the catalog grows.
+ */
+export async function fetchActiveListingsForSitemap(): Promise<
+  SitemapListing[]
+> {
+  "use cache";
+  applyListingsCachePolicy();
+
+  const rows: SitemapListing[] = [];
+
+  for (let page = 0; ; page++) {
+    const from = page * SITEMAP_PAGE_SIZE;
+    const to = from + SITEMAP_PAGE_SIZE - 1;
+
+    const { data, error } = await anonClient
+      .from("listings")
+      .select("id, created_at")
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (error) {
+      console.error("[listings-queries] Failed to load listings for sitemap", {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
+      return rows;
+    }
+
+    if (!data?.length) break;
+    rows.push(...(data as SitemapListing[]));
+    if (data.length < SITEMAP_PAGE_SIZE) break;
+  }
+
+  return rows;
+}
+
 export async function fetchPriceBounds(): Promise<PriceBounds> {
   "use cache";
   applyListingsCachePolicy();

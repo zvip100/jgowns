@@ -16,6 +16,7 @@ const {
       chain.eq = vi.fn().mockReturnValue(chain);
       chain.order = vi.fn().mockReturnValue(chain);
       chain.limit = vi.fn().mockReturnValue(chain);
+      chain.range = vi.fn().mockReturnValue(chain);
       chain.maybeSingle = terminal;
       return chain;
     };
@@ -38,6 +39,7 @@ vi.mock("@/lib/supabase/anon", () => ({ anonClient }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: mockCreateClient }));
 
 import {
+  fetchActiveListingsForSitemap,
   fetchListingWithFallback,
   fetchPriceBounds,
 } from "@/lib/listings-queries";
@@ -116,6 +118,70 @@ describe("fetchListingWithFallback", () => {
     expect(result).toEqual({ listing: null, error: null });
     expect(anonMaybeSingle).not.toHaveBeenCalled();
     expect(sessionMaybeSingle).not.toHaveBeenCalled();
+  });
+});
+
+describe("fetchActiveListingsForSitemap", () => {
+  const anonRange = anonChain.range as ReturnType<typeof vi.fn>;
+  const listingRows = (count: number, offset = 0) =>
+    Array.from({ length: count }, (_, i) => ({
+      id: `id-${offset + i}`,
+      created_at: "2026-07-01T00:00:00.000Z",
+    }));
+
+  beforeEach(() => {
+    anonRange.mockReset().mockReturnValue(anonChain);
+  });
+
+  it("returns all active listing rows from a single page", async () => {
+    const rows = listingRows(3);
+    anonRange.mockResolvedValueOnce({ data: rows, error: null });
+
+    const result = await fetchActiveListingsForSitemap();
+
+    expect(result).toEqual(rows);
+    expect(anonRange).toHaveBeenCalledExactlyOnceWith(0, 999);
+  });
+
+  it("paginates until a short page and concatenates all rows", async () => {
+    anonRange
+      .mockResolvedValueOnce({ data: listingRows(1000), error: null })
+      .mockResolvedValueOnce({ data: listingRows(2, 1000), error: null });
+
+    const result = await fetchActiveListingsForSitemap();
+
+    expect(result).toHaveLength(1002);
+    expect(anonRange).toHaveBeenCalledTimes(2);
+    expect(anonRange).toHaveBeenNthCalledWith(2, 1000, 1999);
+  });
+
+  it("stops when a full page is followed by an empty page", async () => {
+    anonRange
+      .mockResolvedValueOnce({ data: listingRows(1000), error: null })
+      .mockResolvedValueOnce({ data: [], error: null });
+
+    const result = await fetchActiveListingsForSitemap();
+
+    expect(result).toHaveLength(1000);
+    expect(anonRange).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns the rows gathered so far when a page errors", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    anonRange
+      .mockResolvedValueOnce({ data: listingRows(1000), error: null })
+      .mockResolvedValueOnce({
+        data: null,
+        error: { message: "boom", details: "", hint: "", code: "PGRST" },
+      });
+
+    const result = await fetchActiveListingsForSitemap();
+
+    expect(result).toHaveLength(1000);
+    expect(consoleError).toHaveBeenCalledOnce();
+    consoleError.mockRestore();
   });
 });
 

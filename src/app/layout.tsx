@@ -1,5 +1,8 @@
 import type { Metadata } from "next";
 import { Fraunces, Manrope } from "next/font/google";
+
+import { SITE_URL } from "@/lib/site-url";
+
 import "./globals.css";
 
 const fraunces = Fraunces({
@@ -15,13 +18,7 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  metadataBase: (() => {
-    try {
-      return new URL(process.env.NEXT_PUBLIC_SITE_URL ?? "https://jgowns.com");
-    } catch {
-      return new URL("https://jgowns.com");
-    }
-  })(),
+  metadataBase: new URL(SITE_URL),
   title: {
     default: "Jgowns — The ultimate marketplace for modest gowns.",
     template: "%s | Jgowns",
