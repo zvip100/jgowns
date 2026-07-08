@@ -13,7 +13,7 @@ export default function RemoveListingButton({ id }: RemoveListingButtonProps) {
   return (
     <ConfirmActionButton
       title="Remove listing?"
-      description="This will remove the listing from browse and your dashboard. It will not permanently delete the database record."
+      description="This will remove the listing from the site."
       confirmLabel="Remove"
       pendingLabel="Removing..."
       ariaLabel="Remove listing"
