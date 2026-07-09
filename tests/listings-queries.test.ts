@@ -4,6 +4,7 @@ const {
   anonMaybeSingle,
   sessionMaybeSingle,
   anonChain,
+  sessionChain,
   anonClient,
   mockCreateClient,
 } = vi.hoisted(() => {
@@ -14,6 +15,7 @@ const {
       const chain: Record<string, unknown> = {};
       chain.select = vi.fn().mockReturnValue(chain);
       chain.eq = vi.fn().mockReturnValue(chain);
+      chain.neq = vi.fn().mockReturnValue(chain);
       chain.order = vi.fn().mockReturnValue(chain);
       chain.limit = vi.fn().mockReturnValue(chain);
       chain.range = vi.fn().mockReturnValue(chain);
@@ -22,15 +24,17 @@ const {
     };
 
     const anonChain = makeChain(anonMaybeSingle);
+    const sessionChain = makeChain(sessionMaybeSingle);
 
     return {
       anonMaybeSingle,
       sessionMaybeSingle,
       anonChain,
+      sessionChain,
       anonClient: { from: vi.fn().mockReturnValue(anonChain) },
       mockCreateClient: vi
         .fn()
-        .mockResolvedValue({ from: vi.fn().mockReturnValue(makeChain(sessionMaybeSingle)) }),
+        .mockResolvedValue({ from: vi.fn().mockReturnValue(sessionChain) }),
     };
   });
 
@@ -48,11 +52,15 @@ const ID_PUBLIC_HIT    = "11111111-1111-1111-1111-111111111111";
 const ID_SESSION_HIT   = "22222222-2222-2222-2222-222222222222";
 const ID_PUBLIC_ERROR  = "33333333-3333-3333-3333-333333333333";
 const ID_SORTED_SIZES  = "44444444-4444-4444-4444-444444444444";
+const ID_REMOVED_OWNER = "55555555-5555-5555-5555-555555555555";
 
 describe("fetchListingWithFallback", () => {
   beforeEach(() => {
     anonMaybeSingle.mockReset();
     sessionMaybeSingle.mockReset();
+    (anonChain.eq as ReturnType<typeof vi.fn>).mockClear();
+    (sessionChain.eq as ReturnType<typeof vi.fn>).mockClear();
+    (sessionChain.neq as ReturnType<typeof vi.fn>).mockClear();
   });
 
   it("returns the listing when the public query finds it", async () => {
@@ -63,6 +71,7 @@ describe("fetchListingWithFallback", () => {
 
     expect(result.listing).toEqual(listing);
     expect(result.error).toBeNull();
+    expect(anonChain.eq).toHaveBeenCalledWith("status", "active");
     expect(sessionMaybeSingle).not.toHaveBeenCalled();
   });
 
@@ -97,6 +106,17 @@ describe("fetchListingWithFallback", () => {
     expect(result.listing).toEqual(listing);
     expect(result.error).toBeNull();
     expect(sessionMaybeSingle).toHaveBeenCalledOnce();
+    expect(sessionChain.neq).toHaveBeenCalledWith("status", "removed");
+  });
+
+  it("returns no listing when the owner fallback excludes a removed row", async () => {
+    anonMaybeSingle.mockResolvedValue({ data: null, error: null });
+    sessionMaybeSingle.mockResolvedValue({ data: null, error: null });
+
+    const result = await fetchListingWithFallback(ID_REMOVED_OWNER);
+
+    expect(result).toEqual({ listing: null, error: null });
+    expect(sessionChain.neq).toHaveBeenCalledWith("status", "removed");
   });
 
   it("returns the error and skips the session query when the public query errors", async () => {

@@ -56,11 +56,17 @@ async function selectListingById(
   normalizedId: string,
   logContext: "anon" | "session",
 ): Promise<ListingByIdResult> {
-  const { data: listing, error } = await supabase
+  const query = supabase
     .from("listings")
     .select(LISTING_WITH_SIZES_SELECT)
-    .eq("id", normalizedId)
-    .maybeSingle();
+    .eq("id", normalizedId);
+
+  const visibleQuery =
+    logContext === "anon"
+      ? query.eq("status", "active")
+      : query.neq("status", "removed");
+
+  const { data: listing, error } = await visibleQuery.maybeSingle();
 
   if (error) {
     console.error(
@@ -249,7 +255,7 @@ export async function fetchListing(id: string): Promise<ListingByIdResult> {
   return selectListingById(anonClient, normalizedId, "anon");
 }
 
-/** Uncached: request cookies so RLS can return the row to the owning seller (e.g. sold/removed). */
+/** Uncached: request cookies so RLS can return active/sold rows to the owning seller. */
 export async function fetchListingAsOwner(
   id: string,
 ): Promise<ListingByIdResult> {
@@ -262,7 +268,7 @@ export async function fetchListingAsOwner(
   return selectListingById(supabase, normalizedId, "session");
 }
 
-/** Public lookup first; falls back to session-scoped query for sold/removed listings visible to the owner. */
+/** Public active lookup first; falls back to session-scoped query for sold listings visible to the owner. */
 export const fetchListingWithFallback = cache(
   async (id: string): Promise<ListingByIdResult> => {
     const { listing, error } = await fetchListing(id);

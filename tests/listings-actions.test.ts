@@ -17,6 +17,8 @@ vi.mock("@/lib/actions/auth", () => ({ getAuthClient: mockGetAuthClient }));
 import {
   markListingSold,
   markSizeSold,
+  reactivateListing,
+  reactivateSize,
   removeListing,
   revalidateListings,
 } from "@/lib/actions/listings";
@@ -180,7 +182,7 @@ describe("removeListing", () => {
 });
 
 describe("markSizeSold", () => {
-  it("marks the single size sold and invalidates tags", async () => {
+  it("marks the single size sold via the sync RPC and invalidates tags", async () => {
     const supabase = makeSupabase();
     mockGetAuthClient.mockResolvedValue({
       ok: true,
@@ -191,14 +193,10 @@ describe("markSizeSold", () => {
     const result = await markSizeSold(LISTING_ID, SIZE_ID);
 
     expect(result).toEqual({});
-    expect(supabase._sizesChain.update).toHaveBeenCalledWith({
-      status: "sold",
+    expect(supabase._rpc).toHaveBeenCalledWith("mark_size_sold", {
+      p_listing_id: LISTING_ID,
+      p_size_id: SIZE_ID,
     });
-    expect(supabase._sizesChain.eq).toHaveBeenCalledWith("id", SIZE_ID);
-    expect(supabase._sizesChain.eq).toHaveBeenCalledWith(
-      "listing_id",
-      LISTING_ID,
-    );
     expect(mockUpdateTag).toHaveBeenCalledWith(`listing:${LISTING_ID}`);
     expect(mockUpdateTag).toHaveBeenCalledWith("listings");
   });
@@ -213,6 +211,117 @@ describe("markSizeSold", () => {
     expect(mockGetAuthClient).not.toHaveBeenCalled();
   });
 
+  it("returns 'Size not found' when the RPC reports no matching row", async () => {
+    const supabase = makeSupabase(undefined, {
+      error: { message: "Size not found" },
+    });
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+
+    const result = await markSizeSold(LISTING_ID, SIZE_ID);
+    expect(result).toEqual({ error: "Size not found" });
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+});
+
+describe("reactivateListing", () => {
+  it("reactivates the listing and all its sizes, then invalidates tags", async () => {
+    const supabase = makeSupabase();
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+
+    const result = await reactivateListing(LISTING_ID);
+
+    expect(result).toEqual({});
+    expect(supabase._rpc).toHaveBeenCalledWith("reactivate_listing", {
+      p_listing_id: LISTING_ID,
+    });
+    expect(mockUpdateTag).toHaveBeenCalledWith(`listing:${LISTING_ID}`);
+    expect(mockUpdateTag).toHaveBeenCalledWith("listings");
+  });
+
+  it("returns an error for a blank id without touching the database", async () => {
+    const result = await reactivateListing("");
+    expect(result).toEqual({ error: "Invalid listing id" });
+    expect(mockGetAuthClient).not.toHaveBeenCalled();
+  });
+
+  it("returns the auth error when the user is not signed in", async () => {
+    mockGetAuthClient.mockResolvedValue({
+      ok: false,
+      error: "Not authenticated",
+    });
+    const result = await reactivateListing(LISTING_ID);
+    expect(result).toEqual({ error: "Not authenticated" });
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("returns 'Listing not found' when no row matches", async () => {
+    const supabase = makeSupabase(undefined, {
+      error: { message: "Listing not found" },
+    });
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+
+    const result = await reactivateListing(LISTING_ID);
+    expect(result).toEqual({ error: "Listing not found" });
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+});
+
+describe("reactivateSize", () => {
+  it("marks the single size available and invalidates tags", async () => {
+    const supabase = makeSupabase();
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+
+    const result = await reactivateSize(LISTING_ID, SIZE_ID);
+
+    expect(result).toEqual({});
+    expect(supabase._sizesChain.update).toHaveBeenCalledWith({
+      status: "available",
+    });
+    expect(supabase._sizesChain.eq).toHaveBeenCalledWith("id", SIZE_ID);
+    expect(supabase._sizesChain.eq).toHaveBeenCalledWith(
+      "listing_id",
+      LISTING_ID,
+    );
+    expect(mockUpdateTag).toHaveBeenCalledWith(`listing:${LISTING_ID}`);
+    expect(mockUpdateTag).toHaveBeenCalledWith("listings");
+  });
+
+  it("returns errors for blank ids without touching the database", async () => {
+    expect(await reactivateSize("", SIZE_ID)).toEqual({
+      error: "Invalid listing id",
+    });
+    expect(await reactivateSize(LISTING_ID, "")).toEqual({
+      error: "Invalid size id",
+    });
+    expect(mockGetAuthClient).not.toHaveBeenCalled();
+  });
+
+  it("returns the auth error when the user is not signed in", async () => {
+    mockGetAuthClient.mockResolvedValue({
+      ok: false,
+      error: "Not authenticated",
+    });
+    const result = await reactivateSize(LISTING_ID, SIZE_ID);
+    expect(result).toEqual({ error: "Not authenticated" });
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
   it("returns 'Size not found' when no row matches (wrong owner or id)", async () => {
     const supabase = makeSupabase({ data: [], error: null });
     mockGetAuthClient.mockResolvedValue({
@@ -221,7 +330,7 @@ describe("markSizeSold", () => {
       user: { id: "user-1" },
     });
 
-    const result = await markSizeSold(LISTING_ID, SIZE_ID);
+    const result = await reactivateSize(LISTING_ID, SIZE_ID);
     expect(result).toEqual({ error: "Size not found" });
     expect(mockUpdateTag).not.toHaveBeenCalled();
   });

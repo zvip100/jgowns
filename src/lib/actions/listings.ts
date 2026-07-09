@@ -55,8 +55,57 @@ export async function removeListing(
   return {};
 }
 
-/** Mark a single size variant sold; the listing stays active. */
+/** Mark a single size variant sold; if it was the last available one, the listing goes sold too. */
 export async function markSizeSold(
+  listingId: string,
+  sizeId: string,
+): Promise<ServerActionErrorResult> {
+  if (!listingId || typeof listingId !== "string") {
+    return { error: "Invalid listing id" };
+  }
+  if (!sizeId || typeof sizeId !== "string") {
+    return { error: "Invalid size id" };
+  }
+
+  const auth = await getAuthClient();
+  if (!auth.ok) return { error: auth.error };
+  const { supabase } = auth;
+
+  const { error } = await supabase.rpc("mark_size_sold", {
+    p_listing_id: listingId,
+    p_size_id: sizeId,
+  });
+
+  if (error) return { error: error.message };
+
+  updateTag(`listing:${listingId}`);
+  updateTag("listings");
+  return {};
+}
+
+/** Reactivate a sold listing: listing status + every size variant back to available. */
+export async function reactivateListing(
+  id: string,
+): Promise<ServerActionErrorResult> {
+  if (!id || typeof id !== "string") return { error: "Invalid listing id" };
+
+  const auth = await getAuthClient();
+  if (!auth.ok) return { error: auth.error };
+  const { supabase } = auth;
+
+  const { error } = await supabase.rpc("reactivate_listing", {
+    p_listing_id: id,
+  });
+
+  if (error) return { error: error.message };
+
+  updateTag(`listing:${id}`);
+  updateTag("listings");
+  return {};
+}
+
+/** Reactivate a single sold size variant; the listing stays as-is. */
+export async function reactivateSize(
   listingId: string,
   sizeId: string,
 ): Promise<ServerActionErrorResult> {
@@ -73,7 +122,7 @@ export async function markSizeSold(
 
   const { data: updated, error } = await supabase
     .from("listing_sizes")
-    .update({ status: "sold" })
+    .update({ status: "available" })
     .eq("id", sizeId)
     .eq("listing_id", listingId)
     .select("id");

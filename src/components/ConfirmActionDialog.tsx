@@ -14,6 +14,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { PRIMARY_CTA_CLASS } from '@/lib/styles';
 
 import type { ReactNode } from 'react';
 import type { ServerActionErrorResult } from '@/lib/types';
@@ -91,12 +92,17 @@ export default function ConfirmActionDialog({
           >
             {error}
           </p>
-        )
+        )}
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isPending}>Cancel</AlertDialogCancel>
           <Button
             type="button"
             variant={confirmVariant}
+            className={
+              confirmVariant === 'default'
+                ? `${PRIMARY_CTA_CLASS} w-auto px-4 disabled:translate-y-0`
+                : undefined
+            }
             onClick={handleConfirm}
             disabled={isPending}
           >
