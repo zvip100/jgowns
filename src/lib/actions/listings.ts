@@ -104,7 +104,7 @@ export async function reactivateListing(
   return {};
 }
 
-/** Reactivate a single sold size variant; the listing stays as-is. */
+/** Reactivate a single sold size variant; only while the parent listing is active. */
 export async function reactivateSize(
   listingId: string,
   sizeId: string,
@@ -119,6 +119,18 @@ export async function reactivateSize(
   const auth = await getAuthClient();
   if (!auth.ok) return { error: auth.error };
   const { supabase } = auth;
+
+  const { data: listing, error: listingError } = await supabase
+    .from("listings")
+    .select("status")
+    .eq("id", listingId)
+    .maybeSingle();
+
+  if (listingError) return { error: listingError.message };
+  if (!listing) return { error: "Listing not found" };
+  if (listing.status !== "active") {
+    return { error: "Reactivate the listing before changing its sizes" };
+  }
 
   const { data: updated, error } = await supabase
     .from("listing_sizes")

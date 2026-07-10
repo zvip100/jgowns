@@ -1,10 +1,13 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { Lock } from 'lucide-react';
 
 import { createClient } from '@/lib/supabase/server';
+import { getCurrentUser } from '@/lib/queries/auth';
 import { sortListingSizes } from '@/lib/listing-variants';
 import { isValidUUID } from '@/lib/utils';
 import ListingForm from '@/components/ListingForm';
+import NoticePanel from '@/components/NoticePanel';
 
 import type { ListingFormData, ListingWithSizes } from '@/lib/types';
 
@@ -21,16 +24,35 @@ type EditListingPageProps = {
 export default async function EditListingPage({ params }: EditListingPageProps) {
   const { id } = await params;
   if (!isValidUUID(id)) notFound();
+
+  const user = await getCurrentUser();
+  if (!user) notFound();
+
   const supabase = await createClient();
 
   const { data } = await supabase
     .from('listings')
     .select('*, sizes:listing_sizes(*)')
     .eq('id', id)
+    .eq('user_id', user.id)
+    .neq('status', 'removed')
     .single();
   if (!data) notFound();
 
   const listingWithSizes = data as ListingWithSizes;
+
+  if (listingWithSizes.status === 'sold') {
+    return (
+      <NoticePanel
+        icon={Lock}
+        title='Listing Sold'
+        description='Reactivate this listing from your dashboard to edit it.'
+        href='/dashboard'
+        linkLabel='Back to dashboard'
+      />
+    );
+  }
+
   const initial: Partial<ListingFormData> = {
     ...listingWithSizes,
     sizes: sortListingSizes(listingWithSizes.sizes).map(

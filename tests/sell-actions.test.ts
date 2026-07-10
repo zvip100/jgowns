@@ -128,9 +128,14 @@ function makeUpdateSupabase(
   existingImageUrls: string[],
   updateCapture: UpdateCapture,
   updateResult: { error: null | { message: string } } = { error: null },
+  existingStatus: string = "active",
 ) {
   const maybeSingle = vi.fn().mockResolvedValue({
-    data: { user_id: "user-123", image_urls: existingImageUrls },
+    data: {
+      user_id: "user-123",
+      image_urls: existingImageUrls,
+      status: existingStatus,
+    },
     error: null,
   });
 
@@ -779,5 +784,24 @@ describe("updateListing", () => {
       { size: "8", size_group: "adult", price: 800, sort_order: 0 },
     ]);
     expect(mockUpdateTag).toHaveBeenCalledWith("listings");
+  });
+
+  it("preserves the stored listing status and ignores any submitted status", async () => {
+    const capture: UpdateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeUpdateSupabase([OLD_URL_0], capture, { error: null }, "sold"),
+    });
+
+    const fd = baseFormData();
+    fd.set("status", "active"); // a submitted status must not reactivate the listing
+    fd.set("existing_url_0", OLD_URL_0);
+    fd.set("blur_0", makeBlur("blur0"));
+
+    try { await updateListing(LISTING_ID, fd); } catch { /* redirect */ }
+
+    const payload = capture.payload as Record<string, unknown>;
+    expect(payload.status).toBe("sold");
   });
 });

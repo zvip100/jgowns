@@ -181,7 +181,6 @@ function rawListingFieldsFromFormData(formData: FormData) {
     bundle_price: strOrUndefined(formData.get("bundle_price")),
     contact_email: formData.get("contact_email"),
     contact_phone: strOrUndefined(formData.get("contact_phone")),
-    status: strOrUndefined(formData.get("status")),
   };
 }
 
@@ -370,7 +369,7 @@ export async function updateListing(
 
   const { data: existing, error: existingError } = await supabase
     .from("listings")
-    .select("user_id, image_urls")
+    .select("user_id, image_urls, status")
     .eq("id", id)
     .maybeSingle();
 
@@ -427,7 +426,13 @@ export async function updateListing(
       nextBlurUrls.push(slot.blur);
     }
 
-    const payload = listingRowPayload(parsed, nextImageUrls, nextBlurUrls);
+    // An edit never changes listing status; preserve the stored value so a
+    // submit can't reactivate a sold listing. Status transitions go through
+    // their dedicated actions (markListingSold / reactivateListing).
+    const payload = {
+      ...listingRowPayload(parsed, nextImageUrls, nextBlurUrls),
+      status: existing.status,
+    };
 
     const { error: dbError } = await supabase.rpc(
       "update_listing_with_variants",

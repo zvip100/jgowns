@@ -120,12 +120,14 @@ export default function ListingRow({
             <span className="hidden sm:inline">View</span>
           </Link>
         </Button>
-        <Button asChild variant="ghost" size="sm">
-          <Link href={`/dashboard/edit/${listing.id}`} aria-label="Edit listing">
-            <Pencil data-icon="inline-start" />
-            <span className="hidden sm:inline">Edit</span>
-          </Link>
-        </Button>
+        {listing.status === 'active' && (
+          <Button asChild variant="ghost" size="sm">
+            <Link href={`/dashboard/edit/${listing.id}`} aria-label="Edit listing">
+              <Pencil data-icon="inline-start" />
+              <span className="hidden sm:inline">Edit</span>
+            </Link>
+          </Button>
+        )}
         <MarkSoldButton
           id={listing.id}
           status={listing.status}

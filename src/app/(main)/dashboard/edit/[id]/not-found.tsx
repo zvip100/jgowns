@@ -5,18 +5,18 @@ import NoticePanel from '@/components/NoticePanel'
 
 export const metadata: Metadata = {
   title: "Listing Not Found",
-  description: "This gown listing doesn't exist or has been removed.",
+  description: "This listing doesn't exist or has been removed.",
   robots: { index: false },
 }
 
-export default function ListingNotFound() {
+export default function EditListingNotFound() {
   return (
     <NoticePanel
       icon={SearchX}
       title='Listing Not Found'
-      description="This gown listing doesn't exist or may have been removed."
-      href='/browse'
-      linkLabel='Browse all gowns'
+      description="This listing doesn't exist or has been removed."
+      href='/dashboard'
+      linkLabel='Back to dashboard'
     />
   )
 }
