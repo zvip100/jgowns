@@ -29,14 +29,20 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  // Protect dashboard routes — redirect to login, preserving the intended destination
+  // Protect dashboard routes — redirect to login, preserving the intended destination.
+  // Copy Supabase's cookie mutations (e.g. clearing a stale session after a failed
+  // refresh) onto the redirect, or they are silently dropped.
   if (request.nextUrl.pathname.startsWith("/dashboard") && !user) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set(
       "next",
       request.nextUrl.pathname + request.nextUrl.search,
     );
-    return NextResponse.redirect(loginUrl);
+    const redirectResponse = NextResponse.redirect(loginUrl);
+    supabaseResponse.cookies
+      .getAll()
+      .forEach((cookie) => redirectResponse.cookies.set(cookie));
+    return redirectResponse;
   }
 
   return supabaseResponse;
