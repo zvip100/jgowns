@@ -20,7 +20,7 @@ export default function NoticePanel({
   return (
     <div className='mx-auto mt-16 max-w-md text-center sm:mt-24'>
       <div className='surface-panel hairline stagger-rise rounded-[1.7rem] p-8 sm:p-10'>
-        <Icon className='mx-auto mb-4 size-12 text-[#8a7462]' />
+        <Icon className='mx-auto mb-4 size-12 text-[#8a7462]' aria-hidden />
         <h2 className='text-[1.6rem] text-[#2f241b]'>{title}</h2>
         <p className='mt-2 text-sm text-[#7d6652]'>{description}</p>
         <Link
