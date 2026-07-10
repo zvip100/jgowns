@@ -14,7 +14,11 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-export default async function EditListingPage({ params }: { params: Promise<{ id: string }> }) {
+type EditListingPageProps = {
+  params: Promise<{ id: string }>;
+};
+
+export default async function EditListingPage({ params }: EditListingPageProps) {
   const { id } = await params;
   if (!isValidUUID(id)) notFound();
   const supabase = await createClient();

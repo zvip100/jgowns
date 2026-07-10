@@ -1,10 +1,12 @@
 import Navbar from "@/components/Navbar";
 
+type MainLayoutProps = {
+  children: React.ReactNode;
+};
+
 export default function MainLayout({
   children,
-}: {
-  children: React.ReactNode;
-}) {
+}: MainLayoutProps) {
   return (
     <>
       <Navbar />

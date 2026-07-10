@@ -19,11 +19,13 @@ const statusStyles: Record<Listing['status'], string> = {
   removed: 'bg-[#fef4e0] text-[#8a6a30]',
 };
 
+type ListingRowProps = {
+  listing: ListingWithSizes;
+};
+
 export default function ListingRow({
   listing,
-}: {
-  listing: ListingWithSizes;
-}) {
+}: ListingRowProps) {
   const sizes = sortListingSizes(listing.sizes);
   const isSetOnly = listing.sell_mode === 'set_only';
   const showPerSizeActions =

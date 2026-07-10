@@ -9,11 +9,13 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
+type ResetPasswordPageProps = {
+  searchParams: Promise<{ next?: string }>;
+};
+
 export default function ResetPasswordPage({
   searchParams,
-}: {
-  searchParams: Promise<{ next?: string }>;
-}) {
+}: ResetPasswordPageProps) {
   return (
     <AuthScreen
       title="Reset Password"

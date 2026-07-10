@@ -5,15 +5,17 @@ import { RotateCcw } from 'lucide-react';
 import ConfirmActionButton from '@/components/ConfirmActionButton';
 import { reactivateSize } from '@/lib/actions/listings';
 
+type ReactivateSizeButtonProps = {
+  listingId: string;
+  sizeId: string;
+  size: string;
+};
+
 export default function ReactivateSizeButton({
   listingId,
   sizeId,
   size,
-}: {
-  listingId: string;
-  sizeId: string;
-  size: string;
-}) {
+}: ReactivateSizeButtonProps) {
   return (
     <ConfirmActionButton
       title={`Reactivate size ${size}?`}

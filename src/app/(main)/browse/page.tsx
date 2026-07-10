@@ -21,11 +21,13 @@ export const metadata: Metadata = {
   },
 };
 
+type BrowsePageProps = {
+  searchParams: Promise<PageSearchParams>;
+};
+
 export default async function BrowsePage({
   searchParams,
-}: {
-  searchParams: Promise<PageSearchParams>;
-}) {
+}: BrowsePageProps) {
   const { minBound, maxBound } = await fetchPriceBounds();
   const resolvedSearchParams = await searchParams;
 

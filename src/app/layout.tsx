@@ -35,11 +35,13 @@ export const metadata: Metadata = {
   },
 };
 
+type RootLayoutProps = {
+  children: React.ReactNode;
+};
+
 export default function RootLayout({
   children,
-}: {
-  children: React.ReactNode;
-}) {
+}: RootLayoutProps) {
   return (
     <html lang='en' className={`${fraunces.variable} ${manrope.variable}`}>
       <body className='font-body min-h-screen antialiased'>{children}</body>

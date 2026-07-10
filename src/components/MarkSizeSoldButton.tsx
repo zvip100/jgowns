@@ -5,15 +5,17 @@ import { CheckCircle2 } from 'lucide-react';
 import ConfirmActionButton from '@/components/ConfirmActionButton';
 import { markSizeSold } from '@/lib/actions/listings';
 
+type MarkSizeSoldButtonProps = {
+  listingId: string;
+  sizeId: string;
+  size: string;
+};
+
 export default function MarkSizeSoldButton({
   listingId,
   sizeId,
   size,
-}: {
-  listingId: string;
-  sizeId: string;
-  size: string;
-}) {
+}: MarkSizeSoldButtonProps) {
   return (
     <ConfirmActionButton
       title={`Mark size ${size} as sold?`}

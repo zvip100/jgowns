@@ -25,11 +25,17 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+type DashboardCollectionSummaryProps = {
+  listingsPromise: Promise<ListingWithSizes[]>;
+};
+
+type DashboardContentProps = {
+  listingsPromise: Promise<ListingWithSizes[]>;
+};
+
 async function DashboardCollectionSummary({
   listingsPromise,
-}: {
-  listingsPromise: Promise<ListingWithSizes[]>;
-}) {
+}: DashboardCollectionSummaryProps) {
   const listings = await listingsPromise;
   const gownCount = listings.reduce((sum, l) => sum + l.sizes.length, 0);
 
@@ -39,9 +45,7 @@ async function DashboardCollectionSummary({
 
 async function DashboardContent({
   listingsPromise,
-}: {
-  listingsPromise: Promise<ListingWithSizes[]>;
-}) {
+}: DashboardContentProps) {
   const listings = await listingsPromise;
   const hasListings = listings.length > 0;
 

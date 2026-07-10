@@ -15,6 +15,14 @@ type MobileMenuContextValue = {
   close: () => void;
 };
 
+type MobileMenuProviderProps = {
+  children: ReactNode;
+};
+
+type MobileMenuPanelProps = {
+  children: ReactNode;
+};
+
 const MobileMenuContext = createContext<MobileMenuContextValue | null>(null);
 
 function useMobileMenu(): MobileMenuContextValue {
@@ -25,7 +33,7 @@ function useMobileMenu(): MobileMenuContextValue {
   return context;
 }
 
-export function MobileMenuProvider({ children }: { children: ReactNode }) {
+export function MobileMenuProvider({ children }: MobileMenuProviderProps) {
   const [isOpen, setIsOpen] = useState(false);
   const close = useCallback(() => setIsOpen(false), []);
   const toggle = useCallback(() => setIsOpen((open) => !open), []);
@@ -65,7 +73,7 @@ export function MobileMenuTrigger() {
   );
 }
 
-export function MobileMenuPanel({ children }: { children: ReactNode }) {
+export function MobileMenuPanel({ children }: MobileMenuPanelProps) {
   const { isOpen, close } = useMobileMenu();
 
   return (

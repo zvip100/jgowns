@@ -9,11 +9,13 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
+type LoginPageProps = {
+  searchParams: Promise<{ next?: string }>;
+};
+
 export default function LoginPage({
   searchParams,
-}: {
-  searchParams: Promise<{ next?: string }>;
-}) {
+}: LoginPageProps) {
   return (
     <AuthScreen
       title="Welcome Back"

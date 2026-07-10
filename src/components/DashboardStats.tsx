@@ -3,11 +3,13 @@ import type { ListingWithSizes } from '@/lib/types';
 const labelClass =
   'text-[0.62rem] font-semibold uppercase tracking-[0.18em] text-(--muted-ink)';
 
+type DashboardStatsProps = {
+  listings: ListingWithSizes[];
+};
+
 export default function DashboardStats({
   listings,
-}: {
-  listings: ListingWithSizes[];
-}) {
+}: DashboardStatsProps) {
   const activeListings = listings.filter((l) => l.status === 'active');
   const availableGowns = activeListings.flatMap((l) =>
     l.sizes.filter((s) => s.status === 'available'),

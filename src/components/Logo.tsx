@@ -1,4 +1,8 @@
-export default function Logo({ className }: { className?: string }) {
+type LogoProps = {
+  className?: string;
+};
+
+export default function Logo({ className }: LogoProps) {
   return (
     <svg
       xmlns="http://www.w3.org/2000/svg"

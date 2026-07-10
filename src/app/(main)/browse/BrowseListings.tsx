@@ -12,11 +12,13 @@ import type { PageSearchParams } from "@/lib/types";
 import BrowsePagination from "./BrowsePagination";
 import ListingsGrid from "./ListingsGrid";
 
+type BrowseListingsProps = {
+  searchParams: Promise<PageSearchParams>;
+};
+
 export default async function BrowseListings({
   searchParams,
-}: {
-  searchParams: Promise<PageSearchParams>;
-}) {
+}: BrowseListingsProps) {
   const resolved = await searchParams;
   const filters = parseBrowseFilters(resolved);
   const page = parseBrowsePage(resolved);

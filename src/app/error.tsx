@@ -3,13 +3,15 @@
 import { useEffect } from 'react'
 import Link from 'next/link'
 
+type ErrorProps = {
+  error: Error & { digest?: string }
+  unstable_retry: () => void
+}
+
 export default function Error({
   error,
   unstable_retry,
-}: {
-  error: Error & { digest?: string }
-  unstable_retry: () => void
-}) {
+}: ErrorProps) {
   useEffect(() => {
     console.error(error)
   }, [error])

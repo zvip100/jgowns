@@ -9,11 +9,13 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
+type ForgotPasswordPageProps = {
+  searchParams: Promise<{ next?: string }>;
+};
+
 export default function ForgotPasswordPage({
   searchParams,
-}: {
-  searchParams: Promise<{ next?: string }>;
-}) {
+}: ForgotPasswordPageProps) {
   return (
     <AuthScreen
       title="Forgot Password"

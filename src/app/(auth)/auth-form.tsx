@@ -12,7 +12,9 @@ type AuthFieldProps = {
   onChange: (value: string) => void;
 };
 
-export function AuthEmailField({ value, onChange }: AuthFieldProps) {
+type AuthEmailFieldProps = AuthFieldProps;
+
+export function AuthEmailField({ value, onChange }: AuthEmailFieldProps) {
   return (
     <TextInputField
       id="email"
@@ -48,7 +50,9 @@ export function AuthPasswordField({
   );
 }
 
-export function AuthPhoneField({ value, onChange }: AuthFieldProps) {
+type AuthPhoneFieldProps = AuthFieldProps;
+
+export function AuthPhoneField({ value, onChange }: AuthPhoneFieldProps) {
   return (
     <TextInputField
       id="phone"
