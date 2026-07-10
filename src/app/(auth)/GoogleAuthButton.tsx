@@ -6,7 +6,11 @@ import { FieldError } from '@/components/ui/field';
 
 const INITIAL_STATE: GoogleAuthState = { error: null };
 
-function GoogleIcon({ className }: { className?: string }) {
+type GoogleIconProps = {
+  className?: string;
+};
+
+function GoogleIcon({ className }: GoogleIconProps) {
   return (
     <svg className={className} viewBox="0 0 18 18" aria-hidden="true">
       <path

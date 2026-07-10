@@ -35,7 +35,11 @@ export default function GownCard({
     : `/browse/${listing.id}`;
 
   return (
-    <Link href={href} className='group block'>
+    <Link
+      href={href}
+      className='group block'
+      style={{ viewTransitionName: `card-${listing.id}` }}
+    >
       <Card className='surface-panel hairline gap-0 overflow-hidden rounded-3xl bg-transparent p-0 py-0 text-card-foreground ring-0'>
         <div className='relative aspect-3/4 overflow-hidden bg-[#efe7dc]'>
           <Image

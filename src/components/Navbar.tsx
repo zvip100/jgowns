@@ -17,7 +17,10 @@ const MOBILE_LINK_CLASS =
 export default function Navbar() {
   return (
     <MobileMenuProvider>
-      <header className="sticky top-0 z-50 border-b border-[#d5c4b0] bg-[rgba(252,246,236,0.78)] backdrop-blur-lg">
+      <header
+        className="sticky top-0 z-50 border-b border-[#d5c4b0] bg-[rgba(252,246,236,0.78)] backdrop-blur-lg"
+        style={{ viewTransitionName: "site-nav" }}
+      >
         <nav
           aria-label="Main navigation"
           className="mx-auto flex w-full max-w-375 items-center justify-between px-4 py-4 sm:px-6 lg:px-10"

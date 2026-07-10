@@ -166,6 +166,86 @@ $$;
 
 grant execute on function mark_listing_sold(uuid) to authenticated;
 
+-- Atomic "reactivate listing": flip the listing status back to active and all
+-- of its size variants back to available in one transaction, undoing a
+-- mark-sold so a mid-way failure can't leave the listing active while some
+-- variants stay sold.
+create or replace function reactivate_listing(p_listing_id uuid)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_uid uuid := (select auth.uid());
+  v_count int;
+begin
+  if v_uid is null then
+    raise exception 'Not authenticated' using errcode = '28000';
+  end if;
+
+  update public.listings
+     set status = 'active'
+   where id = p_listing_id and user_id = v_uid;
+
+  get diagnostics v_count = row_count;
+  if v_count = 0 then
+    raise exception 'Listing not found' using errcode = 'P0002';
+  end if;
+
+  update public.listing_sizes
+     set status = 'available'
+   where listing_id = p_listing_id;
+end;
+$$;
+
+grant execute on function reactivate_listing(uuid) to authenticated;
+
+-- Atomic "mark size sold" with listing-status sync: mark one variant sold and,
+-- if it was the last available variant, flip the parent listing to 'sold' in the
+-- same transaction. Keeps listings.status consistent with its variants so a
+-- listing sold off one size at a time disappears from browse exactly like one
+-- sold via mark_listing_sold. Ownership is enforced by RLS on listing_sizes
+-- (via parent) for the size update, and by the explicit user_id guard on the
+-- listing update.
+create or replace function mark_size_sold(p_listing_id uuid, p_size_id uuid)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_uid uuid := (select auth.uid());
+  v_count int;
+  v_available int;
+begin
+  if v_uid is null then
+    raise exception 'Not authenticated' using errcode = '28000';
+  end if;
+
+  update public.listing_sizes
+     set status = 'sold'
+   where id = p_size_id and listing_id = p_listing_id;
+
+  get diagnostics v_count = row_count;
+  if v_count = 0 then
+    raise exception 'Size not found' using errcode = 'P0002';
+  end if;
+
+  select count(*) into v_available
+    from public.listing_sizes
+   where listing_id = p_listing_id and status = 'available';
+
+  if v_available = 0 then
+    update public.listings
+       set status = 'sold'
+     where id = p_listing_id and user_id = v_uid;
+  end if;
+end;
+$$;
+
+grant execute on function mark_size_sold(uuid, uuid) to authenticated;
+
 -- Atomic listing edit: update the shared listing row and reconcile its size
 -- variants (delete removed, re-price/re-order kept ones while preserving their
 -- status, insert new ones) in a single transaction. Image upload and cleanup

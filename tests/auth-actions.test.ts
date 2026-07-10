@@ -9,6 +9,8 @@ const {
   mockSignUp,
   mockSignInWithOAuth,
   mockSignOut,
+  mockResetPasswordForEmail,
+  mockUpdateUser,
   mockCreateClient,
 } = vi.hoisted(() => ({
   mockRedirect: vi.fn(),
@@ -19,6 +21,8 @@ const {
   mockSignUp: vi.fn(),
   mockSignInWithOAuth: vi.fn(),
   mockSignOut: vi.fn(),
+  mockResetPasswordForEmail: vi.fn(),
+  mockUpdateUser: vi.fn(),
   mockCreateClient: vi.fn(),
 }));
 
@@ -33,6 +37,8 @@ import {
   signUp,
   signInWithGoogle,
   signOut,
+  requestPasswordReset,
+  updatePassword,
 } from "@/lib/actions/auth";
 
 const SUCCESS_MESSAGE = "Check your email to confirm your account!";
@@ -46,6 +52,8 @@ function fakeSupabase() {
       signUp: mockSignUp,
       signInWithOAuth: mockSignInWithOAuth,
       signOut: mockSignOut,
+      resetPasswordForEmail: mockResetPasswordForEmail,
+      updateUser: mockUpdateUser,
     },
   };
 }
@@ -56,6 +64,8 @@ beforeEach(() => {
   mockSignUp.mockReset();
   mockSignInWithOAuth.mockReset();
   mockSignOut.mockReset();
+  mockResetPasswordForEmail.mockReset();
+  mockUpdateUser.mockReset();
   mockRevalidatePath.mockReset();
   mockRedirect.mockReset().mockImplementation(() => {
     throw new Error("NEXT_REDIRECT");
@@ -336,6 +346,133 @@ describe("signInWithGoogle", () => {
     expect(result).toEqual({
       error: "Could not start Google sign-in. Please try again.",
     });
+  });
+});
+
+describe("requestPasswordReset", () => {
+  it("sends the reset email with the callback redirect to /reset-password", async () => {
+    mockResetPasswordForEmail.mockResolvedValue({ error: null });
+
+    const result = await requestPasswordReset({ email: "a@b.com" });
+
+    expect(result).toEqual({
+      success: true,
+      message: "Check your email for a link to reset your password.",
+    });
+    expect(mockResetPasswordForEmail).toHaveBeenCalledWith("a@b.com", {
+      redirectTo: `${ORIGIN}/api/auth/callback?next=%2Freset-password`,
+    });
+  });
+
+  it("nests a safe next under the reset-password callback target", async () => {
+    mockResetPasswordForEmail.mockResolvedValue({ error: null });
+
+    await requestPasswordReset({ email: "a@b.com", next: "/dashboard/new" });
+
+    const nestedNext = encodeURIComponent(
+      `/reset-password?next=${encodeURIComponent("/dashboard/new")}`,
+    );
+    expect(mockResetPasswordForEmail).toHaveBeenCalledWith("a@b.com", {
+      redirectTo: `${ORIGIN}/api/auth/callback?next=${nestedNext}`,
+    });
+  });
+
+  it("drops an unsafe next and pins the callback to /reset-password", async () => {
+    mockResetPasswordForEmail.mockResolvedValue({ error: null });
+
+    await requestPasswordReset({ email: "a@b.com", next: "https://evil.com" });
+
+    expect(mockResetPasswordForEmail).toHaveBeenCalledWith("a@b.com", {
+      redirectTo: `${ORIGIN}/api/auth/callback?next=%2Freset-password`,
+    });
+  });
+
+  it("rejects an invalid email before calling Supabase", async () => {
+    const result = await requestPasswordReset({ email: "not-an-email" });
+
+    expect(result).toEqual({ error: "Please enter a valid email address." });
+    expect(mockResetPasswordForEmail).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the Supabase error message", async () => {
+    mockResetPasswordForEmail.mockResolvedValue({
+      error: { message: "Email rate limit exceeded" },
+    });
+
+    const result = await requestPasswordReset({ email: "a@b.com" });
+
+    expect(result).toEqual({ error: "Email rate limit exceeded" });
+  });
+});
+
+describe("updatePassword", () => {
+  it("updates the password and redirects to the dashboard", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+    mockUpdateUser.mockResolvedValue({ error: null });
+
+    await expect(updatePassword({ password: "secret6" })).rejects.toThrow(
+      "NEXT_REDIRECT",
+    );
+
+    expect(mockUpdateUser).toHaveBeenCalledWith({ password: "secret6" });
+    expect(mockRevalidatePath).toHaveBeenCalledWith("/", "layout");
+    expect(mockRedirect).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("redirects to a safe next path on success", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+    mockUpdateUser.mockResolvedValue({ error: null });
+
+    await expect(
+      updatePassword({ password: "secret6", next: "/dashboard/new" }),
+    ).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(mockUpdateUser).toHaveBeenCalledWith({ password: "secret6" });
+    expect(mockRedirect).toHaveBeenCalledWith("/dashboard/new");
+  });
+
+  it("ignores an unsafe next and falls back to /dashboard", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+    mockUpdateUser.mockResolvedValue({ error: null });
+
+    await expect(
+      updatePassword({ password: "secret6", next: "https://evil.com" }),
+    ).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(mockRedirect).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("rejects a too-short password before calling Supabase", async () => {
+    const result = await updatePassword({ password: "123" });
+
+    expect(result).toEqual({ error: "Password must be at least 6 characters." });
+    expect(mockGetUser).not.toHaveBeenCalled();
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+  });
+
+  it("returns an expired-link error when there is no session", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null }, error: null });
+
+    const result = await updatePassword({ password: "secret6" });
+
+    expect(result).toEqual({
+      error: "Your reset link is invalid or expired. Request a new one.",
+    });
+    expect(mockUpdateUser).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the Supabase error and does not redirect", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: { id: "u1" } }, error: null });
+    mockUpdateUser.mockResolvedValue({
+      error: { message: "New password should be different from the old password." },
+    });
+
+    const result = await updatePassword({ password: "secret6" });
+
+    expect(result).toEqual({
+      error: "New password should be different from the old password.",
+    });
+    expect(mockRedirect).not.toHaveBeenCalled();
   });
 });
 

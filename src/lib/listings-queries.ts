@@ -56,11 +56,17 @@ async function selectListingById(
   normalizedId: string,
   logContext: "anon" | "session",
 ): Promise<ListingByIdResult> {
-  const { data: listing, error } = await supabase
+  const query = supabase
     .from("listings")
     .select(LISTING_WITH_SIZES_SELECT)
-    .eq("id", normalizedId)
-    .maybeSingle();
+    .eq("id", normalizedId);
+
+  const visibleQuery =
+    logContext === "anon"
+      ? query.eq("status", "active")
+      : query.neq("status", "removed");
+
+  const { data: listing, error } = await visibleQuery.maybeSingle();
 
   if (error) {
     console.error(
@@ -249,7 +255,7 @@ export async function fetchListing(id: string): Promise<ListingByIdResult> {
   return selectListingById(anonClient, normalizedId, "anon");
 }
 
-/** Uncached: request cookies so RLS can return the row to the owning seller (e.g. sold/removed). */
+/** Uncached: request cookies so RLS can return active/sold rows to the owning seller. */
 export async function fetchListingAsOwner(
   id: string,
 ): Promise<ListingByIdResult> {
@@ -262,7 +268,7 @@ export async function fetchListingAsOwner(
   return selectListingById(supabase, normalizedId, "session");
 }
 
-/** Public lookup first; falls back to session-scoped query for sold/removed listings visible to the owner. */
+/** Public active lookup first; falls back to session-scoped query for sold listings visible to the owner. */
 export const fetchListingWithFallback = cache(
   async (id: string): Promise<ListingByIdResult> => {
     const { listing, error } = await fetchListing(id);
@@ -273,17 +279,75 @@ export const fetchListingWithFallback = cache(
   },
 );
 
+type SitemapListing = { id: string; created_at: string };
+
+const SITEMAP_PAGE_SIZE = 1000;
+
+/**
+ * Active listing ids + timestamps for the sitemap. Paginated because PostgREST
+ * caps a single response at max_rows (1000); a plain select would silently
+ * truncate the sitemap as the catalog grows.
+ */
+export async function fetchActiveListingsForSitemap(): Promise<
+  SitemapListing[]
+> {
+  "use cache";
+  applyListingsCachePolicy();
+
+  const rows: SitemapListing[] = [];
+
+  for (let page = 0; ; page++) {
+    const from = page * SITEMAP_PAGE_SIZE;
+    const to = from + SITEMAP_PAGE_SIZE - 1;
+
+    const { data, error } = await anonClient
+      .from("listings")
+      .select("id, created_at")
+      .eq("status", "active")
+      .order("created_at", { ascending: false })
+      .range(from, to);
+
+    if (error) {
+      console.error("[listings-queries] Failed to load listings for sitemap", {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
+      return rows;
+    }
+
+    if (!data?.length) break;
+    rows.push(...(data as SitemapListing[]));
+    if (data.length < SITEMAP_PAGE_SIZE) break;
+  }
+
+  return rows;
+}
+
 export async function fetchPriceBounds(): Promise<PriceBounds> {
   "use cache";
   applyListingsCachePolicy();
 
-  const { data, error } = await anonClient
-    .from("listing_sizes")
-    .select("price, listing:listings!inner(status)")
-    .eq("status", "available")
-    .eq("listing.status", "active")
-    .order("price", { ascending: true });
+  // Ordered limit(1) queries instead of fetching all rows: PostgREST caps
+  // responses at max_rows (1000), which would silently truncate the data
+  // and corrupt the max bound as the table grows.
+  const boundsQuery = (ascending: boolean) =>
+    anonClient
+      .from("listing_sizes")
+      .select("price, listing:listings!inner(status)")
+      .eq("status", "available")
+      .eq("listing.status", "active")
+      .order("price", { ascending })
+      .limit(1)
+      .maybeSingle();
 
+  const [minResult, maxResult] = await Promise.all([
+    boundsQuery(true),
+    boundsQuery(false),
+  ]);
+
+  const error = minResult.error ?? maxResult.error;
   if (error) {
     console.error("[listings-queries] Failed to load price bounds", {
       message: error.message,
@@ -294,16 +358,15 @@ export async function fetchPriceBounds(): Promise<PriceBounds> {
     return { minBound: 0, maxBound: 10000 };
   }
 
-  const prices = (data ?? [])
-    .map((row) => Number(row.price))
-    .filter((value) => Number.isFinite(value));
+  const minPrice = Number(minResult.data?.price);
+  const maxPrice = Number(maxResult.data?.price);
 
-  if (prices.length === 0) {
+  if (!Number.isFinite(minPrice) || !Number.isFinite(maxPrice)) {
     return { minBound: 0, maxBound: 10000 };
   }
 
-  const min = Math.floor(Math.min(...prices));
-  const max = Math.ceil(Math.max(...prices));
+  const min = Math.floor(minPrice);
+  const max = Math.ceil(maxPrice);
   const safeMax = max <= min ? min + 1000 : max;
 
   return { minBound: Math.max(0, min), maxBound: safeMax };

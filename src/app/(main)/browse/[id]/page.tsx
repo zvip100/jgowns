@@ -12,6 +12,11 @@ import { ListingDetail } from "./ListingDetail";
 
 import type { Metadata } from "next";
 
+type ListingPageProps = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ back?: string; from?: string }>;
+};
+
 export async function generateMetadata({
   params,
 }: {
@@ -58,10 +63,7 @@ export async function generateMetadata({
 export default async function ListingPage({
   params,
   searchParams,
-}: {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ back?: string; from?: string }>;
-}) {
+}: ListingPageProps) {
   const [{ id }, { back, from }] = await Promise.all([params, searchParams]);
 
   if (!isValidUUID(id)) notFound();

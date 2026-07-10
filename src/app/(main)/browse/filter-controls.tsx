@@ -33,7 +33,11 @@ const pillClass =
 
 const pillRowClass = "flex flex-wrap gap-1.5";
 
-function CountBadge({ count }: { count: number }) {
+type CountBadgeProps = {
+  count: number;
+};
+
+function CountBadge({ count }: CountBadgeProps) {
   return (
     <Badge
       variant="outline"

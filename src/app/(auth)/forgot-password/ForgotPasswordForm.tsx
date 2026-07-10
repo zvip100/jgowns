@@ -2,24 +2,16 @@
 
 import { useState, useLayoutEffect } from 'react';
 
-import { signUp } from '@/lib/actions/auth';
+import { requestPasswordReset } from '@/lib/actions/auth';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { FieldError, FieldGroup } from '@/components/ui/field';
 
-import {
-  AuthAltLink,
-  AuthEmailField,
-  AuthPasswordField,
-  AuthPhoneField,
-  AuthSubmitButton,
-} from '../auth-form';
+import { AuthAltLink, AuthEmailField, AuthSubmitButton } from '../auth-form';
 
-type RegisterFormProps = { next: string };
+type ForgotPasswordFormProps = { next: string };
 
-export default function RegisterForm({ next }: RegisterFormProps) {
+export default function ForgotPasswordForm({ next }: ForgotPasswordFormProps) {
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [phone, setPhone] = useState('');
   const [msg, setMsg] = useState('');
   const [isError, setIsError] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -31,12 +23,12 @@ export default function RegisterForm({ next }: RegisterFormProps) {
     };
   }, []);
 
-  const handleRegister = async () => {
+  const handleRequest = async () => {
     setMsg('');
     setIsError(false);
     setLoading(true);
     try {
-      const result = await signUp({ email, password, phone, next });
+      const result = await requestPasswordReset({ email, next });
       if ('error' in result) {
         setIsError(true);
         setMsg(result.error);
@@ -53,15 +45,9 @@ export default function RegisterForm({ next }: RegisterFormProps) {
   };
 
   return (
-    <form onSubmit={(e) => { e.preventDefault(); handleRegister(); }}>
+    <form onSubmit={(e) => { e.preventDefault(); handleRequest(); }}>
       <FieldGroup>
         <AuthEmailField value={email} onChange={setEmail} />
-        <AuthPasswordField
-          value={password}
-          onChange={setPassword}
-          autoComplete="new-password"
-        />
-        <AuthPhoneField value={phone} onChange={setPhone} />
         {msg && (isError ? (
           <FieldError>{msg}</FieldError>
         ) : (
@@ -72,9 +58,9 @@ export default function RegisterForm({ next }: RegisterFormProps) {
             <AlertDescription>{msg}</AlertDescription>
           </Alert>
         ))}
-        <AuthSubmitButton pending={loading} label="Sign Up" pendingLabel="Creating account…" />
+        <AuthSubmitButton pending={loading} label="Send Reset Link" pendingLabel="Sending…" />
         <AuthAltLink
-          prompt="Already have an account?"
+          prompt="Remember your password?"
           linkText="Sign in"
           to="/login"
           next={next}

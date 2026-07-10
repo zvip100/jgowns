@@ -9,11 +9,13 @@ export const metadata: Metadata = {
     'Create a free Jgowns account to list and sell your modest gowns.',
 };
 
+type RegisterPageProps = {
+  searchParams: Promise<{ next?: string }>;
+};
+
 export default function RegisterPage({
   searchParams,
-}: {
-  searchParams: Promise<{ next?: string }>;
-}) {
+}: RegisterPageProps) {
   return (
     <AuthScreen
       title="Create Account"

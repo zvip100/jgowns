@@ -48,6 +48,12 @@ export default function LoginForm({ next }: LoginFormProps) {
           onChange={setPassword}
           autoComplete="current-password"
         />
+        <AuthAltLink
+          prompt="Forgot your password?"
+          linkText="Reset it"
+          to="/forgot-password"
+          next={next}
+        />
         {error && <FieldError>{error}</FieldError>}
         <AuthSubmitButton pending={loading} label="Sign In" pendingLabel="Signing in…" />
         <AuthAltLink

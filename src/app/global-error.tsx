@@ -2,13 +2,15 @@
 
 import { useEffect } from 'react'
 
+type GlobalErrorProps = {
+  error: Error & { digest?: string }
+  unstable_retry: () => void
+}
+
 export default function GlobalError({
   error,
   unstable_retry,
-}: {
-  error: Error & { digest?: string }
-  unstable_retry: () => void
-}) {
+}: GlobalErrorProps) {
   useEffect(() => {
     console.error(error)
   }, [error])

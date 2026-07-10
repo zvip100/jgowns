@@ -27,13 +27,15 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { FieldError, FieldGroup } from '@/components/ui/field';
 
+type ListingFormProps = {
+  initial?: Partial<ListingFormData>;
+  listingId?: string;
+};
+
 export default function ListingForm({
   initial,
   listingId,
-}: {
-  initial?: Partial<ListingFormData>;
-  listingId?: string;
-}) {
+}: ListingFormProps) {
   const { slots, onFileSelected, onClear, resolveUploadFile } =
     useListingImageSlots({
       initialUrls: initial?.image_urls ?? [],
