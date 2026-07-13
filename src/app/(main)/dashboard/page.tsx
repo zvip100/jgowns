@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Suspense } from 'react';
-import { Plus, Sparkles } from 'lucide-react';
+import { PackageOpen, Plus, Sparkles } from 'lucide-react';
 
 import { createClient } from '@/lib/supabase/server';
 import { Button } from '@/components/ui/button';
@@ -63,7 +63,9 @@ async function DashboardContent({
       ) : (
         <Empty className="surface-panel hairline rounded-[1.8rem] py-16 sm:py-20">
           <EmptyHeader>
-            <EmptyMedia className="text-5xl">👗</EmptyMedia>
+            <EmptyMedia>
+              <PackageOpen className="size-12 text-(--accent-deep)" strokeWidth={1.5} aria-hidden />
+            </EmptyMedia>
             <EmptyTitle className="font-display text-xl text-(--ink)">
               Your wardrobe is empty
             </EmptyTitle>

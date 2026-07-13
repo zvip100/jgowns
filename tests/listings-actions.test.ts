@@ -35,16 +35,25 @@ function makeSupabase(
   sizesResult: UpdateResult = { data: [{ id: SIZE_ID }], error: null },
   rpcResult: { error: null | { message: string } } = { error: null },
   listingsResult: UpdateResult = { data: [{ id: LISTING_ID }], error: null },
+  listingStatusResult: {
+    data: { status: string } | null;
+    error: null | { message: string };
+  } = { data: { status: "active" }, error: null },
 ) {
   const sizesChain = {
     update: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
     select: vi.fn().mockResolvedValue(sizesResult),
   };
+  // Thenable so removeListing's terminal `.select("id")` resolves the update
+  // result, while reactivateSize's `.select("status").eq().maybeSingle()`
+  // resolves the parent-status read.
   const listingsChain = {
     update: vi.fn().mockReturnThis(),
+    select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
-    select: vi.fn().mockResolvedValue(listingsResult),
+    maybeSingle: vi.fn().mockResolvedValue(listingStatusResult),
+    then: (resolve: (value: UpdateResult) => unknown) => resolve(listingsResult),
   };
   const rpc = vi.fn().mockResolvedValue(rpcResult);
 
@@ -290,6 +299,10 @@ describe("reactivateSize", () => {
     const result = await reactivateSize(LISTING_ID, SIZE_ID);
 
     expect(result).toEqual({});
+    expect(supabase._listingsChain.select).toHaveBeenCalledWith("status");
+    expect(supabase._listingsChain.eq).toHaveBeenCalledWith("id", LISTING_ID);
+    expect(supabase._listingsChain.eq).toHaveBeenCalledWith("user_id", "user-1");
+    expect(supabase._listingsChain.maybeSingle).toHaveBeenCalled();
     expect(supabase._sizesChain.update).toHaveBeenCalledWith({
       status: "available",
     });
@@ -322,7 +335,7 @@ describe("reactivateSize", () => {
     expect(mockUpdateTag).not.toHaveBeenCalled();
   });
 
-  it("returns 'Size not found' when no row matches (wrong owner or id)", async () => {
+  it("returns 'Size not found' when the size row does not match", async () => {
     const supabase = makeSupabase({ data: [], error: null });
     mockGetAuthClient.mockResolvedValue({
       ok: true,
@@ -332,6 +345,42 @@ describe("reactivateSize", () => {
 
     const result = await reactivateSize(LISTING_ID, SIZE_ID);
     expect(result).toEqual({ error: "Size not found" });
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("returns 'Listing not found' when the parent listing is missing or not owned", async () => {
+    const supabase = makeSupabase(undefined, undefined, undefined, {
+      data: null,
+      error: null,
+    });
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+
+    const result = await reactivateSize(LISTING_ID, SIZE_ID);
+    expect(result).toEqual({ error: "Listing not found" });
+    expect(supabase._sizesChain.update).not.toHaveBeenCalled();
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("refuses to reactivate a size while the parent listing is not active", async () => {
+    const supabase = makeSupabase(undefined, undefined, undefined, {
+      data: { status: "sold" },
+      error: null,
+    });
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+
+    const result = await reactivateSize(LISTING_ID, SIZE_ID);
+    expect(result).toEqual({
+      error: "Reactivate the listing before changing its sizes",
+    });
+    expect(supabase._sizesChain.update).not.toHaveBeenCalled();
     expect(mockUpdateTag).not.toHaveBeenCalled();
   });
 });

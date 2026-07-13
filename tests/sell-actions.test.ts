@@ -128,9 +128,14 @@ function makeUpdateSupabase(
   existingImageUrls: string[],
   updateCapture: UpdateCapture,
   updateResult: { error: null | { message: string } } = { error: null },
+  existingStatus: string = "active",
 ) {
   const maybeSingle = vi.fn().mockResolvedValue({
-    data: { user_id: "user-123", image_urls: existingImageUrls },
+    data: {
+      user_id: "user-123",
+      image_urls: existingImageUrls,
+      status: existingStatus,
+    },
     error: null,
   });
 
@@ -779,5 +784,56 @@ describe("updateListing", () => {
       { size: "8", size_group: "adult", price: 800, sort_order: 0 },
     ]);
     expect(mockUpdateTag).toHaveBeenCalledWith("listings");
+  });
+
+  it("rejects an edit to a sold listing without touching the RPC", async () => {
+    const capture: UpdateCapture = { payload: {} };
+    const supabase = makeUpdateSupabase(
+      [OLD_URL_0],
+      capture,
+      { error: null },
+      "sold",
+    );
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase,
+    });
+
+    const fd = baseFormData();
+    fd.set("existing_url_0", OLD_URL_0);
+    fd.set("blur_0", makeBlur("blur0"));
+
+    const result = await updateListing(LISTING_ID, fd);
+
+    expect(result).toEqual({ error: "Only active listings can be edited." });
+    expect(supabase._rpc).not.toHaveBeenCalled();
+    expect(mockUpload).not.toHaveBeenCalled();
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("rejects an edit to a removed listing without touching the RPC", async () => {
+    const capture: UpdateCapture = { payload: {} };
+    const supabase = makeUpdateSupabase(
+      [OLD_URL_0],
+      capture,
+      { error: null },
+      "removed",
+    );
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase,
+    });
+
+    const fd = baseFormData();
+    fd.set("existing_url_0", OLD_URL_0);
+    fd.set("blur_0", makeBlur("blur0"));
+
+    const result = await updateListing(LISTING_ID, fd);
+
+    expect(result).toEqual({ error: "Only active listings can be edited." });
+    expect(supabase._rpc).not.toHaveBeenCalled();
+    expect(mockUpdateTag).not.toHaveBeenCalled();
   });
 });

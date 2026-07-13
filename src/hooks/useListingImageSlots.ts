@@ -10,9 +10,11 @@ type UseListingImageSlotsOptions = {
   initialBlurUrls?: string[];
 };
 
-function emptySlot(): ImageSlotState {
+// Initial slots need deterministic ids: render-time crypto.randomUUID() marks the
+// page dynamic under Cache Components (blank prerender shell) and mismatches on hydration.
+function emptySlot(id: string): ImageSlotState {
   return {
-    id: crypto.randomUUID(),
+    id,
     preview: null,
     imageFile: null,
     optimizedDataUrl: null,
@@ -29,13 +31,13 @@ export function useListingImageSlots({
 }: UseListingImageSlotsOptions = {}) {
   const [slots, setSlots] = useState<ImageSlotState[]>(() => {
     const initial: ImageSlotState[] = initialUrls.map((url, i) => ({
-      ...emptySlot(),
+      ...emptySlot(`slot-${i}`),
       preview: url,
       existingUrl: url,
       blurPromise: Promise.resolve(initialBlurUrls[i] ?? null),
     }));
     while (initial.length < MAX_LISTING_IMAGES) {
-      initial.push(emptySlot());
+      initial.push(emptySlot(`slot-${initial.length}`));
     }
     return initial;
   });
@@ -120,7 +122,8 @@ export function useListingImageSlots({
 
     setSlots((prev) => {
       const next = prev.filter((_, i) => i !== index);
-      while (next.length < MAX_LISTING_IMAGES) next.push(emptySlot());
+      while (next.length < MAX_LISTING_IMAGES)
+        next.push(emptySlot(crypto.randomUUID()));
       return next;
     });
   };
