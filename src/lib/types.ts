@@ -11,14 +11,23 @@ export type Listing = {
   bundle_price: number | null;
   image_urls: string[];
   image_blur_data_urls: string[];
-  contact_email: string;
+  contact_email: string | null;
   contact_phone: string | null;
+  contact_methods: ContactMethod[];
   status: 'active' | 'sold' | 'removed';
   created_at: string;
 };
 
 export const SELL_MODES = ['individual', 'set_only', 'either'] as const;
 export type SellMode = (typeof SELL_MODES)[number];
+
+/** How a buyer may reach the seller on the listing's phone number. */
+export const CONTACT_METHODS = ['call', 'text'] as const;
+export type ContactMethod = (typeof CONTACT_METHODS)[number];
+export const CONTACT_METHOD_LABELS: Record<ContactMethod, string> = {
+  call: 'Call',
+  text: 'Text',
+};
 
 /** One physical gown (size variant) belonging to a listing. */
 export type ListingSize = {

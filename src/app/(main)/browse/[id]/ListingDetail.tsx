@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ChevronLeft, Mail, Phone } from "lucide-react";
+import { ChevronLeft } from "lucide-react";
 
 import {
   formatPrice,
@@ -11,6 +11,7 @@ import {
 import { GOWN_CATEGORIES } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+import { ContactPanel } from "./ContactPanel";
 import { ImageViewer } from "./ImageViewer";
 
 import type { ListingWithSizes } from "@/lib/types";
@@ -213,41 +214,12 @@ export function ListingDetail({
 
           <div className='soft-divider my-5' />
 
-          <div className='surface-panel hairline flex flex-col gap-3 rounded-2xl p-5'>
-            <p className='text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#8a7462]'>
-              {sold ? 'No longer available' : 'Contact the Seller'}
-            </p>
-            <a
-              href={sold ? undefined : `mailto:${listing.contact_email}`}
-              aria-disabled={sold || undefined}
-              tabIndex={sold ? -1 : undefined}
-              aria-label='Email the seller'
-              className={cn(
-                'flex w-full items-center justify-center gap-2 rounded-full border border-[#b58d5f]/70 gold-gradient py-3 text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)]',
-                sold
-                  ? 'pointer-events-none opacity-40 grayscale'
-                  : 'hover:-translate-y-0.5 hover:brightness-105',
-              )}
-            >
-              <Mail data-icon='inline-start' className='size-3.5 shrink-0' />
-              Email Seller
-            </a>
-            {listing.contact_phone && (
-              <a
-                href={sold ? undefined : `tel:${listing.contact_phone}`}
-                aria-disabled={sold || undefined}
-                tabIndex={sold ? -1 : undefined}
-                aria-label='Call the seller'
-                className={cn(
-                  'flex w-full items-center justify-center gap-2 rounded-full border border-[#d4c2ad] bg-white/70 py-3 text-xs font-semibold uppercase tracking-[0.12em] text-[#5a4738]',
-                  sold ? 'pointer-events-none opacity-40 grayscale' : 'hover:bg-white',
-                )}
-              >
-                <Phone data-icon='inline-start' className='size-3.5 shrink-0' />
-                Call Seller
-              </a>
-            )}
-          </div>
+          <ContactPanel
+            contactEmail={listing.contact_email}
+            contactPhone={listing.contact_phone}
+            contactMethods={listing.contact_methods}
+            sold={sold}
+          />
         </div>
       </div>
     </div>

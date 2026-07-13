@@ -2,6 +2,8 @@
 
 import { CircleDollarSign, Mail, Phone } from 'lucide-react';
 import {
+  CONTACT_METHODS,
+  CONTACT_METHOD_LABELS,
   GOWN_CATEGORIES,
   GOWN_COLORS,
   GOWN_CONDITIONS,
@@ -11,6 +13,7 @@ import {
 } from '@/lib/types';
 import { ListingPhotoField } from '@/components/ListingPhotoField';
 import { ListingSizesField } from '@/components/ListingSizesField';
+import { FORM_LABEL_CLASS } from '@/components/form/constants';
 import { FormFieldGrid } from '@/components/form/FormFieldGrid';
 import { FormSection } from '@/components/form/FormSection';
 import { InputGroupField } from '@/components/form/InputGroupField';
@@ -22,10 +25,12 @@ import { TextInputField } from '@/components/form/TextInputField';
 import { TextareaField } from '@/components/form/TextareaField';
 import { useListingFormSubmit } from '@/hooks/useListingFormSubmit';
 import { useListingImageSlots } from '@/hooks/useListingImageSlots';
-import { PRIMARY_CTA_CLASS } from '@/lib/styles';
+import { CHECKBOX_GOLD_CLASS, PRIMARY_CTA_CLASS } from '@/lib/styles';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { FieldError, FieldGroup } from '@/components/ui/field';
+import { Label } from '@/components/ui/label';
 
 type ListingFormProps = {
   initial?: Partial<ListingFormData>;
@@ -47,6 +52,8 @@ export default function ListingForm({
     setField,
     setCategory,
     setContactPhone,
+    contactMethods,
+    toggleContactMethod,
     sizesController,
     loading,
     error,
@@ -58,6 +65,8 @@ export default function ListingForm({
     slots,
     resolveUploadFile,
   });
+
+  const hasPhone = Boolean(form.contact_phone?.trim());
 
   return (
     <form
@@ -140,39 +149,64 @@ export default function ListingForm({
 
         <FormSection
           legend="Contact"
-          description="How buyers will reach you about this listing."
+          description="Add at least one way for buyers to reach you."
         >
           <FormFieldGrid>
             <InputGroupField
               id="contact_email"
               label="Email"
-              required
               type="email"
               placeholder="example@gmail.com"
               autoComplete="email"
               value={form.contact_email || ''}
               onChange={(e) => setField('contact_email', e.target.value)}
+              onClear={() => setField('contact_email', '')}
               leading={<Mail />}
             />
-            <InputGroupField
-              id="contact_phone"
-              label="Phone"
-              type="tel"
-              placeholder="(555) 000-0000"
-              autoComplete="tel"
-              value={form.contact_phone || ''}
-              onChange={(e) => setContactPhone(e.target.value)}
-              leading={<Phone />}
-            />
+            <div className="flex flex-col gap-3">
+              <InputGroupField
+                id="contact_phone"
+                label="Phone"
+                type="tel"
+                placeholder="(555) 000-0000"
+                autoComplete="tel"
+                value={form.contact_phone || ''}
+                onChange={(e) => setContactPhone(e.target.value)}
+                onClear={() => setContactPhone('')}
+                leading={<Phone />}
+              />
+              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+                <span className={FORM_LABEL_CLASS}>Buyers can</span>
+                {CONTACT_METHODS.map((method) => (
+                  <div key={method} className="flex items-center gap-2">
+                    <Checkbox
+                      id={`contact-method-${method}`}
+                      checked={contactMethods.includes(method)}
+                      disabled={!hasPhone}
+                      className={CHECKBOX_GOLD_CLASS}
+                      onCheckedChange={(checked) =>
+                        toggleContactMethod(method, checked === true)
+                      }
+                    />
+                    <Label
+                      htmlFor={`contact-method-${method}`}
+                      className="font-normal"
+                    >
+                      {CONTACT_METHOD_LABELS[method]}
+                    </Label>
+                  </div>
+                ))}
+              </div>
+            </div>
           </FormFieldGrid>
         </FormSection>
 
         <Alert className="border-(--line) bg-(--bg-cream)">
           <CircleDollarSign className="text-(--accent-deep)" />
           <AlertTitle className="font-semibold tracking-tight">
-            Listing fee — $9.99 per listing
+            Listing fee — free for a limited time
           </AlertTitle>
-          <AlertDescription>Payment integration coming soon.</AlertDescription>
+          <AlertDescription>This is a limited time offer.</AlertDescription>
         </Alert>
 
         {error && <FieldError>{error}</FieldError>}

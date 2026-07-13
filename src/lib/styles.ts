@@ -1,3 +1,11 @@
 /** Shared gold-gradient primary call-to-action button styling */
 export const PRIMARY_CTA_CLASS =
   "w-full rounded-full border border-[#b58d5f]/70 gold-gradient text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)] hover:-translate-y-0.5 hover:brightness-105";
+
+/**
+ * Overrides the shadcn Checkbox checked fill (default --primary, a dark brown)
+ * with the brand gold gradient. Applied per-instance because the primitive in
+ * src/components/ui must not be edited.
+ */
+export const CHECKBOX_GOLD_CLASS =
+  "data-[state=checked]:gold-gradient data-[state=checked]:border-[#a67841]!";

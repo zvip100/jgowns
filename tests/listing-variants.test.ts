@@ -48,6 +48,7 @@ function makeListing(
     image_blur_data_urls: [],
     contact_email: "a@b.com",
     contact_phone: null,
+    contact_methods: [],
     status: "active",
     created_at: "2026-01-01T00:00:00Z",
     sizes,

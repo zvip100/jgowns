@@ -554,6 +554,112 @@ describe("createListing", () => {
     expect(mockDeleteListingImages).toHaveBeenCalled();
     expect(mockUpdateTag).not.toHaveBeenCalled();
   });
+
+  it("stores a null contact_email when only a phone is provided", async () => {
+    const capture: CreateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture),
+    });
+
+    const fd = baseFormData();
+    fd.set("contact_email", "");
+    fd.set("contact_phone", "5551234567");
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    try { await createListing(fd); } catch { /* redirect */ }
+
+    const payload = capture.payload as Record<string, unknown>;
+    expect(payload.contact_email).toBeNull();
+    expect(payload.contact_phone).toBe("5551234567");
+    expect(mockUpdateTag).toHaveBeenCalledWith("listings");
+  });
+
+  it("rejects when neither an email nor a phone is provided", async () => {
+    const capture: CreateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture),
+    });
+
+    const fd = baseFormData();
+    fd.set("contact_email", "");
+    fd.set("contact_phone", "");
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    const result = await createListing(fd);
+
+    expect(result).toEqual({
+      error: "Add an email or phone number so buyers can reach you.",
+    });
+    expect(mockUpload).not.toHaveBeenCalled();
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("stores the parsed contact_methods on the listing", async () => {
+    const capture: CreateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture),
+    });
+
+    const fd = baseFormData();
+    fd.set("contact_phone", "5551234567");
+    fd.set("contact_methods", JSON.stringify(["call", "text"]));
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    try { await createListing(fd); } catch { /* redirect */ }
+
+    const payload = capture.payload as Record<string, unknown>;
+    expect(payload.contact_methods).toEqual(["call", "text"]);
+  });
+
+  it("defaults contact_methods to an empty array when none are submitted", async () => {
+    const capture: CreateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture),
+    });
+
+    const fd = baseFormData();
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    try { await createListing(fd); } catch { /* redirect */ }
+
+    const payload = capture.payload as Record<string, unknown>;
+    expect(payload.contact_methods).toEqual([]);
+  });
+
+  it("rejects contact_methods without a phone number", async () => {
+    const capture: CreateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture),
+    });
+
+    const fd = baseFormData();
+    fd.set("contact_phone", "");
+    fd.set("contact_methods", JSON.stringify(["call"]));
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    const result = await createListing(fd);
+
+    expect(result).toEqual({
+      error: "Add a phone number to offer call or text.",
+    });
+    expect(mockUpload).not.toHaveBeenCalled();
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
 });
 
 describe("updateListing", () => {
@@ -835,5 +941,26 @@ describe("updateListing", () => {
     expect(result).toEqual({ error: "Only active listings can be edited." });
     expect(supabase._rpc).not.toHaveBeenCalled();
     expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("passes contact_methods through to the atomic RPC payload", async () => {
+    const capture: UpdateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeUpdateSupabase([OLD_URL_0], capture),
+    });
+
+    const fd = baseFormData();
+    fd.set("contact_phone", "5551234567");
+    fd.set("contact_methods", JSON.stringify(["text"]));
+    fd.set("existing_url_0", OLD_URL_0);
+    fd.set("blur_0", makeBlur("blur0"));
+
+    try { await updateListing(LISTING_ID, fd); } catch { /* redirect */ }
+
+    const payload = capture.payload as Record<string, unknown>;
+    expect(payload.contact_methods).toEqual(["text"]);
+    expect(payload.contact_phone).toBe("5551234567");
   });
 });

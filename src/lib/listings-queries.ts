@@ -305,6 +305,7 @@ export async function fetchActiveListingsForSitemap(): Promise<
       .select("id, created_at")
       .eq("status", "active")
       .order("created_at", { ascending: false })
+      .order("id", { ascending: false })
       .range(from, to);
 
     if (error) {
