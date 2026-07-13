@@ -786,22 +786,54 @@ describe("updateListing", () => {
     expect(mockUpdateTag).toHaveBeenCalledWith("listings");
   });
 
-  it("preserves the stored listing status and ignores any submitted status", async () => {
+  it("rejects an edit to a sold listing without touching the RPC", async () => {
     const capture: UpdateCapture = { payload: {} };
+    const supabase = makeUpdateSupabase(
+      [OLD_URL_0],
+      capture,
+      { error: null },
+      "sold",
+    );
     mockGetAuthClient.mockResolvedValue({
       ok: true,
       user: { id: "user-123" },
-      supabase: makeUpdateSupabase([OLD_URL_0], capture, { error: null }, "sold"),
+      supabase,
     });
 
     const fd = baseFormData();
-    fd.set("status", "active"); // a submitted status must not reactivate the listing
     fd.set("existing_url_0", OLD_URL_0);
     fd.set("blur_0", makeBlur("blur0"));
 
-    try { await updateListing(LISTING_ID, fd); } catch { /* redirect */ }
+    const result = await updateListing(LISTING_ID, fd);
 
-    const payload = capture.payload as Record<string, unknown>;
-    expect(payload.status).toBe("sold");
+    expect(result).toEqual({ error: "Only active listings can be edited." });
+    expect(supabase._rpc).not.toHaveBeenCalled();
+    expect(mockUpload).not.toHaveBeenCalled();
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("rejects an edit to a removed listing without touching the RPC", async () => {
+    const capture: UpdateCapture = { payload: {} };
+    const supabase = makeUpdateSupabase(
+      [OLD_URL_0],
+      capture,
+      { error: null },
+      "removed",
+    );
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase,
+    });
+
+    const fd = baseFormData();
+    fd.set("existing_url_0", OLD_URL_0);
+    fd.set("blur_0", makeBlur("blur0"));
+
+    const result = await updateListing(LISTING_ID, fd);
+
+    expect(result).toEqual({ error: "Only active listings can be edited." });
+    expect(supabase._rpc).not.toHaveBeenCalled();
+    expect(mockUpdateTag).not.toHaveBeenCalled();
   });
 });

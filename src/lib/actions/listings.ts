@@ -118,12 +118,13 @@ export async function reactivateSize(
 
   const auth = await getAuthClient();
   if (!auth.ok) return { error: auth.error };
-  const { supabase } = auth;
+  const { supabase, user } = auth;
 
   const { data: listing, error: listingError } = await supabase
     .from("listings")
     .select("status")
     .eq("id", listingId)
+    .eq("user_id", user.id)
     .maybeSingle();
 
   if (listingError) return { error: listingError.message };

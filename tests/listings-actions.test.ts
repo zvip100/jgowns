@@ -299,6 +299,9 @@ describe("reactivateSize", () => {
     const result = await reactivateSize(LISTING_ID, SIZE_ID);
 
     expect(result).toEqual({});
+    expect(supabase._listingsChain.select).toHaveBeenCalledWith("status");
+    expect(supabase._listingsChain.eq).toHaveBeenCalledWith("id", LISTING_ID);
+    expect(supabase._listingsChain.eq).toHaveBeenCalledWith("user_id", "user-1");
     expect(supabase._listingsChain.maybeSingle).toHaveBeenCalled();
     expect(supabase._sizesChain.update).toHaveBeenCalledWith({
       status: "available",
@@ -332,7 +335,7 @@ describe("reactivateSize", () => {
     expect(mockUpdateTag).not.toHaveBeenCalled();
   });
 
-  it("returns 'Size not found' when no row matches (wrong owner or id)", async () => {
+  it("returns 'Size not found' when the size row does not match", async () => {
     const supabase = makeSupabase({ data: [], error: null });
     mockGetAuthClient.mockResolvedValue({
       ok: true,
@@ -345,7 +348,7 @@ describe("reactivateSize", () => {
     expect(mockUpdateTag).not.toHaveBeenCalled();
   });
 
-  it("returns 'Listing not found' when the parent listing is missing", async () => {
+  it("returns 'Listing not found' when the parent listing is missing or not owned", async () => {
     const supabase = makeSupabase(undefined, undefined, undefined, {
       data: null,
       error: null,

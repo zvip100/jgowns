@@ -290,8 +290,7 @@ begin
     image_urls           = array(select jsonb_array_elements_text(p_listing->'image_urls')),
     image_blur_data_urls = array(select jsonb_array_elements_text(p_listing->'image_blur_data_urls')),
     contact_email        = p_listing->>'contact_email',
-    contact_phone        = p_listing->>'contact_phone',
-    status               = p_listing->>'status'
+    contact_phone        = p_listing->>'contact_phone'
   where id = p_listing_id;
 
   -- Remove variants that are no longer submitted.

@@ -376,6 +376,9 @@ export async function updateListing(
   if (existingError) return { error: existingError.message };
   if (!existing) return { error: "Listing not found" };
   if (existing.user_id !== user.id) return { error: "Not authorized" };
+  if (existing.status !== "active") {
+    return { error: "Only active listings can be edited." };
+  }
 
   const oldImageUrls: string[] = existing.image_urls ?? [];
 
@@ -426,13 +429,10 @@ export async function updateListing(
       nextBlurUrls.push(slot.blur);
     }
 
-    // An edit never changes listing status; preserve the stored value so a
-    // submit can't reactivate a sold listing. Status transitions go through
-    // their dedicated actions (markListingSold / reactivateListing).
-    const payload = {
-      ...listingRowPayload(parsed, nextImageUrls, nextBlurUrls),
-      status: existing.status,
-    };
+    // An edit never changes listing status: the RPC no longer writes the status
+    // column, and non-active listings are rejected above. Status transitions go
+    // through their dedicated actions (markListingSold / reactivateListing).
+    const payload = listingRowPayload(parsed, nextImageUrls, nextBlurUrls);
 
     const { error: dbError } = await supabase.rpc(
       "update_listing_with_variants",
