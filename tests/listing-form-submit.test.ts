@@ -86,12 +86,14 @@ const SECOND_URL = "https://example.com/second.webp";
 const BLUR_DATA_URL = "data:image/jpeg;base64,blur";
 
 // useState order in the hook: 0 loading, 1 error, 2 form, 3 sizeRows,
-// 4 sellOnlyAsSet, 5 bundlePrice. useRef order: 0 initialFormRef,
-// 1 initialSizeSnapshotRef, 2 originalImageUrlsRef.
+// 4 sellOnlyAsSet, 5 bundlePrice, 6 contactMethods. useRef order:
+// 0 initialFormRef, 1 initialSizeSnapshotRef, 2 originalImageUrlsRef,
+// 3 initialContactMethodsRef.
 const STATE_FORM = 2;
 const STATE_ROWS = 3;
 const STATE_SELL_ONLY_AS_SET = 4;
 const STATE_BUNDLE_PRICE = 5;
+const STATE_CONTACT_METHODS = 6;
 const REF_INITIAL_FORM = 0;
 const REF_INITIAL_SIZE_SNAPSHOT = 1;
 const REF_ORIGINAL_IMAGE_URLS = 2;
@@ -187,6 +189,14 @@ function formUpdaters(): FormUpdater[] {
 function rowSetterValues(): unknown[] {
   return hookState.setterCalls
     .filter((call) => call.index === STATE_ROWS)
+    .map((call) => call.value);
+}
+
+type ContactMethodsUpdater = (current: string[]) => string[];
+
+function contactMethodsSetterValues(): unknown[] {
+  return hookState.setterCalls
+    .filter((call) => call.index === STATE_CONTACT_METHODS)
     .map((call) => call.value);
 }
 
@@ -391,6 +401,7 @@ describe("useListingFormSubmit", () => {
       expect(formData.get("category")).toBe("bridal");
       expect(formData.get("contact_email")).toBe("seller@example.com");
       expect(formData.get("contact_phone")).toBe("5551112222");
+      expect(formData.get("contact_methods")).toBe("[]");
       expect(formData.get("status")).toBe("active");
       expect(formData.get("existing_url_0")).toBe(EXISTING_URL);
       expect(formData.get("blur_0")).toBe(BLUR_DATA_URL);
@@ -426,6 +437,26 @@ describe("useListingFormSubmit", () => {
       expect(formData.get("color")).toBe("");
       expect(formData.get("contact_email")).toBe("seller@example.com");
       expect(formData.get("contact_phone")).toBe("");
+    });
+
+    it("serializes selected contact methods into FormData", async () => {
+      setValidCreateState({ contact_phone: "5551234567" });
+      hookState.overrides.set(STATE_CONTACT_METHODS, ["call", "text"]);
+
+      const submit = useListingFormSubmit({
+        slots: [makeSlot()],
+        resolveUploadFile: vi.fn(),
+      });
+
+      await submit.handleSubmit();
+
+      const formData = mockCreateListing.mock.calls[0]?.[0];
+      if (!(formData instanceof FormData)) {
+        throw new Error("Expected createListing to receive FormData.");
+      }
+      expect(formData.get("contact_methods")).toBe(
+        JSON.stringify(["call", "text"]),
+      );
     });
 
     it("defaults status to active when the form has no status", async () => {
@@ -552,7 +583,6 @@ describe("useListingFormSubmit", () => {
       ["title is blank", { title: "   " }],
       ["location is empty", { location: "" }],
       ["condition is missing", { condition: undefined }],
-      ["contact_email is blank", { contact_email: "  " }],
       ["category is missing", { category: null }],
       ["category is not a known category", { category: "spacesuit" }],
     ];
@@ -624,6 +654,43 @@ describe("useListingFormSubmit", () => {
         expect(errorSetterValues()).toEqual(["", message]);
       },
     );
+
+    it("rejects when neither an email nor a phone is provided", async () => {
+      setValidCreateState({ contact_email: "  ", contact_phone: "" });
+      const resolveUploadFile = vi.fn();
+
+      const submit = useListingFormSubmit({
+        slots: [makeSlot()],
+        resolveUploadFile,
+      });
+
+      await submit.handleSubmit();
+
+      expect(mockCreateListing).not.toHaveBeenCalled();
+      expect(resolveUploadFile).not.toHaveBeenCalled();
+      expect(errorSetterValues()).toEqual([
+        "",
+        "Add an email or phone number so buyers can reach you.",
+      ]);
+    });
+
+    it("accepts a phone-only form with a blank email", async () => {
+      setValidCreateState({ contact_email: "", contact_phone: "5551234567" });
+
+      const submit = useListingFormSubmit({
+        slots: [makeSlot()],
+        resolveUploadFile: vi.fn(),
+      });
+
+      await submit.handleSubmit();
+
+      const formData = mockCreateListing.mock.calls[0]?.[0];
+      if (!(formData instanceof FormData)) {
+        throw new Error("Expected createListing to receive FormData.");
+      }
+      expect(formData.get("contact_email")).toBe("");
+      expect(formData.get("contact_phone")).toBe("5551234567");
+    });
 
     it("rejects set_only with no set price", async () => {
       setValidCreateState();
@@ -892,6 +959,35 @@ describe("useListingFormSubmit", () => {
       expect(formatted({})).toEqual({ contact_phone: "5551234567" });
       expect(emptied({})).toEqual({ contact_phone: "" });
       expect(letters({})).toEqual({ contact_phone: "" });
+    });
+
+    it("setContactPhone clears contact methods when the phone is emptied", () => {
+      const submit = useListingFormSubmit({
+        slots: [makeSlot()],
+        resolveUploadFile: vi.fn(),
+      });
+
+      submit.setContactPhone("(555) 123-4567");
+      submit.setContactPhone("");
+
+      // Only the empty call clears methods; the digit-bearing call leaves them.
+      expect(contactMethodsSetterValues()).toEqual([[]]);
+    });
+
+    it("toggleContactMethod adds without duplicating and removes a method", () => {
+      const submit = useListingFormSubmit({
+        slots: [makeSlot()],
+        resolveUploadFile: vi.fn(),
+      });
+
+      submit.toggleContactMethod("call", true);
+      submit.toggleContactMethod("text", false);
+
+      const [add, remove] =
+        contactMethodsSetterValues() as ContactMethodsUpdater[];
+      expect(add([])).toEqual(["call"]);
+      expect(add(["call"])).toEqual(["call"]);
+      expect(remove(["call", "text"])).toEqual(["call"]);
     });
   });
 

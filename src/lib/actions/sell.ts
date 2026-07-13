@@ -7,6 +7,7 @@ import { z } from "zod";
 
 import { isValidSizePair, sizeOptionIndex } from "@/lib/gown-sizes";
 import {
+  CONTACT_METHODS,
   GOWN_CATEGORIES,
   MAX_LISTING_IMAGES,
   SELL_MODES,
@@ -41,11 +42,26 @@ const listingInputSchema = z
     sizes: z.array(sizeEntrySchema).min(1),
     sell_mode: z.enum(SELL_MODES).default("individual"),
     bundle_price: z.coerce.number().positive().optional(),
-    contact_email: z.email(),
+    contact_email: z.email().optional(),
     contact_phone: optionalPhoneSchema,
+    contact_methods: z.array(z.enum(CONTACT_METHODS)).default([]),
     status: z.enum(["active", "sold", "removed"]).default("active"),
   })
   .superRefine((data, ctx) => {
+    if (!data.contact_email && !data.contact_phone) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["contact_email"],
+        message: "Add an email or phone number so buyers can reach you.",
+      });
+    }
+    if (data.contact_methods.length > 0 && !data.contact_phone) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["contact_methods"],
+        message: "Add a phone number to offer call or text.",
+      });
+    }
     const seen = new Set<string>();
     for (const [i, entry] of data.sizes.entries()) {
       if (!isValidSizePair(data.category, entry.size_group, entry.size)) {
@@ -153,13 +169,16 @@ function zodListingFormErrorMessage(e: z.ZodError): string {
   if (e.issues.some((issue) => issue.path[0] === "contact_phone")) {
     return "Leave phone blank, or enter a valid phone number.";
   }
+  if (e.issues.some((issue) => issue.path[0] === "contact_email")) {
+    return "Enter a valid email address, or clear the field.";
+  }
   const custom = e.issues.find((issue) => issue.code === "custom");
   if (custom?.message) return custom.message;
   return "Please fill in all required fields.";
 }
 
-/** `sizes` travels as a JSON string; invalid JSON is passed through so zod rejects it. */
-function rawSizesFromFormData(value: FormDataEntryValue | null): unknown {
+/** JSON-encoded form field; invalid JSON is passed through so zod rejects it. */
+function parseJsonFormValue(value: FormDataEntryValue | null): unknown {
   if (typeof value !== "string") return undefined;
   try {
     return JSON.parse(value);
@@ -176,11 +195,12 @@ function rawListingFieldsFromFormData(formData: FormData) {
     location: formData.get("location"),
     condition: formData.get("condition"),
     category: formData.get("category"),
-    sizes: rawSizesFromFormData(formData.get("sizes")),
+    sizes: parseJsonFormValue(formData.get("sizes")),
     sell_mode: strOrUndefined(formData.get("sell_mode")),
     bundle_price: strOrUndefined(formData.get("bundle_price")),
-    contact_email: formData.get("contact_email"),
+    contact_email: strOrUndefined(formData.get("contact_email")),
     contact_phone: strOrUndefined(formData.get("contact_phone")),
+    contact_methods: parseJsonFormValue(formData.get("contact_methods")),
   };
 }
 
@@ -200,8 +220,9 @@ function listingRowPayload(
     bundle_price: parsed.bundle_price ?? null,
     image_urls,
     image_blur_data_urls,
-    contact_email: parsed.contact_email,
+    contact_email: parsed.contact_email ?? null,
     contact_phone: parsed.contact_phone ?? null,
+    contact_methods: parsed.contact_methods,
     status: parsed.status,
   };
 }

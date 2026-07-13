@@ -7,7 +7,7 @@ const { mockGetClaims, mockCreateClient } = vi.hoisted(() => ({
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: mockCreateClient }));
 
-import { getCurrentUser } from "@/lib/queries/auth";
+import { getCurrentUser, getSessionContact } from "@/lib/queries/auth";
 
 beforeEach(() => {
   mockGetClaims.mockReset();
@@ -48,5 +48,57 @@ describe("getCurrentUser", () => {
     });
 
     expect(await getCurrentUser()).toBeNull();
+  });
+});
+
+describe("getSessionContact", () => {
+  it("returns the email and the user_metadata phone", async () => {
+    mockGetClaims.mockResolvedValue({
+      data: {
+        claims: {
+          sub: "u1",
+          email: "a@b.com",
+          user_metadata: { phone: "5551234567" },
+        },
+      },
+      error: null,
+    });
+
+    expect(await getSessionContact()).toEqual({
+      email: "a@b.com",
+      phone: "5551234567",
+    });
+  });
+
+  it("returns a null phone when user_metadata has no phone", async () => {
+    mockGetClaims.mockResolvedValue({
+      data: { claims: { sub: "u1", email: "a@b.com", user_metadata: {} } },
+      error: null,
+    });
+
+    expect(await getSessionContact()).toEqual({
+      email: "a@b.com",
+      phone: null,
+    });
+  });
+
+  it("returns a null phone when the metadata phone is not a string", async () => {
+    mockGetClaims.mockResolvedValue({
+      data: {
+        claims: { sub: "u1", email: "a@b.com", user_metadata: { phone: 42 } },
+      },
+      error: null,
+    });
+
+    expect(await getSessionContact()).toEqual({
+      email: "a@b.com",
+      phone: null,
+    });
+  });
+
+  it("returns null when there is no session", async () => {
+    mockGetClaims.mockResolvedValue({ data: null, error: null });
+
+    expect(await getSessionContact()).toBeNull();
   });
 });

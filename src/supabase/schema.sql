@@ -22,8 +22,9 @@ create table listings (
   bundle_price numeric(10,2),
   image_urls text[] not null,
   image_blur_data_urls text[] not null,
-  contact_email text not null,
+  contact_email text,
   contact_phone text,
+  contact_methods text[] not null default '{}',
   status text default 'active' check (status in ('active', 'sold', 'removed')),
   created_at timestamp with time zone default now(),
   constraint listings_image_arrays_check check (
@@ -33,6 +34,15 @@ create table listings (
   constraint listings_bundle_price_check check (
     bundle_price is null
     or (bundle_price > 0 and sell_mode in ('set_only', 'either'))
+  ),
+  constraint listings_contact_present_check check (
+    contact_email is not null or contact_phone is not null
+  ),
+  constraint listings_contact_methods_values_check check (
+    contact_methods <@ array['call', 'text']::text[]
+  ),
+  constraint listings_contact_methods_need_phone_check check (
+    cardinality(contact_methods) = 0 or contact_phone is not null
   )
 );
 
@@ -290,7 +300,8 @@ begin
     image_urls           = array(select jsonb_array_elements_text(p_listing->'image_urls')),
     image_blur_data_urls = array(select jsonb_array_elements_text(p_listing->'image_blur_data_urls')),
     contact_email        = p_listing->>'contact_email',
-    contact_phone        = p_listing->>'contact_phone'
+    contact_phone        = p_listing->>'contact_phone',
+    contact_methods      = array(select jsonb_array_elements_text(p_listing->'contact_methods'))
   where id = p_listing_id;
 
   -- Remove variants that are no longer submitted.

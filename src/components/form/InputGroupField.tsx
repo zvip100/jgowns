@@ -1,11 +1,13 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { X } from 'lucide-react';
 import { FormField, type FormFieldProps } from '@/components/form/FormField';
 import { FORM_CONTROL_CLASS } from '@/components/form/constants';
 import {
   InputGroup,
   InputGroupAddon,
+  InputGroupButton,
   InputGroupInput,
   InputGroupText,
 } from '@/components/ui/input-group';
@@ -16,6 +18,8 @@ type InputGroupFieldProps = Omit<FormFieldProps, 'children'> &
     id: string;
     leading?: ReactNode;
     groupClassName?: string;
+    /** Renders a trailing clear (✕) button while the field has a value. */
+    onClear?: () => void;
   };
 
 export function InputGroupField({
@@ -29,9 +33,12 @@ export function InputGroupField({
   className,
   leading,
   groupClassName,
+  onClear,
   ...inputProps
 }: InputGroupFieldProps) {
   const showInvalid = invalid || Boolean(error);
+  const showClear =
+    Boolean(onClear) && inputProps.value != null && inputProps.value !== '';
 
   return (
     <FormField
@@ -62,6 +69,20 @@ export function InputGroupField({
           aria-invalid={showInvalid || undefined}
           {...inputProps}
         />
+        {showClear ? (
+          <InputGroupAddon align="inline-end">
+            <InputGroupButton
+              type="button"
+              size="icon-xs"
+              aria-label={`Clear ${label.toLowerCase()}`}
+              tabIndex={-1}
+              disabled={disabled}
+              onClick={onClear}
+            >
+              <X />
+            </InputGroupButton>
+          </InputGroupAddon>
+        ) : null}
       </InputGroup>
     </FormField>
   );

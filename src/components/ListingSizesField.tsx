@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { FieldDescription } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
+import { CHECKBOX_GOLD_CLASS } from '@/lib/styles';
 import { cn } from '@/lib/utils';
 
 import type { ListingSizesController } from '@/hooks/useListingFormSubmit';
@@ -87,6 +88,7 @@ export function ListingSizesField({
               <Checkbox
                 id="sell-only-as-set"
                 checked={sellOnlyAsSet}
+                className={CHECKBOX_GOLD_CLASS}
                 onCheckedChange={(checked) => setSellOnlyAsSet(checked === true)}
               />
               <Label htmlFor="sell-only-as-set" className="font-normal">

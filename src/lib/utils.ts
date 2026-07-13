@@ -11,6 +11,15 @@ export function digitsOnlyPhone(value: string | null | undefined): string {
   return value ? value.replace(/\D/g, "") : "";
 }
 
+/** Formats a 10-digit US number as `(XXX) XXX-XXXX`; returns the input unchanged otherwise. */
+export function formatPhoneDisplay(value: string): string {
+  const digits = digitsOnlyPhone(value);
+  if (digits.length === 10) {
+    return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+  }
+  return value;
+}
+
 /**
  * Optional phone field shared by the auth and listing forms. Blank → undefined; otherwise the
  * value may contain only digits and common formatting (spaces, + ( ) - .), is normalized to a

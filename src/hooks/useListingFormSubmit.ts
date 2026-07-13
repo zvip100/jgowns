@@ -9,6 +9,7 @@ import { digitsOnlyPhone, imageSlotFormKeys } from "@/lib/utils";
 
 import {
   GOWN_CATEGORIES,
+  type ContactMethod,
   type GownCategoryId,
   type ListingFormData,
   type ListingSizeInput,
@@ -18,8 +19,10 @@ import {
   type ImageSlotState,
 } from "@/lib/types";
 
-/** Scalar form fields — size rows and set pricing live in their own state. */
-type ListingScalarFormData = Partial<Omit<ListingFormData, "sizes">>;
+/** Scalar form fields — size rows, set pricing, and contact methods live in their own state. */
+type ListingScalarFormData = Partial<
+  Omit<ListingFormData, "sizes" | "contact_methods">
+>;
 
 export type ListingSizesController = {
   rows: ListingSizeRowState[];
@@ -49,7 +52,8 @@ export function deriveSellMode(
 function buildInitialForm(
   initial?: Partial<ListingFormData>,
 ): ListingScalarFormData {
-  const { sizes: _sizes, ...rest } = initial ?? {};
+  const { sizes: _sizes, contact_methods: _contactMethods, ...rest } =
+    initial ?? {};
   const base: ListingScalarFormData = {
     title: "",
     description: "",
@@ -101,6 +105,11 @@ function sizeStateSnapshot(
     sellOnlyAsSet,
     bundlePrice: bundlePrice.trim(),
   });
+}
+
+/** Order-insensitive equality for the small contact-methods set. */
+function sameMethods(a: ContactMethod[], b: ContactMethod[]): boolean {
+  return a.length === b.length && a.every((m) => b.includes(m));
 }
 
 /** True if any form field differs from the values the form loaded with. */
@@ -157,12 +166,16 @@ export function useListingFormSubmit({
   const [bundlePrice, setBundlePrice] = useState(
     initial?.bundle_price != null ? String(initial.bundle_price) : "",
   );
+  const [contactMethods, setContactMethods] = useState<ContactMethod[]>(
+    initial?.contact_methods ?? [],
+  );
 
   const initialFormRef = useRef(form);
   const initialSizeSnapshotRef = useRef(
     sizeStateSnapshot(sizeRows, sellOnlyAsSet, bundlePrice),
   );
   const originalImageUrlsRef = useRef(initial?.image_urls ?? []);
+  const initialContactMethodsRef = useRef(contactMethods);
 
   const setField = useCallback(
     (key: keyof ListingScalarFormData, value: string | number) => {
@@ -189,8 +202,24 @@ export function useListingFormSubmit({
   }, []);
 
   const setContactPhone = useCallback((value: string) => {
-    setForm((f) => ({ ...f, contact_phone: digitsOnlyPhone(value) }));
+    const digits = digitsOnlyPhone(value);
+    setForm((f) => ({ ...f, contact_phone: digits }));
+    // A contact method only makes sense with a phone number to act on.
+    if (!digits) setContactMethods([]);
   }, []);
+
+  const toggleContactMethod = useCallback(
+    (method: ContactMethod, checked: boolean) => {
+      setContactMethods((prev) =>
+        checked
+          ? prev.includes(method)
+            ? prev
+            : [...prev, method]
+          : prev.filter((m) => m !== method),
+      );
+    },
+    [],
+  );
 
   const updateRow = useCallback(
     (key: string, patch: Partial<Omit<ListingSizeRowState, "key">>) => {
@@ -245,6 +274,7 @@ export function useListingFormSubmit({
       !listingFormChanged(form, initialFormRef.current) &&
       sizeStateSnapshot(sizeRows, sellOnlyAsSet, bundlePrice) ===
         initialSizeSnapshotRef.current &&
+      sameMethods(contactMethods, initialContactMethodsRef.current) &&
       !listingImagesChanged(slots, originalImageUrlsRef.current)
     ) {
       router.push("/dashboard");
@@ -258,11 +288,16 @@ export function useListingFormSubmit({
         !form.title?.trim() ||
         !form.location ||
         !form.condition ||
-        !form.contact_email?.trim() ||
         !form.category ||
         !GOWN_CATEGORIES.some((c) => c.id === form.category)
       ) {
         throw new Error("Please fill in all required fields.");
+      }
+
+      if (!form.contact_email?.trim() && !form.contact_phone?.trim()) {
+        throw new Error(
+          "Add an email or phone number so buyers can reach you.",
+        );
       }
 
       const seenSizes = new Set<string>();
@@ -338,8 +373,9 @@ export function useListingFormSubmit({
         "bundle_price",
         sellMode === "individual" || bundle == null ? "" : String(bundle),
       );
-      formData.set("contact_email", form.contact_email.trim());
+      formData.set("contact_email", form.contact_email?.trim() || "");
       formData.set("contact_phone", form.contact_phone?.trim() || "");
+      formData.set("contact_methods", JSON.stringify(contactMethods));
       formData.set("status", String(form.status ?? "active"));
 
       const slotPayloads = await Promise.all(
@@ -379,6 +415,7 @@ export function useListingFormSubmit({
     sizeRows,
     sellOnlyAsSet,
     bundlePrice,
+    contactMethods,
     slots,
     resolveUploadFile,
     router,
@@ -389,6 +426,8 @@ export function useListingFormSubmit({
     setField,
     setCategory,
     setContactPhone,
+    contactMethods,
+    toggleContactMethod,
     sizesController,
     loading,
     error,

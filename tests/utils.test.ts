@@ -4,6 +4,7 @@ import {
   cn,
   digitsOnlyPhone,
   firstParam,
+  formatPhoneDisplay,
   optionalPhoneSchema,
 } from "@/lib/utils";
 
@@ -64,6 +65,22 @@ describe("utils", () => {
       expect(digitsOnlyPhone("")).toBe("");
       expect(digitsOnlyPhone(null)).toBe("");
       expect(digitsOnlyPhone(undefined)).toBe("");
+    });
+  });
+
+  describe("formatPhoneDisplay", () => {
+    it("formats a 10-digit number as (XXX) XXX-XXXX", () => {
+      expect(formatPhoneDisplay("5551234567")).toBe("(555) 123-4567");
+    });
+
+    it("strips formatting before formatting a 10-digit number", () => {
+      expect(formatPhoneDisplay("555.123.4567")).toBe("(555) 123-4567");
+    });
+
+    it("returns the input unchanged when it is not 10 digits", () => {
+      expect(formatPhoneDisplay("+1 (555) 123-4567")).toBe("+1 (555) 123-4567");
+      expect(formatPhoneDisplay("12345")).toBe("12345");
+      expect(formatPhoneDisplay("")).toBe("");
     });
   });
 
