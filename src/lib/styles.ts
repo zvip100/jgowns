@@ -9,3 +9,7 @@ export const PRIMARY_CTA_CLASS =
  */
 export const CHECKBOX_GOLD_CLASS =
   "data-[state=checked]:gold-gradient data-[state=checked]:border-[#a67841]!";
+
+/** Inline underlined gold text link (legal documents + the contact intro). */
+export const LEGAL_LINK_CLASS =
+  "text-(--accent-deep) underline underline-offset-2 transition-colors hover:text-[#a0733f]";

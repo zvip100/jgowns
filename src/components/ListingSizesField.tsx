@@ -50,8 +50,8 @@ export function ListingSizesField({
             Have this gown in multiple sizes?
           </span>
           <span className="mt-1 block leading-relaxed">
-            Add every size you have. All sizes appear on a single listing —
-            sold individually or as a complete set, your choice.
+            Add every size you have, all sizes appear on a single listing.
+            You can sell individually or as a complete set, your choice.
           </span>
         </FormInfoBanner>
 
@@ -111,7 +111,7 @@ export function ListingSizesField({
               />
               {!sellOnlyAsSet && (
                 <FieldDescription className={cn('mt-3', FORM_HINT_CLASS)}>
-                  Optional — one price for the full set.
+                  Optional: one price for the full set.
                 </FieldDescription>
               )}
             </div>

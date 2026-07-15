@@ -37,7 +37,7 @@ export async function generateMetadata({
   ].filter(Boolean).join(" · ");
 
   const description = listing.description
-    ? `${listing.description.slice(0, 120).trimEnd()} — ${details}`
+    ? `${listing.description.slice(0, 120).trimEnd()}. ${details}`
     : `${listing.title}. ${details}`;
 
   const primaryImage = listing.image_urls[0];
@@ -46,14 +46,14 @@ export async function generateMetadata({
     title: listing.title,
     description,
     openGraph: {
-      title: `${listing.title} — ${price}`,
+      title: `${listing.title}, ${price}`,
       description: details,
       images: primaryImage ? [{ url: primaryImage, alt: listing.title }] : [],
       type: "website",
     },
     twitter: {
       card: "summary_large_image",
-      title: `${listing.title} — ${price}`,
+      title: `${listing.title}, ${price}`,
       description: details,
       images: primaryImage ? [primaryImage] : [],
     },

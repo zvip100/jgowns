@@ -204,7 +204,7 @@ export default function ListingForm({
         <Alert className="border-(--line) bg-(--bg-cream)">
           <CircleDollarSign className="text-(--accent-deep)" />
           <AlertTitle className="font-semibold tracking-tight">
-            Listing fee — free for a limited time
+            Listing fee: free for a limited time
           </AlertTitle>
           <AlertDescription>This is a limited time offer.</AlertDescription>
         </Alert>

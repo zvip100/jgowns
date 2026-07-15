@@ -6,7 +6,7 @@ const { mockCreateClient, mockExchangeCodeForSession } = vi.hoisted(() => ({
   mockExchangeCodeForSession: vi.fn(),
 }));
 
-vi.mock("@/lib/site-url", () => ({
+vi.mock("@/lib/site", () => ({
   SITE_URL: "https://jgowns.test",
 }));
 vi.mock("@/lib/supabase/server", () => ({

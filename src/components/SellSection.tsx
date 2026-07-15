@@ -12,7 +12,7 @@ const steps = [
   {
     n: '02',
     title: 'List',
-    detail: 'Add a few details, set your price — listed until someone falls for it.',
+    detail: 'Add a few details, set your price. Listed until someone falls for it.',
   },
   {
     n: '03',
@@ -39,15 +39,15 @@ export default function SellSection() {
           </p>
           <h2
             id="sell-headline"
-            className="mt-4 font-display text-[2.1rem] leading-[1.05] text-(--ink) sm:text-[2.6rem] lg:text-[3rem]"
+            className="mt-4 text-balance font-display text-[2.1rem] leading-[1.05] text-(--ink) sm:text-[2.6rem] lg:text-[3rem]"
           >
             Worn once.
             <br />
             <span className="italic text-(--accent-deep)">Ready for another.</span>
           </h2>
-          <p className="mt-5 max-w-md text-base leading-relaxed text-(--muted-ink) sm:text-[1.05rem]">
+          <p className="mt-5 max-w-md text-pretty text-base leading-relaxed text-(--muted-ink) sm:text-[1.05rem]">
             Every gown in your closet has another night ahead of it. List it in a
-            few minutes — there&apos;s someone in your community searching for it now.
+            few minutes. There&apos;s someone in your community searching for it now.
           </p>
 
           <div className="mt-7 flex flex-wrap items-center gap-4">

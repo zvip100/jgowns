@@ -10,3 +10,9 @@ function resolveSiteUrl(): string {
 
 /** Canonical origin (no trailing slash), e.g. `https://jgowns.com`. */
 export const SITE_URL = resolveSiteUrl();
+
+/**
+ * Placeholder support address — swap for the real mailbox in one line.
+ * Referenced by the footer, contact page, and legal documents.
+ */
+export const CONTACT_EMAIL = "hello@jgowns.com";

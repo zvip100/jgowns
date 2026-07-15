@@ -90,6 +90,17 @@ create table payment_intents (
   created_at timestamp with time zone default now()
 );
 
+-- Contact form submissions. Write-only from the app: insert is granted to anon
+-- + authenticated (buyers have no accounts), with no select/update/delete
+-- policies — messages are readable only via the Supabase dashboard (and a later
+-- admin inbox).
+create table contact_messages (
+  id uuid primary key default gen_random_uuid(),
+  email text not null,
+  message text not null,
+  created_at timestamp with time zone not null default now()
+);
+
 insert into storage.buckets (id, name, public) values ('gown-images', 'gown-images', true);
 
 alter table listings enable row level security;
@@ -137,6 +148,13 @@ create policy "Sellers can delete own listing sizes" on listing_sizes
       where l.id = listing_id and l.user_id = (select auth.uid())
     )
   );
+
+alter table contact_messages enable row level security;
+
+create policy "Anyone can submit a contact message" on contact_messages
+  for insert
+  to anon, authenticated
+  with check (true);
 
 create policy "Public image access" on storage.objects for select using (bucket_id = 'gown-images');
 create policy "Auth users can upload images" on storage.objects for insert with check (bucket_id = 'gown-images' and auth.role() = 'authenticated');

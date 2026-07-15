@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { DEFAULT_POST_AUTH_PATH, safePostAuthPath } from "@/lib/auth-redirect";
-import { SITE_URL } from "@/lib/site-url";
+import { SITE_URL } from "@/lib/site";
 import { createClient } from "@/lib/supabase/server";
 
 function loginErrorUrl(next: string): string {
