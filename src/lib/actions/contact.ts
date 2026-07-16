@@ -18,9 +18,38 @@ export type ContactActionResult =
   | { success: false; error: string };
 
 /**
- * Capture a contact-form submission into `contact_messages` (write-only table;
- * no email is sent yet — see the footer/contact/legal spec). Works without a
- * session so anonymous buyers can reach us.
+ * Notify us of a new contact message via Formspree. Best-effort: the DB row is
+ * the source of truth, so a Formspree failure is logged but never fails the
+ * submission. Called server-side so the endpoint stays out of the client bundle.
+ */
+async function sendContactNotification(
+  email: string,
+  message: string,
+): Promise<void> {
+  const endpoint = process.env.FORMSPREE_CONTACT_ENDPOINT;
+  if (!endpoint) {
+    console.error("FORMSPREE_CONTACT_ENDPOINT is not set; skipping email.");
+    return;
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({ email, message }),
+    });
+    if (!response.ok) {
+      console.error("Formspree notification failed with status:", response.status);
+    }
+  } catch (error) {
+    console.error("Formspree notification error:", error);
+  }
+}
+
+/**
+ * Capture a contact-form submission into `contact_messages` (write-only table),
+ * then notify us by email via Formspree. Works without a session so anonymous
+ * buyers can reach us.
  *
  * No cache invalidation: nothing in the app reads `contact_messages`, so there
  * is no tag to invalidate.
@@ -62,6 +91,8 @@ export async function submitContactMessage(
       error: "We couldn't send your message. Please try again in a moment.",
     };
   }
+
+  await sendContactNotification(parsed.data.email, parsed.data.message);
 
   return { success: true };
 }

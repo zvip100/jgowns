@@ -74,7 +74,7 @@ export default function ContactForm() {
         {/* Honeypot: hidden from real users; a filled value flags a bot. */}
         <div
           aria-hidden
-          className="absolute left-[-9999px] h-0 w-0 overflow-hidden"
+          className="absolute -left-2499.75 h-0 w-0 overflow-hidden"
         >
           <label htmlFor="company">Company</label>
           <input
