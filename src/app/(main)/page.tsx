@@ -1,12 +1,12 @@
-import { Search } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 
 import heroImage from "@/assets/jgowns-hero.png";
-import SellSection from "@/components/SellSection";
-import { Button } from "@/components/ui/button";
 
+import CategoryMarquee from "./CategoryMarquee";
 import ContactSection from "./ContactSection";
+import SellSection from "./SellSection";
 
 import type { Metadata } from "next";
 
@@ -26,62 +26,58 @@ export const metadata: Metadata = {
 
 export default function HomePage() {
   return (
-    <div className='flex flex-col gap-8 sm:gap-12'>
-    <section className='hero-glow relative isolate overflow-hidden rounded-[2.1rem] border border-[#d4c2ad] shadow-[0_35px_90px_rgba(109,82,47,0.17)] min-h-136 lg:min-h-160'>
-      <Image
-        src={heroImage}
-        alt='Softly lit bridal showroom with floral arrangements'
-        fill
-        priority
-        sizes='(max-width: 768px) 100vw, 1280px'
-        className='object-cover object-center'
-      />
-      <div className='absolute inset-0 bg-[linear-gradient(112deg,rgba(255,251,246,0.78)_0%,rgba(255,251,246,0.47)_34%,rgba(73,52,30,0.18)_100%)]' />
-      <div className='absolute inset-0 bg-[radial-gradient(circle_at_20%_12%,rgba(255,255,255,0.7),transparent_52%)]' />
+    <div className='flex flex-col gap-16 sm:gap-24'>
+      <section className='hero-enter hero-glow relative isolate overflow-hidden rounded-[2.1rem] border border-[#d4c2ad] shadow-[0_35px_90px_rgba(109,82,47,0.17)] min-h-136 lg:min-h-160'>
+        <Image
+          src={heroImage}
+          alt='Softly lit bridal showroom with floral arrangements'
+          fill
+          priority
+          sizes='(max-width: 768px) 100vw, 1280px'
+          className='hero-kenburns object-cover object-center'
+        />
+        <div className='absolute inset-0 bg-[linear-gradient(112deg,rgba(255,251,246,0.92)_0%,rgba(255,251,246,0.6)_34%,rgba(73,52,30,0.18)_100%)]' />
+        <div className='absolute inset-0 bg-[radial-gradient(circle_at_20%_12%,rgba(255,255,255,0.7),transparent_52%)]' />
 
-      <div className='relative flex flex-col justify-center px-6 py-12 sm:px-10 sm:py-16 lg:px-14 lg:py-20'>
-        <div className='surface-panel hairline stagger-rise w-full rounded-2xl p-5 sm:max-w-3xl sm:rounded-[1.7rem] sm:p-9'>
-          <span className='mb-4 inline-flex items-center rounded-full border border-white/75 bg-white/66 px-4 py-1.5 text-[0.66rem] font-semibold uppercase tracking-[0.24em] text-[#6d5949] backdrop-blur-md'>
+        <div className='relative flex flex-col justify-center px-6 py-12 sm:px-10 sm:py-16 lg:px-14 lg:py-20'>
+          <p className='hero-float text-[0.7rem] font-semibold uppercase tracking-[0.24em] text-[#6d5949] [animation-delay:0ms]'>
             The ultimate marketplace for modest gowns.
-          </span>
-          <h1 className='max-w-3xl text-balance text-[2.4rem] text-[#2f241b] sm:text-6xl lg:text-[4.25rem]'>
-            Find the gown that already feels like yours.
+          </p>
+          <h1 className='hero-float mt-5 max-w-3xl text-balance text-[2.6rem] text-[#2f241b] sm:text-6xl lg:text-[4.75rem] [animation-delay:280ms]'>
+            Dream gown, <em className='shimmer-text'>Dreamier</em> price.
           </h1>
-          <p className='mt-5 max-w-2xl text-pretty text-base leading-7 text-[#5d4b3d] sm:text-lg'>
-            Shop gently loved wedding gowns in exceptional condition, speak
-            directly with sellers, and move from discovery to "yes" with calm
-            confidence.
+          <p className='hero-float mt-6 max-w-xl text-pretty text-base leading-7 text-[#5d4b3d] sm:text-lg [animation-delay:640ms]'>
+            Browse gently worn modest gowns from sellers in your community. Find one you love, contact the seller directly, and save hundreds off retail.
+          </p>
+          <p className='hero-float mt-6 hidden text-xs font-semibold italic uppercase tracking-wide text-[#7f6954] sm:block [animation-delay:960ms]'>
+            Every category and size
+            <span aria-hidden className='mx-2.5'>&middot;</span>
+            Direct contact
+            <span aria-hidden className='mx-2.5'>&middot;</span>
+            Like-new quality
           </p>
 
-          <div className='mt-7 hidden flex-wrap gap-3 sm:flex'>
-            <span className='rounded-full border border-[#d7c2a9] bg-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.11em] text-[#7f6954]'>
-              Modest silhouettes
-            </span>
-            <span className='rounded-full border border-[#d7c2a9] bg-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.11em] text-[#7f6954]'>
-              Trusted direct contact
-            </span>
-            <span className='rounded-full border border-[#d7c2a9] bg-white/70 px-4 py-2 text-xs font-semibold uppercase tracking-[0.11em] text-[#7f6954]'>
-              Like-new quality
-            </span>
+          <div className='hero-float mt-16 self-center sm:mt-24 [animation-delay:1240ms]'>
+            <Link
+              href='/browse'
+              prefetch={true}
+              className='group inline-flex flex-col items-center gap-3 text-sm font-semibold uppercase tracking-[0.24em] text-(--accent-deep)'
+            >
+              <span className='inline-flex items-center gap-2.5'>
+                Browse Gowns
+                <ArrowRight className='size-4.5 transition-transform duration-300 group-hover:translate-x-1.5' />
+              </span>
+              <span
+                aria-hidden
+                className='h-px w-14 bg-[#b58d5f] transition-[width] duration-500 group-hover:w-full'
+              />
+            </Link>
           </div>
         </div>
-
-        <div className='stagger-rise mt-7 flex justify-center'>
-          <Button
-            asChild
-            variant='secondary'
-            className='h-11 rounded-full border border-white/60 px-6 text-xs font-semibold uppercase tracking-[0.14em] shadow-[0_12px_28px_rgba(98,72,40,0.10)] backdrop-blur-md transition hover:-translate-y-0.5'
-          >
-            <Link href='/browse' prefetch={true}>
-              <Search data-icon='inline-start' />
-              Browse Gowns
-            </Link>
-          </Button>
-        </div>
-      </div>
-    </section>
-    <SellSection />
-    <ContactSection />
+      </section>
+      <CategoryMarquee />
+      <SellSection />
+      <ContactSection />
     </div>
   );
 }

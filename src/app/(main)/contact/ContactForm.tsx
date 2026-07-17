@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { TextInputField } from "@/components/form/TextInputField";
 import { TextareaField } from "@/components/form/TextareaField";
@@ -10,19 +10,45 @@ import { FieldError, FieldGroup } from "@/components/ui/field";
 import { submitContactMessage } from "@/lib/actions/contact";
 import { PRIMARY_CTA_CLASS } from "@/lib/styles";
 
+import type { SubmitEvent } from "react";
+
+const SUCCESS_RESET_MS = 10_000;
+
 export default function ContactForm() {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState(false);
+  const resetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleSubmit = async (event: React.SubmitEvent<HTMLFormElement>) => {
+  useEffect(() => {
+    setSent(false);
+    setError("");
+
+    return () => {
+      if (resetTimeoutRef.current !== null) {
+        clearTimeout(resetTimeoutRef.current);
+        resetTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     setError("");
     setPending(true);
     try {
-      const result = await submitContactMessage(new FormData(event.currentTarget));
+      const form = event.currentTarget;
+      const result = await submitContactMessage(new FormData(form));
       if (result.success) {
+        form.reset();
         setSent(true);
+        if (resetTimeoutRef.current !== null) {
+          clearTimeout(resetTimeoutRef.current);
+        }
+        resetTimeoutRef.current = setTimeout(() => {
+          resetTimeoutRef.current = null;
+          setSent(false);
+        }, SUCCESS_RESET_MS);
       } else {
         setError(result.error);
       }

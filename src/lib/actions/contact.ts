@@ -32,17 +32,23 @@ async function sendContactNotification(
     return;
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8_000);
+
   try {
     const response = await fetch(endpoint, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ email, message }),
+      signal: controller.signal,
     });
     if (!response.ok) {
       console.error("Formspree notification failed with status:", response.status);
     }
   } catch (error) {
     console.error("Formspree notification error:", error);
+  } finally {
+    clearTimeout(timeoutId);
   }
 }
 
