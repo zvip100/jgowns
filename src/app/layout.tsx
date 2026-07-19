@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Manrope } from "next/font/google";
 
-import { SITE_URL } from "@/lib/site-url";
+import { SITE_URL } from "@/lib/site";
 
 import "./globals.css";
 
@@ -20,7 +20,7 @@ const manrope = Manrope({
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
-    default: "Jgowns — The ultimate marketplace for modest gowns.",
+    default: "The ultimate marketplace for modest gowns.",
     template: "%s | Jgowns",
   },
   description:

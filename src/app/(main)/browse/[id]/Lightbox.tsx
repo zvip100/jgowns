@@ -38,7 +38,7 @@ export function Lightbox({
         aria-describedby={undefined}
         className="flex items-center justify-center h-dvh w-dvw max-w-none sm:max-w-none translate-x-0 translate-y-0 inset-0 rounded-none border-0 p-0 bg-black/80"
       >
-        <DialogTitle className="sr-only">{title} — photo viewer</DialogTitle>
+        <DialogTitle className="sr-only">{title}: photo viewer</DialogTitle>
 
         <DialogClose asChild>
           <button

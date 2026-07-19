@@ -231,6 +231,25 @@
     animation: riseIn 760ms cubic-bezier(0.16, 1, 0.3, 1) both;
   }
 
+  /* Hero load cascade: each line floats in from the left, one after another
+     (sequential via the per-element [animation-delay:*] utilities in the hero
+     markup). Horizontal counterpart to the sections' bottom-up reveals. */
+  .hero-float {
+    animation: heroFloatIn 1120ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes heroFloatIn {
+    from {
+      opacity: 0;
+      transform: translateX(-2.5rem);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
   .hero-glow {
     position: relative;
   }
@@ -315,11 +334,191 @@
     background-size: 300% 100%;
     animation: shimmerWarm 2s ease-in-out infinite;
   }
+
+  /* Hero image: settles inward on load rather than zooming in, which reads
+     calmer against a still photograph. */
+  .hero-kenburns {
+    animation: heroKenBurns 18s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes heroKenBurns {
+    from {
+      transform: scale(1.06);
+    }
+
+    to {
+      transform: scale(1);
+    }
+  }
+
+  /* Hero container: one-time fade-in on load so the whole section eases onto
+     the page instead of popping in (flashing) with the first paint. Opacity
+     only, the hero itself doesn't move; only the words float in over it. */
+  .hero-enter {
+    animation: heroEnter 900ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes heroEnter {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* Scroll reveals driven by IntersectionObserver (ScrollReveal.tsx).
+     Not `animation-timeline: view()`: that silently no-ops in Firefox/Safari.
+     Items stay in normal flow until JS arms the wrapper so no-JS/pre-hydration
+     paints show real content. Transition longhands (not shorthand) leave
+     transition-delay free for per-item stagger utilities. */
+  /* `.reveal-card` is the section panel itself: it hides/reveals as a unit
+     so the empty card frame is never visible before content. Content items
+     follow with a small stagger delay so the panel edge is always visible
+     first. */
+  .reveal-card {
+    transition-property: opacity, transform;
+    transition-duration: 900ms;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .reveal-item {
+    transition-property: opacity, transform;
+    transition-duration: 820ms;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .reveal-rail {
+    transform-origin: top;
+    transition-property: transform;
+    transition-duration: 900ms;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .reveal-divider {
+    transition-property: transform;
+    transition-duration: 820ms;
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  [data-reveal].reveal-card {
+    opacity: 0;
+    transform: translateY(32px);
+  }
+
+  [data-reveal] .reveal-item {
+    opacity: 0;
+    transform: translateY(28px);
+  }
+
+  [data-reveal] .reveal-rail {
+    transform: scaleY(0);
+  }
+
+  [data-reveal] .reveal-divider {
+    transform: scaleX(0);
+  }
+
+  [data-reveal="revealed"].reveal-card {
+    opacity: 1;
+    transform: none;
+  }
+
+  [data-reveal="revealed"] .reveal-item {
+    opacity: 1;
+    transform: none;
+  }
+
+  [data-reveal="revealed"] .reveal-rail {
+    transform: scaleY(1);
+  }
+
+  [data-reveal="revealed"] .reveal-divider {
+    transform: scaleX(1);
+  }
+
+  @keyframes marqueeScroll {
+    to {
+      transform: translateX(-50%);
+    }
+  }
+
+  .marquee-track {
+    /* 90s: translateX(-50%) scrolls two full rows (half of four copies), so
+       90s maintains the same apparent speed as a 45s single-row loop. */
+    animation: marqueeScroll 90s linear infinite;
+  }
+
+  .marquee-shell:hover .marquee-track,
+  .marquee-shell:focus-within .marquee-track {
+    animation-play-state: paused;
+  }
+
+  /* One-time gold sheen sweep. Ends resting on the gradient's solid-gold
+     tail (55%-100% stops), never mid-highlight. */
+  .shimmer-text {
+    /* Italic overhang: background-clip paints gold only inside the background
+       box, so the final glyph's right overhang goes unpainted (invisible).
+       End padding extends the box; the negative margin keeps spacing intact. */
+    padding-inline-end: 0.12em;
+    margin-inline-end: -0.12em;
+    background-image: linear-gradient(100deg,
+        #a67841 0%,
+        #c49a68 20%,
+        rgba(255, 248, 235, 0.95) 40%,
+        #c49a68 55%,
+        #a67841 100%);
+    background-size: 250% 100%;
+    background-position: 0% center;
+    background-clip: text;
+    -webkit-background-clip: text;
+    color: transparent;
+    animation: shimmerSweep 2.4s cubic-bezier(0.16, 1, 0.3, 1) 1400ms both;
+  }
+
+  @keyframes shimmerSweep {
+    from {
+      background-position: 0% center;
+    }
+
+    to {
+      background-position: 100% center;
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .stagger-rise {
     animation: none;
+  }
+
+  .hero-float {
+    animation: none;
+  }
+
+  .hero-enter {
+    animation: none;
+  }
+
+  .hero-kenburns {
+    animation: none;
+  }
+
+  .reveal-card,
+  .reveal-item,
+  .reveal-rail,
+  .reveal-divider {
+    transition: none;
+  }
+
+  .marquee-track {
+    animation: none;
+  }
+
+  .shimmer-text {
+    animation: none;
+    background-position: 100% center;
   }
 }
 

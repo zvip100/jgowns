@@ -43,6 +43,7 @@ No in-app transactions yet. Stripe is planned but **not implemented** — do not
 - **Code review / suggestion evaluation:** Compile all findings into a single list before editing any file. Wait for explicit "apply all" or selective approval. Never auto-apply a finding the moment it is identified.
 - **Search exhaustiveness:** When asked to update "all" occurrences of something, search the full codebase before reporting done. Do not stop at the first match.
 - **User-facing copy** (labels, hints, banners, empty states) is concise, professional, modern e-commerce English for a US audience: direct address, a short bold lead plus at most one supporting sentence, no parenthetical qualifiers or hedging. Example: "Sell as a complete set only" — not "Sell only as a complete set (not individually)".
+- **No em dashes in user-facing copy — ever.** Never use the em dash (—) anywhere on the site: labels, hints, banners, empty states, page and body copy, legal documents (Terms/Privacy), email templates, and metadata `title`/`description`. Rewrite with a period, comma, colon, or parentheses instead. Hyphens in compound words and en dashes in numeric ranges are fine; the ban is specifically the em dash.
 - **Never run `git commit` or `git push`.** The developer commits personally. When asked "to commit," prepare the tree (stage files, split hunks if needed) and suggest message(s) in the `/commit-msg` format — then stop. Never add a `Co-Authored-By` trailer or any other automated trailer to anything in this repo.
 - **Metadata descriptions:** Never write "on JGowns" in metadata `description` fields — the site name already appears in the title template.
 - **`noindex`** applied to a page requires explicit justification. Auth utility pages (login, forgot-password, reset-password) are noindex by default; registration, new-listing, and other discovery pages are indexed — do not noindex them without instruction. When unsure, ask.
@@ -313,3 +314,4 @@ Categories: `decision`, `completed`, `never`.
 - [ ] No edits to `src/components/ui/`?
 - [ ] Repeated Tailwind class strings extracted into a component or utility?
 - [ ] `loading.tsx` / `error.tsx` / `<Suspense>` in place where needed?
+- [ ] No em dashes (—) in any user-facing copy?

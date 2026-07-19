@@ -1,3 +1,4 @@
+import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
 
 type MainLayoutProps = {
@@ -8,17 +9,15 @@ export default function MainLayout({
   children,
 }: MainLayoutProps) {
   return (
-    <>
+    <div className='flex min-h-svh flex-col'>
       <Navbar />
       <main
         id='main-content'
-        className='mx-auto w-full max-w-375 px-4 py-8 sm:px-6 sm:py-10 lg:px-10'
+        className='mx-auto w-full max-w-375 flex-1 px-4 py-8 sm:px-6 sm:py-10 lg:px-10'
       >
         {children}
       </main>
-      <footer className='mx-auto mt-16 w-full max-w-375 px-4 pb-10 text-center text-sm text-[#7f6c5b] sm:px-6 lg:px-10'>
-        © 2026 Jgowns. All rights reserved.
-      </footer>
-    </>
+      <Footer />
+    </div>
   );
 }

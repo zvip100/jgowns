@@ -169,7 +169,11 @@ function zodListingFormErrorMessage(e: z.ZodError): string {
   if (e.issues.some((issue) => issue.path[0] === "contact_phone")) {
     return "Leave phone blank, or enter a valid phone number.";
   }
-  if (e.issues.some((issue) => issue.path[0] === "contact_email")) {
+  if (
+    e.issues.some(
+      (issue) => issue.path[0] === "contact_email" && issue.code !== "custom",
+    )
+  ) {
     return "Enter a valid email address, or clear the field.";
   }
   const custom = e.issues.find((issue) => issue.code === "custom");
