@@ -450,7 +450,8 @@
     animation: marqueeScroll 90s linear infinite;
   }
 
-  .marquee-shell:hover .marquee-track {
+  .marquee-shell:hover .marquee-track,
+  .marquee-shell:focus-within .marquee-track {
     animation-play-state: paused;
   }
 

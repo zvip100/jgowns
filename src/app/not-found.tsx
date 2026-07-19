@@ -18,7 +18,7 @@ export default function NotFound() {
         <div className='w-full max-w-md text-center'>
           <div className='surface-panel hairline stagger-rise rounded-[1.7rem] p-8 sm:p-10'>
             <SearchX className='mx-auto mb-4 size-12 text-[#8a7462]' />
-            <h2 className='text-[1.6rem] text-[#2f241b]'>Page Not Found</h2>
+            <h1 className='text-[1.6rem] text-[#2f241b]'>Page Not Found</h1>
             <p className='mt-2 text-sm text-[#7d6652]'>Could not find the page you were looking for.</p>
             <Link
               href='/browse'

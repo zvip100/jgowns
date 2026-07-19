@@ -2,8 +2,13 @@ const FALLBACK_SITE_URL = "https://jgowns.com";
 
 function resolveSiteUrl(): string {
   try {
-    return new URL(process.env.NEXT_PUBLIC_SITE_URL ?? FALLBACK_SITE_URL).origin;
-  } catch {
+    const url = new URL(process.env.NEXT_PUBLIC_SITE_URL ?? FALLBACK_SITE_URL);
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      throw new Error(`Unsupported protocol: ${url.protocol}`);
+    }
+    return url.origin;
+  } catch (error) {
+    console.error("Invalid NEXT_PUBLIC_SITE_URL, falling back to default:", error);
     return FALLBACK_SITE_URL;
   }
 }

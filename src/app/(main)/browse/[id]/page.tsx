@@ -37,7 +37,7 @@ export async function generateMetadata({
   ].filter(Boolean).join(" · ");
 
   const description = listing.description
-    ? `${listing.description.slice(0, 120).trimEnd()}. ${details}`
+    ? `${listing.description.slice(0, 120).trimEnd().replace(/[.!?]+$/, "")}. ${details}`
     : `${listing.title}. ${details}`;
 
   const primaryImage = listing.image_urls[0];

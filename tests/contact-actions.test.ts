@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { mockInsert, mockFrom, mockCreateClient } = vi.hoisted(() => {
   const mockInsert = vi.fn().mockResolvedValue({ error: null });
@@ -27,6 +27,10 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockInsert.mockResolvedValue({ error: null });
   vi.spyOn(console, "error").mockImplementation(() => {});
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 describe("submitContactMessage", () => {

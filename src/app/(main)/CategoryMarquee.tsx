@@ -12,12 +12,14 @@ const MARQUEE_ITEMS = [
 
 function MarqueeRow({ isHidden }: { isHidden: boolean }) {
   return (
-    <ul className='flex shrink-0 items-center gap-10 pr-10'>
+    <ul
+      aria-hidden={isHidden ? true : undefined}
+      className='flex shrink-0 items-center gap-10 pr-10'
+    >
       {MARQUEE_ITEMS.map((item) => (
         <li key={item.label} className='flex items-center gap-3 whitespace-nowrap'>
           <Link
             href={item.href}
-            aria-hidden={isHidden ? true : undefined}
             tabIndex={isHidden ? -1 : undefined}
             className='font-display text-xl text-(--muted-ink) transition-colors hover:text-(--accent-deep) sm:text-2xl'
           >

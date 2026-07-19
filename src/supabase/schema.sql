@@ -98,7 +98,8 @@ create table contact_messages (
   id uuid primary key default gen_random_uuid(),
   email text not null,
   message text not null,
-  created_at timestamp with time zone not null default now()
+  created_at timestamp with time zone not null default now(),
+  constraint contact_messages_message_length_check check (char_length(message) between 10 and 2000)
 );
 
 insert into storage.buckets (id, name, public) values ('gown-images', 'gown-images', true);

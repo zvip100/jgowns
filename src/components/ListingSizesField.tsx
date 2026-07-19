@@ -50,8 +50,8 @@ export function ListingSizesField({
             Have this gown in multiple sizes?
           </span>
           <span className="mt-1 block leading-relaxed">
-            Add every size you have, all sizes appear on a single listing.
-            You can sell individually or as a complete set, your choice.
+            Add every size you have to one listing, then sell them individually
+            or as a complete set.
           </span>
         </FormInfoBanner>
 

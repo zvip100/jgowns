@@ -79,30 +79,32 @@ export default function SellSection() {
             <p className="reveal-item mb-7 text-[0.66rem] font-semibold uppercase tracking-[0.22em] text-(--muted-ink) [transition-delay:180ms]">
               How it works
             </p>
-            <ol className="relative flex flex-col gap-9 pl-8">
+            <div className="relative">
               <span
                 aria-hidden
                 className="reveal-rail gold-gradient absolute inset-y-0 left-0 w-0.5 [transition-delay:180ms]"
               />
-              {steps.map((s, i) => (
-                <li
-                  key={s.n}
-                  className={`relative flex items-start gap-2 ${STEP_RISE_CLASSES[i]}`}
-                >
-                  <span aria-hidden className={STEP_NUMBER_CLASS}>
-                    {s.n}
-                  </span>
-                  <div className="-ml-6 flex-1 pt-3">
-                    <h3 className="font-display text-xl font-medium text-(--ink) sm:text-2xl">
-                      {s.title}
-                    </h3>
-                    <p className="mt-1.5 text-sm leading-relaxed text-(--muted-ink)">
-                      {s.detail}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ol>
+              <ol className="flex flex-col gap-9 pl-8">
+                {steps.map((s, i) => (
+                  <li
+                    key={s.n}
+                    className={`relative flex items-start gap-2 ${STEP_RISE_CLASSES[i]}`}
+                  >
+                    <span aria-hidden className={STEP_NUMBER_CLASS}>
+                      {s.n}
+                    </span>
+                    <div className="-ml-6 flex-1 pt-3">
+                      <h3 className="font-display text-xl font-medium text-(--ink) sm:text-2xl">
+                        {s.title}
+                      </h3>
+                      <p className="mt-1.5 text-sm leading-relaxed text-(--muted-ink)">
+                        {s.detail}
+                      </p>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
           </div>
         </div>
       </ScrollReveal>
