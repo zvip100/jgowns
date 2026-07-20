@@ -106,7 +106,7 @@ insert into storage.buckets (id, name, public) values ('gown-images', 'gown-imag
 
 alter table listings enable row level security;
 
-create policy "Public can view active listings" on listings for select using (status = 'active');
+create policy "Public can view active listings" on listings for select using (status in ('active', 'sold'));
 create policy "Sellers can view own listings" on listings for select using (auth.uid() = user_id);
 create policy "Sellers can insert listings" on listings for insert with check (auth.uid() = user_id);
 create policy "Sellers can update own listings" on listings for update using (auth.uid() = user_id);
@@ -118,7 +118,7 @@ create policy "Public can view sizes of active listings" on listing_sizes
   for select using (
     exists (
       select 1 from listings l
-      where l.id = listing_id and l.status = 'active'
+      where l.id = listing_id and l.status in ('active', 'sold')
     )
   );
 create policy "Sellers can view own listing sizes" on listing_sizes

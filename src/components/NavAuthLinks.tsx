@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { getCurrentUser } from "@/lib/queries/auth";
 import SignOutButton from "@/components/SignOutButton";
+import { WishlistTrigger } from "@/components/WishlistTrigger";
 
 type NavAuthLinksProps = { variant: "desktop" | "mobile" };
 
@@ -21,6 +22,8 @@ const STYLES = {
 export default async function NavAuthLinks({ variant }: NavAuthLinksProps) {
   const user = await getCurrentUser();
   const styles = STYLES[variant];
+  // Desktop-only: the mobile trigger already sits inline next to the hamburger.
+  const wishlistTrigger = variant === "desktop" ? <WishlistTrigger /> : null;
 
   if (user) {
     return (
@@ -31,6 +34,7 @@ export default async function NavAuthLinks({ variant }: NavAuthLinksProps) {
         <Link href="/dashboard/new" className={styles.cta}>
           + List a Gown
         </Link>
+        {wishlistTrigger}
         <SignOutButton className={styles.signOut} />
       </>
     );
@@ -44,6 +48,7 @@ export default async function NavAuthLinks({ variant }: NavAuthLinksProps) {
       <Link href="/dashboard/new" className={styles.cta}>
         Sell a Gown
       </Link>
+      {wishlistTrigger}
     </>
   );
 }

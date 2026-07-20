@@ -16,6 +16,7 @@ const {
       chain.select = vi.fn().mockReturnValue(chain);
       chain.eq = vi.fn().mockReturnValue(chain);
       chain.neq = vi.fn().mockReturnValue(chain);
+      chain.in = vi.fn().mockReturnValue(chain);
       chain.order = vi.fn().mockReturnValue(chain);
       chain.limit = vi.fn().mockReturnValue(chain);
       chain.range = vi.fn().mockReturnValue(chain);
@@ -59,6 +60,7 @@ describe("fetchListingWithFallback", () => {
     anonMaybeSingle.mockReset();
     sessionMaybeSingle.mockReset();
     (anonChain.eq as ReturnType<typeof vi.fn>).mockClear();
+    (anonChain.in as ReturnType<typeof vi.fn>).mockClear();
     (sessionChain.eq as ReturnType<typeof vi.fn>).mockClear();
     (sessionChain.neq as ReturnType<typeof vi.fn>).mockClear();
   });
@@ -71,7 +73,7 @@ describe("fetchListingWithFallback", () => {
 
     expect(result.listing).toEqual(listing);
     expect(result.error).toBeNull();
-    expect(anonChain.eq).toHaveBeenCalledWith("status", "active");
+    expect(anonChain.in).toHaveBeenCalledWith("status", ["active", "sold"]);
     expect(sessionMaybeSingle).not.toHaveBeenCalled();
   });
 

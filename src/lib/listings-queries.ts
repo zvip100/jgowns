@@ -63,7 +63,7 @@ async function selectListingById(
 
   const visibleQuery =
     logContext === "anon"
-      ? query.eq("status", "active")
+      ? query.in("status", ["active", "sold"])
       : query.neq("status", "removed");
 
   const { data: listing, error } = await visibleQuery.maybeSingle();

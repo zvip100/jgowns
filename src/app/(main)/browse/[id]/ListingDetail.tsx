@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 
 import { ContactPanel } from "./ContactPanel";
 import { ImageViewer } from "./ImageViewer";
+import { WishlistButton } from "./WishlistButton";
 
 import type { ListingWithSizes } from "@/lib/types";
 
@@ -67,9 +68,19 @@ export function ListingDetail({
               {listing.color}
             </span>
           )}
-          <h1 className='text-[1.9rem] text-[#2f241b] sm:text-4xl'>
-            {listing.title}
-          </h1>
+          <div className='flex items-start justify-between gap-3'>
+            <h1 className='text-[1.9rem] text-[#2f241b] sm:text-4xl'>
+              {listing.title}
+            </h1>
+            <WishlistButton
+              listingId={listing.id}
+              title={listing.title}
+              priceLabel={listingPriceSummary(listing)}
+              image={listing.image_urls[0] ?? null}
+              blurDataUrl={listing.image_blur_data_urls[0] ?? null}
+              status={listing.status === 'sold' ? 'sold' : 'active'}
+            />
+          </div>
           <p className='mt-3 font-display text-[2.6rem] leading-none text-[#8a6232]'>
             {listingPriceSummary(listing)}
           </p>

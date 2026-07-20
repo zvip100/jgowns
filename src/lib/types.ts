@@ -146,3 +146,45 @@ export type BrowseFilters = {
 export type ServerActionErrorResult = {
   error?: string;
 };
+
+// --- Buyer wishlist (Phase 1, docs/wishlist-spec.md) ---
+
+export const WISHLIST_STORAGE_KEY = "jgowns:wishlist:v1";
+export const WISHLIST_STORAGE_VERSION = 1;
+export const WISHLIST_MAX_ITEMS = 50;
+
+/** `active`/`sold` come from a live status refresh; `unavailable` = removed or hard-deleted. */
+export type WishlistItemStatus = "active" | "sold" | "unavailable";
+
+/** Display snapshot captured at add time (and self-healed on refresh) so a
+ * sold/removed row can still render without a readable listing row. */
+export type WishlistSnapshot = {
+  title: string;
+  priceLabel: string;
+  image: string | null;
+  blurDataUrl: string | null;
+};
+
+export type WishlistItem = {
+  listingId: string;
+  addedAt: string;
+  status: WishlistItemStatus;
+  snapshot: WishlistSnapshot;
+};
+
+export type WishlistStorageValue = {
+  version: number;
+  items: WishlistItem[];
+};
+
+/** One row of a `GET /api/wishlist/status` response; ids absent from the
+ * response are "no longer available" (removed or hard-deleted). */
+export type WishlistStatusEntry = {
+  id: string;
+  status: "active" | "sold";
+  snapshot: WishlistSnapshot;
+};
+
+export type WishlistStatusResponse = {
+  items: WishlistStatusEntry[];
+};
