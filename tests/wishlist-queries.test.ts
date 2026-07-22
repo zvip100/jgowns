@@ -1,7 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { anonClient, chainSelect, chainIn, setQueryResult } = vi.hoisted(() => {
+const {
+  anonClient,
+  chainSelect,
+  chainIn,
+  setQueryResult,
+  serverClient,
+  userChainOrder,
+  setUserQueryResult,
+} = vi.hoisted(() => {
   let queryResult: { data: unknown; error: unknown } = { data: [], error: null };
+  let userQueryResult: { data: unknown; error: unknown } = {
+    data: [],
+    error: null,
+  };
 
   const chain: Record<string, unknown> = {};
   chain.select = vi.fn().mockReturnValue(chain);
@@ -11,6 +23,14 @@ const { anonClient, chainSelect, chainIn, setQueryResult } = vi.hoisted(() => {
   chain.then = (resolve: (value: { data: unknown; error: unknown }) => void) =>
     resolve(queryResult);
 
+  // Session-scoped chain for getUserWishlist: from().select().order() → thenable.
+  const userChain: Record<string, unknown> = {};
+  userChain.select = vi.fn().mockReturnValue(userChain);
+  userChain.order = vi.fn().mockReturnValue(userChain);
+  userChain.then = (
+    resolve: (value: { data: unknown; error: unknown }) => void,
+  ) => resolve(userQueryResult);
+
   return {
     anonClient: { from: vi.fn().mockReturnValue(chain) },
     chainSelect: chain.select,
@@ -18,12 +38,20 @@ const { anonClient, chainSelect, chainIn, setQueryResult } = vi.hoisted(() => {
     setQueryResult: (result: { data: unknown; error: unknown }) => {
       queryResult = result;
     },
+    serverClient: { from: vi.fn().mockReturnValue(userChain) },
+    userChainOrder: userChain.order,
+    setUserQueryResult: (result: { data: unknown; error: unknown }) => {
+      userQueryResult = result;
+    },
   };
 });
 
 vi.mock("@/lib/supabase/anon", () => ({ anonClient }));
+vi.mock("@/lib/supabase/server", () => ({
+  createClient: vi.fn().mockResolvedValue(serverClient),
+}));
 
-import { getWishlistStatus } from "@/lib/queries/wishlist";
+import { getUserWishlist, getWishlistStatus } from "@/lib/queries/wishlist";
 
 const ID_ACTIVE = "11111111-1111-1111-1111-111111111111";
 const ID_SOLD = "22222222-2222-2222-2222-222222222222";
@@ -47,7 +75,9 @@ function listingRow(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   (chainSelect as ReturnType<typeof vi.fn>).mockClear();
   (chainIn as ReturnType<typeof vi.fn>).mockClear();
+  (userChainOrder as ReturnType<typeof vi.fn>).mockClear();
   setQueryResult({ data: [], error: null });
+  setUserQueryResult({ data: [], error: null });
 });
 
 describe("getWishlistStatus", () => {
@@ -115,6 +145,102 @@ describe("getWishlistStatus", () => {
     setQueryResult({ data: null, error: null });
 
     const result = await getWishlistStatus([ID_ACTIVE]);
+
+    expect(result).toEqual([]);
+  });
+});
+
+const SNAPSHOT = {
+  title: "Saved Gown",
+  priceLabel: "$300",
+  image: "https://example.com/saved.jpg",
+  blurDataUrl: null,
+};
+
+function wishlistRow(overrides: Record<string, unknown> = {}) {
+  return {
+    listing_id: ID_ACTIVE,
+    created_at: "2026-07-01T00:00:00.000Z",
+    snapshot: SNAPSHOT,
+    listing: listingRow(),
+    ...overrides,
+  };
+}
+
+describe("getUserWishlist", () => {
+  it("maps a joined active listing to live data, newest-first ordered", async () => {
+    setUserQueryResult({ data: [wishlistRow()], error: null });
+
+    const result = await getUserWishlist();
+
+    expect(userChainOrder).toHaveBeenCalledWith("created_at", {
+      ascending: false,
+    });
+    expect(userChainOrder).toHaveBeenCalledWith("listing_id", {
+      ascending: true,
+    });
+    expect(result).toEqual([
+      {
+        listingId: ID_ACTIVE,
+        addedAt: "2026-07-01T00:00:00.000Z",
+        status: "active",
+        snapshot: {
+          title: "Test Gown",
+          priceLabel: "$400",
+          image: "https://example.com/a.jpg",
+          blurDataUrl: "data:image/webp;base64,abc",
+        },
+      },
+    ]);
+  });
+
+  it("marks a sold joined listing as sold", async () => {
+    setUserQueryResult({
+      data: [wishlistRow({ listing: listingRow({ status: "sold" }) })],
+      error: null,
+    });
+
+    const result = await getUserWishlist();
+
+    expect(result[0]?.status).toBe("sold");
+  });
+
+  it("falls back to the stored snapshot when the listing join is null", async () => {
+    setUserQueryResult({
+      data: [wishlistRow({ listing: null })],
+      error: null,
+    });
+
+    const result = await getUserWishlist();
+
+    expect(result).toEqual([
+      {
+        listingId: ID_ACTIVE,
+        addedAt: "2026-07-01T00:00:00.000Z",
+        status: "unavailable",
+        snapshot: SNAPSHOT,
+      },
+    ]);
+  });
+
+  it("throws and logs when the query errors", async () => {
+    const consoleError = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    setUserQueryResult({
+      data: null,
+      error: { message: "boom", details: "", hint: "", code: "PGRST" },
+    });
+
+    await expect(getUserWishlist()).rejects.toThrow("Failed to load user wishlist");
+    expect(consoleError).toHaveBeenCalledOnce();
+    consoleError.mockRestore();
+  });
+
+  it("returns an empty array when data is null without an error", async () => {
+    setUserQueryResult({ data: null, error: null });
+
+    const result = await getUserWishlist();
 
     expect(result).toEqual([]);
   });

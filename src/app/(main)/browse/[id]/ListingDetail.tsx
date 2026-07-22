@@ -79,6 +79,7 @@ export function ListingDetail({
               image={listing.image_urls[0] ?? null}
               blurDataUrl={listing.image_blur_data_urls[0] ?? null}
               status={listing.status === 'sold' ? 'sold' : 'active'}
+              sold={sold}
             />
           </div>
           <p className='mt-3 font-display text-[2.6rem] leading-none text-[#8a6232]'>

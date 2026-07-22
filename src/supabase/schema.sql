@@ -102,6 +102,17 @@ create table contact_messages (
   constraint contact_messages_message_length_check check (char_length(message) between 10 and 2000)
 );
 
+-- Buyer wishlist (Phase 2). First buyer-owned table: composite PK makes
+-- duplicates impossible (union merge = upsert-ignore); `snapshot` denormalizes
+-- the display fields so a sold/removed item still renders on a new device.
+create table wishlist_items (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  listing_id uuid not null references listings(id) on delete cascade,
+  snapshot jsonb not null,
+  created_at timestamp with time zone not null default now(),
+  primary key (user_id, listing_id)
+);
+
 insert into storage.buckets (id, name, public) values ('gown-images', 'gown-images', true);
 
 alter table listings enable row level security;
@@ -156,6 +167,17 @@ create policy "Anyone can submit a contact message" on contact_messages
   for insert
   to anon, authenticated
   with check (true);
+
+alter table wishlist_items enable row level security;
+
+-- Owner-only. No update policy: items are only added and removed. The PK's
+-- leading user_id column already indexes owner lookups, so no extra index.
+create policy "Owners can view own wishlist items" on wishlist_items
+  for select using ((select auth.uid()) = user_id);
+create policy "Owners can insert own wishlist items" on wishlist_items
+  for insert with check ((select auth.uid()) = user_id);
+create policy "Owners can delete own wishlist items" on wishlist_items
+  for delete using ((select auth.uid()) = user_id);
 
 create policy "Public image access" on storage.objects for select using (bucket_id = 'gown-images');
 create policy "Auth users can upload images" on storage.objects for insert with check (bucket_id = 'gown-images' and auth.role() = 'authenticated');
@@ -360,3 +382,22 @@ end;
 $$;
 
 grant execute on function update_listing_with_variants(uuid, jsonb, jsonb) to authenticated;
+
+-- Existence check for wishlist merge-on-sign-in. A buyer's RLS view of listings
+-- only shows active/sold/own rows, so a plain select can't tell a `removed`
+-- listing (keep it) from a hard-deleted one (drop it, or the wishlist_items FK
+-- insert fails). This security-definer read returns the subset of the given ids
+-- that physically exist, regardless of status or RLS, so mergeWishlist keeps
+-- sold/removed items and drops only truly-gone ids. Safe: it only confirms
+-- existence of ids the caller already holds.
+create or replace function existing_listing_ids(p_ids uuid[])
+returns setof uuid
+language sql
+security definer
+set search_path = ''
+stable
+as $$
+  select id from public.listings where id = any (p_ids);
+$$;
+
+grant execute on function existing_listing_ids(uuid[]) to authenticated;

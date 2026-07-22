@@ -1,14 +1,15 @@
+import { Suspense } from "react";
+
 import Footer from "@/components/Footer";
 import Navbar from "@/components/Navbar";
-import { WishlistProvider } from "@/components/WishlistProvider";
+import { WishlistProvider } from "@/components/wishlist/WishlistProvider";
+import WishlistServerSync from "@/components/wishlist/WishlistServerSync";
 
 type MainLayoutProps = {
   children: React.ReactNode;
 };
 
-export default function MainLayout({
-  children,
-}: MainLayoutProps) {
+export default function MainLayout({ children }: MainLayoutProps) {
   return (
     <WishlistProvider>
       <div className='flex min-h-svh flex-col'>
@@ -21,6 +22,9 @@ export default function MainLayout({
         </main>
         <Footer />
       </div>
+      <Suspense fallback={null}>
+        <WishlistServerSync />
+      </Suspense>
     </WishlistProvider>
   );
 }

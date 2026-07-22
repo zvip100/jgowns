@@ -2,7 +2,7 @@
 
 import { Heart } from 'lucide-react';
 
-import { useWishlist } from '@/components/WishlistProvider';
+import { useWishlist } from '@/components/wishlist/WishlistProvider';
 import { WISHLIST_HEART_BUTTON_CLASS, WISHLIST_HEART_UNSAVED_CLASS } from '@/lib/styles';
 import { cn } from '@/lib/utils';
 

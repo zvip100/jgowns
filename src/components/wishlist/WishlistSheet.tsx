@@ -1,11 +1,13 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { Heart, X } from 'lucide-react';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { LEGAL_LINK_CLASS } from '@/lib/styles';
 import {
   Empty,
   EmptyDescription,
@@ -15,11 +17,12 @@ import {
 } from '@/components/ui/empty';
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetTitle,
 } from '@/components/ui/sheet';
-import { useWishlist } from '@/components/WishlistProvider';
+import { useWishlist } from '@/components/wishlist/WishlistProvider';
 import { blurProps, cn } from '@/lib/utils';
 
 import type { WishlistItem, WishlistItemStatus } from '@/lib/types';
@@ -108,27 +111,61 @@ function WishlistRow({ item, onRemove, onNavigate }: WishlistRowProps) {
 }
 
 export function WishlistSheet() {
-  const { items, isOpen, open, close, isHydrated, removeItem } = useWishlist();
+  const { items, isOpen, open, close, isHydrated, isAuthenticated, removeItem } =
+    useWishlist();
+  const [signInHref, setSignInHref] = useState('/login');
+
+  // Build the sign-in link from window (not useSearchParams) so this layout-root
+  // client component never forces the (main) tree into client-side rendering.
+  // Folds `wishlist=open` into `next` so the drawer auto-reopens after login.
+  useEffect(() => {
+    if (!isOpen) return;
+    const params = new URLSearchParams(window.location.search);
+    params.set('wishlist', 'open');
+    const returnPath = `${window.location.pathname}?${params.toString()}`;
+    setSignInHref(`/login?next=${encodeURIComponent(returnPath)}`);
+  }, [isOpen]);
 
   return (
     <Sheet open={isOpen} onOpenChange={(next) => (next ? open() : close())}>
       <SheetContent
         side="right"
-        className="w-full max-w-sm border-[#d9c9b6] bg-[#fdf8f1] px-4 pt-12 pb-4 shadow-[0_24px_70px_rgba(74,52,30,0.22)] sm:max-w-sm"
+        showCloseButton={false}
+        className="w-full max-w-sm border-[#d9c9b6] bg-[#fdf8f1] px-4 pt-5 pb-4 shadow-[0_24px_70px_rgba(74,52,30,0.22)] sm:max-w-sm"
       >
-        <SheetTitle className="text-lg text-[#2f241b]">Wishlist</SheetTitle>
-        <SheetDescription className="sr-only">
-          Gowns you have saved for later.
-        </SheetDescription>
+        <div className={cn('flex flex-col gap-4', isAuthenticated ? 'mb-20' : 'mb-10')}>
+          <div className="flex items-center justify-between gap-2">
+            <SheetTitle className="text-2xl text-[#2f241b]">Wishlist</SheetTitle>
+            <SheetClose asChild>
+              <button
+                type="button"
+                aria-label="Close wishlist"
+                className="inline-flex size-9 shrink-0 items-center justify-center rounded-full border border-[#decdb8] bg-[#fff9f0] text-[#a08a72] transition-colors hover:text-[#8a6232]"
+              >
+                <X className="size-5" aria-hidden="true" />
+              </button>
+            </SheetClose>
+          </div>
+          <SheetDescription className="sr-only">
+            Gowns you have saved for later.
+          </SheetDescription>
 
-        <Alert className="border-[#decdb8] bg-[#fff9f0] text-[#7b634b]">
-          <AlertDescription>
-            <span className="font-semibold text-[#5a4537]">
-              Saved on this device only.
-            </span>{' '}
-            Your wishlist is stored in this browser and may be lost if you clear it.
-          </AlertDescription>
-        </Alert>
+          {!isAuthenticated && (
+            <Alert className="border-[#decdb8] bg-[#fff9f0] text-[#7b634b]">
+              <AlertDescription className="flex flex-col gap-1">
+                <span className="font-semibold text-[#5a4537]">
+                  Saved on this device only.
+                </span>
+                <span>
+                  <Link href={signInHref} onClick={close} className={LEGAL_LINK_CLASS}>
+                    Sign in
+                  </Link>{' '}
+                  to save to your account.
+                </span>
+              </AlertDescription>
+            </Alert>
+          )}
+        </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
           {isHydrated && items.length === 0 && (
@@ -139,7 +176,7 @@ export function WishlistSheet() {
                 </EmptyMedia>
                 <EmptyTitle>Your wishlist is empty</EmptyTitle>
                 <EmptyDescription>
-                  Save gowns you love from any listing page to find them here later.
+                  Save your favorite gowns to easily find them later.
                 </EmptyDescription>
               </EmptyHeader>
             </Empty>

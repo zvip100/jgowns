@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Heart } from 'lucide-react';
 
-import { useWishlist } from '@/components/WishlistProvider';
+import { useWishlist } from '@/components/wishlist/WishlistProvider';
 import {
   WISHLIST_HEART_BUTTON_CLASS,
   WISHLIST_HEART_SAVED_CLASS,
@@ -18,6 +18,7 @@ type WishlistButtonProps = {
   image: string | null;
   blurDataUrl: string | null;
   status: 'active' | 'sold';
+  sold: boolean;
 };
 
 export function WishlistButton({
@@ -27,6 +28,7 @@ export function WishlistButton({
   image,
   blurDataUrl,
   status,
+  sold,
 }: WishlistButtonProps) {
   const { isSaved, toggleItem, isHydrated } = useWishlist();
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +36,11 @@ export function WishlistButton({
   // Before hydration, always render unsaved — localStorage hasn't been read
   // yet, so trusting it here would flash the wrong state.
   const saved = isHydrated && isSaved(listingId);
+
+  // A sold listing can't be newly saved: show the button only to someone who
+  // already saved it, so they can remove it. Removing flips `saved` to false and
+  // the button disappears with no way to re-add.
+  if (sold && !saved) return null;
 
   function handleClick() {
     const result = toggleItem(

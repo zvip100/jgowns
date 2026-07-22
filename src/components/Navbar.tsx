@@ -8,8 +8,8 @@ import {
   MobileMenuProvider,
   MobileMenuTrigger,
 } from "@/components/MobileMenu";
-import { WishlistSheet } from "@/components/WishlistSheet";
-import { WishlistTrigger } from "@/components/WishlistTrigger";
+import { WishlistSheet } from "@/components/wishlist/WishlistSheet";
+import { WishlistTrigger } from "@/components/wishlist/WishlistTrigger";
 
 const DESKTOP_LINK_CLASS =
   "text-[0.9rem] font-semibold tracking-[0.06em] uppercase text-[#6d5a49] hover:text-[#a0733f]";

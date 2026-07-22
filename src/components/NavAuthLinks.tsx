@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { getCurrentUser } from "@/lib/queries/auth";
 import SignOutButton from "@/components/SignOutButton";
-import { WishlistTrigger } from "@/components/WishlistTrigger";
+import { WishlistTrigger } from "@/components/wishlist/WishlistTrigger";
 
 type NavAuthLinksProps = { variant: "desktop" | "mobile" };
 

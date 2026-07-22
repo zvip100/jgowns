@@ -3,6 +3,7 @@ import { WISHLIST_MAX_ITEMS, WISHLIST_STORAGE_VERSION } from "@/lib/types";
 
 import type {
   WishlistItem,
+  WishlistMergeItem,
   WishlistSnapshot,
   WishlistStatusEntry,
   WishlistStorageValue,
@@ -10,6 +11,7 @@ import type {
 
 const EMPTY_STORAGE: WishlistStorageValue = {
   version: WISHLIST_STORAGE_VERSION,
+  ownerId: null,
   items: [],
 };
 
@@ -53,7 +55,11 @@ export function parseWishlistStorage(raw: string | null): WishlistStorageValue {
       console.warn("[wishlist-storage] Discarding malformed wishlist data");
       return EMPTY_STORAGE;
     }
-    return { version: WISHLIST_STORAGE_VERSION, items: parsed.items as WishlistItem[] };
+    return {
+      version: WISHLIST_STORAGE_VERSION,
+      ownerId: typeof parsed.ownerId === "string" ? parsed.ownerId : null,
+      items: parsed.items as WishlistItem[],
+    };
   } catch (error) {
     console.warn("[wishlist-storage] Failed to parse wishlist data", error);
     return EMPTY_STORAGE;
@@ -101,17 +107,72 @@ export function removeWishlistItem(
   return items.filter((item) => item.listingId !== listingId);
 }
 
+/** Strips a wishlist item down to the id + snapshot sent to `mergeWishlist`. */
+export function toWishlistMergePayload(
+  items: WishlistItem[],
+): WishlistMergeItem[] {
+  return items.map(({ listingId, snapshot }) => ({ listingId, snapshot }));
+}
+
+export type WishlistReconcileInput = {
+  isAuthenticated: boolean;
+  /** The id of the user whose session is active, or `null` when signed out /
+   * the server read was unavailable. */
+  currentUserId: string | null;
+  /** The account this local cache currently mirrors (`null` = guest cache). */
+  ownerId: string | null;
+  localItems: WishlistItem[];
+  /** Account wishlist, or `null` when the server read was unavailable. */
+  serverItems: WishlistItem[] | null;
+};
+
 /**
- * Applies a `/api/wishlist/status` refresh: ids present in the response get
- * live status and a self-healed snapshot; ids absent are marked unavailable
- * (removed/deleted) while keeping their last-known snapshot, per the
- * "keep everything" decision.
+ * What the provider should do once both localStorage and the server payload are
+ * known, decided purely from the current session and the cache's `ownerId` (never
+ * device history). Pure so the branching is unit-testable.
+ *
+ * - `keep-local`: signed out, or the server read failed. localStorage stands.
+ * - `merge`: signed in and the cache is this user's (or a guest cache), with
+ *   local items to fold in. Upsert them, then adopt the canonical list.
+ * - `use-server`: signed in with nothing local to merge, OR the cache mirrors a
+ *   different account (discard it wholesale). The account is authoritative.
+ */
+export type WishlistReconcilePlan =
+  | { type: "keep-local" }
+  | { type: "merge"; payload: WishlistMergeItem[] }
+  | { type: "use-server"; items: WishlistItem[] };
+
+export function planWishlistReconcile(
+  input: WishlistReconcileInput,
+): WishlistReconcilePlan {
+  if (!input.isAuthenticated || input.currentUserId === null || input.serverItems === null) {
+    return { type: "keep-local" };
+  }
+  // Guest cache (null owner) or a cache this same user already owns: fold local
+  // items in. A cache owned by a different, known user is discarded wholesale
+  // (falls through to use-server), never partially merged.
+  const isOwnCache =
+    input.ownerId === null || input.ownerId === input.currentUserId;
+  if (isOwnCache && input.localItems.length > 0) {
+    return { type: "merge", payload: toWishlistMergePayload(input.localItems) };
+  }
+  return { type: "use-server", items: input.serverItems };
+}
+
+/**
+ * Applies a `/api/wishlist/status` refresh, scoped to `requestedIds` (the set the
+ * response was computed for): requested ids get live status and a self-healed
+ * snapshot, or `unavailable` if absent (removed/deleted) while keeping their last
+ * snapshot. Items outside the set are left untouched, so a response that resolves
+ * after the list changed can't wrongly mark newer items unavailable.
  */
 export function applyWishlistStatusRefresh(
   items: WishlistItem[],
   statusById: Map<string, WishlistStatusEntry>,
+  requestedIds: ReadonlySet<string>,
 ): WishlistItem[] {
   return items.map((item) => {
+    if (!requestedIds.has(item.listingId)) return item;
     const entry = statusById.get(item.listingId);
     if (!entry) return { ...item, status: "unavailable" };
     return { ...item, status: entry.status, snapshot: entry.snapshot };

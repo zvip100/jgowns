@@ -174,7 +174,18 @@ export type WishlistItem = {
 
 export type WishlistStorageValue = {
   version: number;
+  /** The account this cache mirrors. `null` = a pure guest cache (nobody has
+   * signed in on this device). Set to a user's id once their account list has
+   * been mirrored in; drives the sign-in merge-vs-discard decision. */
+  ownerId: string | null;
   items: WishlistItem[];
+};
+
+/** One local item sent to `mergeWishlist`; `addedAt`/`status` are re-derived
+ * server-side from the account row + live listing, so only these travel. */
+export type WishlistMergeItem = {
+  listingId: string;
+  snapshot: WishlistSnapshot;
 };
 
 /** One row of a `GET /api/wishlist/status` response; ids absent from the

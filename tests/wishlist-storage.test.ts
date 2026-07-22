@@ -4,9 +4,11 @@ import {
   addWishlistItem,
   applyWishlistStatusRefresh,
   parseWishlistStorage,
+  planWishlistReconcile,
   removeWishlistItem,
   serializeWishlistStorage,
   sortWishlistItems,
+  toWishlistMergePayload,
 } from "@/lib/wishlist-storage";
 import { WISHLIST_MAX_ITEMS, WISHLIST_STORAGE_VERSION } from "@/lib/types";
 
@@ -15,6 +17,8 @@ import type { WishlistItem, WishlistStatusEntry } from "@/lib/types";
 const ID_A = "11111111-1111-1111-1111-111111111111";
 const ID_B = "22222222-2222-2222-2222-222222222222";
 const ID_C = "33333333-3333-3333-3333-333333333333";
+const USER_ID = "99999999-9999-9999-9999-999999999999";
+const OTHER_USER_ID = "88888888-8888-8888-8888-888888888888";
 
 function makeItem(
   listingId: string,
@@ -38,6 +42,7 @@ describe("parseWishlistStorage", () => {
   it("returns an empty value for null input", () => {
     expect(parseWishlistStorage(null)).toEqual({
       version: WISHLIST_STORAGE_VERSION,
+      ownerId: null,
       items: [],
     });
   });
@@ -47,7 +52,7 @@ describe("parseWishlistStorage", () => {
 
     const result = parseWishlistStorage("{not json");
 
-    expect(result).toEqual({ version: WISHLIST_STORAGE_VERSION, items: [] });
+    expect(result).toEqual({ version: WISHLIST_STORAGE_VERSION, ownerId: null, items: [] });
     expect(warn).toHaveBeenCalledOnce();
     warn.mockRestore();
   });
@@ -57,7 +62,7 @@ describe("parseWishlistStorage", () => {
 
     const result = parseWishlistStorage(JSON.stringify({ foo: "bar" }));
 
-    expect(result).toEqual({ version: WISHLIST_STORAGE_VERSION, items: [] });
+    expect(result).toEqual({ version: WISHLIST_STORAGE_VERSION, ownerId: null, items: [] });
     warn.mockRestore();
   });
 
@@ -68,7 +73,7 @@ describe("parseWishlistStorage", () => {
       JSON.stringify({ version: 999, items: [] }),
     );
 
-    expect(result).toEqual({ version: WISHLIST_STORAGE_VERSION, items: [] });
+    expect(result).toEqual({ version: WISHLIST_STORAGE_VERSION, ownerId: null, items: [] });
     warn.mockRestore();
   });
 
@@ -105,14 +110,43 @@ describe("parseWishlistStorage", () => {
 
     expect(result).toEqual({
       version: WISHLIST_STORAGE_VERSION,
+      ownerId: null,
       items: [item],
     });
+  });
+
+  it("preserves a stored ownerId", () => {
+    const result = parseWishlistStorage(
+      JSON.stringify({
+        version: WISHLIST_STORAGE_VERSION,
+        ownerId: USER_ID,
+        items: [makeItem(ID_A)],
+      }),
+    );
+
+    expect(result.ownerId).toBe(USER_ID);
+  });
+
+  it("defaults ownerId to null when it is not a string", () => {
+    const result = parseWishlistStorage(
+      JSON.stringify({
+        version: WISHLIST_STORAGE_VERSION,
+        ownerId: 42,
+        items: [makeItem(ID_A)],
+      }),
+    );
+
+    expect(result.ownerId).toBeNull();
   });
 });
 
 describe("serializeWishlistStorage", () => {
   it("round-trips through parseWishlistStorage", () => {
-    const value = { version: WISHLIST_STORAGE_VERSION, items: [makeItem(ID_A)] };
+    const value = {
+      version: WISHLIST_STORAGE_VERSION,
+      ownerId: USER_ID,
+      items: [makeItem(ID_A)],
+    };
 
     const result = parseWishlistStorage(serializeWishlistStorage(value));
 
@@ -206,6 +240,7 @@ describe("applyWishlistStatusRefresh", () => {
     const result = applyWishlistStatusRefresh(
       items,
       new Map([[ID_A, entry]]),
+      new Set([ID_A]),
     );
 
     expect(result).toEqual([
@@ -213,11 +248,108 @@ describe("applyWishlistStatusRefresh", () => {
     ]);
   });
 
-  it("marks ids absent from the response as unavailable, keeping their snapshot", () => {
+  it("marks requested ids absent from the response as unavailable, keeping their snapshot", () => {
     const items = [makeItem(ID_C, { status: "active" })];
 
-    const result = applyWishlistStatusRefresh(items, new Map());
+    const result = applyWishlistStatusRefresh(items, new Map(), new Set([ID_C]));
 
     expect(result).toEqual([{ ...items[0], status: "unavailable" }]);
+  });
+
+  it("leaves items untouched when they weren't part of the request (stale response)", () => {
+    // A response requested for ID_A resolves after ID_B's list swapped in.
+    const items = [makeItem(ID_B, { status: "active" })];
+
+    const result = applyWishlistStatusRefresh(items, new Map(), new Set([ID_A]));
+
+    expect(result).toEqual(items);
+    expect(result[0].status).toBe("active");
+  });
+});
+
+describe("toWishlistMergePayload", () => {
+  it("keeps only listingId + snapshot, dropping addedAt/status", () => {
+    const item = makeItem(ID_A, { status: "sold" });
+
+    expect(toWishlistMergePayload([item])).toEqual([
+      { listingId: ID_A, snapshot: item.snapshot },
+    ]);
+  });
+});
+
+describe("planWishlistReconcile", () => {
+  const local = [makeItem(ID_A)];
+  const server = [makeItem(ID_B)];
+
+  it("keeps local when signed out", () => {
+    expect(
+      planWishlistReconcile({
+        isAuthenticated: false,
+        currentUserId: null,
+        ownerId: USER_ID,
+        localItems: local,
+        serverItems: server,
+      }),
+    ).toEqual({ type: "keep-local" });
+  });
+
+  it("keeps local when the server read is unavailable", () => {
+    expect(
+      planWishlistReconcile({
+        isAuthenticated: true,
+        currentUserId: USER_ID,
+        ownerId: null,
+        localItems: local,
+        serverItems: null,
+      }),
+    ).toEqual({ type: "keep-local" });
+  });
+
+  it("merges a guest (null-owner) cache into the signed-in account", () => {
+    expect(
+      planWishlistReconcile({
+        isAuthenticated: true,
+        currentUserId: USER_ID,
+        ownerId: null,
+        localItems: local,
+        serverItems: server,
+      }),
+    ).toEqual({ type: "merge", payload: toWishlistMergePayload(local) });
+  });
+
+  it("merges when the cache is already owned by the same signing-in user", () => {
+    expect(
+      planWishlistReconcile({
+        isAuthenticated: true,
+        currentUserId: USER_ID,
+        ownerId: USER_ID,
+        localItems: local,
+        serverItems: server,
+      }),
+    ).toEqual({ type: "merge", payload: toWishlistMergePayload(local) });
+  });
+
+  it("discards a cache owned by a different user (adopts the server list)", () => {
+    expect(
+      planWishlistReconcile({
+        isAuthenticated: true,
+        currentUserId: USER_ID,
+        ownerId: OTHER_USER_ID,
+        localItems: local,
+        serverItems: server,
+      }),
+    ).toEqual({ type: "use-server", items: server });
+  });
+
+  it("uses the server list when there is nothing local to merge", () => {
+    expect(
+      planWishlistReconcile({
+        isAuthenticated: true,
+        currentUserId: USER_ID,
+        ownerId: null,
+        localItems: [],
+        serverItems: server,
+      }),
+    ).toEqual({ type: "use-server", items: server });
   });
 });
