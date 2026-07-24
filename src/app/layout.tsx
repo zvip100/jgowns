@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Manrope } from "next/font/google";
 
+import { Toaster } from "@/components/ui/sonner";
 import { SITE_URL } from "@/lib/site";
 
 import "./globals.css";
@@ -44,7 +45,10 @@ export default function RootLayout({
 }: RootLayoutProps) {
   return (
     <html lang='en' className={`${fraunces.variable} ${manrope.variable}`}>
-      <body className='font-body min-h-screen antialiased'>{children}</body>
+      <body className='font-body min-h-screen antialiased'>
+        {children}
+        <Toaster />
+      </body>
     </html>
   );
 }

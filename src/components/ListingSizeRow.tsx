@@ -6,6 +6,7 @@ import { CategorySizeSelect } from '@/components/CategorySizeSelect';
 import { InputGroupField } from '@/components/form/InputGroupField';
 import { Button } from '@/components/ui/button';
 
+import type { SizeRowError } from '@/hooks/useListingFormSubmit';
 import type {
   GownCategoryId,
   ListingSizeRowState,
@@ -21,6 +22,8 @@ type ListingSizeRowProps = {
   canRemove: boolean;
   /** Hidden in set-only mode, where the one set price replaces per-size prices. */
   showPrice: boolean;
+  /** Inline validation for this row's size picker and price input. */
+  error?: SizeRowError;
   onChange: (patch: Partial<Omit<ListingSizeRowState, 'key'>>) => void;
   onRemove: () => void;
 };
@@ -32,11 +35,12 @@ export function ListingSizeRow({
   disabledSizes,
   canRemove,
   showPrice,
+  error,
   onChange,
   onRemove,
 }: ListingSizeRowProps) {
   return (
-    <div className="flex items-end gap-3">
+    <div className="flex items-start gap-3">
       <div className="min-w-0 flex-1">
         <CategorySizeSelect
           id={`size-picker-${index}`}
@@ -44,6 +48,7 @@ export function ListingSizeRow({
           size={row.size}
           sizeGroup={row.size_group}
           disabledSizes={disabledSizes}
+          error={error?.size}
           onChange={({ size, sizeGroup }) =>
             onChange({ size, size_group: sizeGroup })
           }
@@ -60,6 +65,7 @@ export function ListingSizeRow({
             inputMode="decimal"
             placeholder="500"
             value={row.price}
+            error={error?.price}
             onChange={(e) => onChange({ price: e.target.value })}
           />
         </div>
@@ -73,7 +79,7 @@ export function ListingSizeRow({
           aria-label={
             row.size ? `Remove size ${row.size}` : `Remove size row ${index + 1}`
           }
-          className="mb-1 shrink-0 text-(--muted-ink) hover:text-destructive"
+          className="mt-6 shrink-0 text-(--muted-ink) hover:text-destructive"
         >
           <Trash2 />
         </Button>

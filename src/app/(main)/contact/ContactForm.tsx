@@ -1,76 +1,71 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 
 import { TextInputField } from "@/components/form/TextInputField";
 import { TextareaField } from "@/components/form/TextareaField";
-import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { FieldError, FieldGroup } from "@/components/ui/field";
+import { FieldGroup } from "@/components/ui/field";
 import { submitContactMessage } from "@/lib/actions/contact";
+import {
+  contactSchema,
+  type ContactFieldName,
+} from "@/lib/validations/contact-schema";
+import { toast } from "@/lib/toast";
 import { PRIMARY_CTA_CLASS } from "@/lib/styles";
 
 import type { SubmitEvent } from "react";
 
-const SUCCESS_RESET_MS = 10_000;
+type ContactFieldErrors = Partial<Record<ContactFieldName, string>>;
 
 export default function ContactForm() {
   const [pending, setPending] = useState(false);
-  const [error, setError] = useState("");
-  const [sent, setSent] = useState(false);
-  const resetTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  useEffect(() => {
-    setSent(false);
-    setError("");
-
-    return () => {
-      if (resetTimeoutRef.current !== null) {
-        clearTimeout(resetTimeoutRef.current);
-        resetTimeoutRef.current = null;
-      }
-    };
-  }, []);
+  const [errors, setErrors] = useState<ContactFieldErrors>({});
 
   const handleSubmit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
-    setError("");
+    const form = event.currentTarget;
+    const formData = new FormData(form);
+
+    // Field-level validation stays inline; only the submit outcome toasts.
+    const parsed = contactSchema.safeParse({
+      email: formData.get("email") ?? "",
+      message: formData.get("message") ?? "",
+    });
+    
+    if (!parsed.success) {
+      const fieldErrors: ContactFieldErrors = {};
+      for (const issue of parsed.error.issues) {
+        const field = issue.path[0];
+        if (
+          (field === "email" || field === "message") &&
+          !fieldErrors[field]
+        ) {
+          fieldErrors[field] = issue.message;
+        }
+      }
+      setErrors(fieldErrors);
+      return;
+    }
+
+    setErrors({});
     setPending(true);
     try {
-      const form = event.currentTarget;
-      const result = await submitContactMessage(new FormData(form));
+      const result = await submitContactMessage(formData);
       if (result.success) {
         form.reset();
-        setSent(true);
-        if (resetTimeoutRef.current !== null) {
-          clearTimeout(resetTimeoutRef.current);
-        }
-        resetTimeoutRef.current = setTimeout(() => {
-          resetTimeoutRef.current = null;
-          setSent(false);
-        }, SUCCESS_RESET_MS);
+        toast.success("Message sent successfully");
       } else {
-        setError(result.error);
+        toast.error("Failed to send message", { description: result.error });
       }
     } catch {
-      setError("Something went wrong. Please try again.");
+      toast.error("Failed to send message", {
+        description: "Please try again in a moment.",
+      });
     } finally {
       setPending(false);
     }
   };
-
-  if (sent) {
-    return (
-      <Alert
-        className="border-green-200 bg-green-50 text-green-700"
-        role="status"
-      >
-        <AlertDescription className="text-center text-green-700">
-          Thanks, we received your message. We&apos;ll get back to you soon.
-        </AlertDescription>
-      </Alert>
-    );
-  }
 
   return (
     <form
@@ -87,6 +82,7 @@ export default function ContactForm() {
           autoComplete="email"
           required
           placeholder="you@example.com"
+          error={errors.email}
         />
         <TextareaField
           id="message"
@@ -95,6 +91,7 @@ export default function ContactForm() {
           required
           rows={5}
           placeholder="How can we help?"
+          error={errors.message}
         />
 
         {/* Honeypot: hidden from real users; a filled value flags a bot. */}
@@ -111,8 +108,6 @@ export default function ContactForm() {
             autoComplete="off"
           />
         </div>
-
-        {error ? <FieldError>{error}</FieldError> : null}
 
         <Button type="submit" disabled={pending} className={PRIMARY_CTA_CLASS}>
           {pending ? "Sending…" : "Send Message"}

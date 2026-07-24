@@ -33,6 +33,7 @@ export default function ReactivateListingButton({
       ariaLabel="Reactivate listing"
       buttonLabel="Reactivate"
       icon={RotateCcw}
+      successMessage="Listing reactivated"
       triggerClassName="text-(--accent-deep) hover:bg-(--accent-deep)/10 hover:text-(--accent-deep)"
       onConfirm={() => reactivateListing(id)}
     />

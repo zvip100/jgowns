@@ -24,6 +24,7 @@ export default function ReactivateSizeButton({
       pendingLabel="Reactivating..."
       ariaLabel={`Reactivate size ${size}`}
       icon={RotateCcw}
+      successMessage={`Size ${size} reactivated`}
       triggerClassName="inline-flex items-center text-(--accent-deep)/70 transition hover:text-(--accent-deep) disabled:opacity-50"
       triggerStyle="inline-icon"
       onConfirm={() => reactivateSize(listingId, sizeId)}

@@ -477,13 +477,13 @@ describe("updatePassword", () => {
 });
 
 describe("signOut", () => {
-  it("signs out and redirects home", async () => {
+  it("signs out and redirects to browse", async () => {
     mockSignOut.mockResolvedValue({ error: null });
 
     await expect(signOut()).rejects.toThrow("NEXT_REDIRECT");
 
     expect(mockSignOut).toHaveBeenCalled();
     expect(mockRevalidatePath).toHaveBeenCalledWith("/", "layout");
-    expect(mockRedirect).toHaveBeenCalledWith("/");
+    expect(mockRedirect).toHaveBeenCalledWith("/browse");
   });
 });

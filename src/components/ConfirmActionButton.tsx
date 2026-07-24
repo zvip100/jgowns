@@ -17,6 +17,7 @@ type ConfirmActionButtonProps = {
   buttonLabel?: string;
   icon: LucideIcon;
   confirmVariant?: 'default' | 'destructive';
+  successMessage?: string;
   triggerClassName: string;
   triggerStyle?: 'button' | 'inline-icon';
   onConfirm: () => Promise<ServerActionErrorResult>;
@@ -31,6 +32,7 @@ export default function ConfirmActionButton({
   buttonLabel,
   icon: Icon,
   confirmVariant = 'default',
+  successMessage,
   triggerClassName,
   triggerStyle = 'button',
   onConfirm,
@@ -42,6 +44,7 @@ export default function ConfirmActionButton({
       confirmLabel={confirmLabel}
       pendingLabel={pendingLabel}
       confirmVariant={confirmVariant}
+      successMessage={successMessage}
       onConfirm={onConfirm}
       renderTrigger={({ error, isPending }) =>
         triggerStyle === 'inline-icon' ? (

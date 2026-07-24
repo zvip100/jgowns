@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
+  ContactMethod,
   ImageSlotState,
   ListingFormData,
   ListingSizeRowState,
+  SellMode,
 } from "@/lib/types";
 
 type StateSetterCall = {
@@ -17,6 +19,7 @@ const {
   hookState,
   mockCreateListing,
   mockPush,
+  mockToastError,
   mockUnstableRethrow,
   mockUpdateListing,
 } = vi.hoisted(() => ({
@@ -29,6 +32,7 @@ const {
   },
   mockCreateListing: vi.fn(),
   mockPush: vi.fn(),
+  mockToastError: vi.fn(),
   mockUnstableRethrow: vi.fn(),
   mockUpdateListing: vi.fn(),
 }));
@@ -75,9 +79,24 @@ vi.mock("@/lib/actions/sell", () => ({
   updateListing: mockUpdateListing,
 }));
 
+vi.mock("@/lib/toast", () => ({
+  toast: {
+    error: mockToastError,
+    success: vi.fn(),
+    info: vi.fn(),
+    warning: vi.fn(),
+    promise: vi.fn(),
+  },
+}));
+
 import {
+  EMPTY_LISTING_ERRORS,
+  collectListingFieldErrors,
   deriveSellMode,
+  hasListingErrors,
   useListingFormSubmit,
+  validateListingForm,
+  type ListingFormErrors,
 } from "@/hooks/useListingFormSubmit";
 
 const LISTING_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
@@ -85,7 +104,10 @@ const EXISTING_URL = "https://example.com/existing.webp";
 const SECOND_URL = "https://example.com/second.webp";
 const BLUR_DATA_URL = "data:image/jpeg;base64,blur";
 
-// useState order in the hook: 0 loading, 1 error, 2 form, 3 sizeRows,
+const FIX_HIGHLIGHTED = "Please fix the highlighted fields.";
+const MISSING_PHOTO = "Please add at least one gown photo.";
+
+// useState order in the hook: 0 loading, 1 errors, 2 form, 3 sizeRows,
 // 4 sellOnlyAsSet, 5 bundlePrice, 6 contactMethods. useRef order:
 // 0 initialFormRef, 1 initialSizeSnapshotRef, 2 originalImageUrlsRef,
 // 3 initialContactMethodsRef.
@@ -169,10 +191,15 @@ function loadingSetterValues(): unknown[] {
     .map((call) => call.value);
 }
 
-function errorSetterValues(): unknown[] {
+function errorSetterValues(): ListingFormErrors[] {
   return hookState.setterCalls
     .filter((call) => call.index === 1)
-    .map((call) => call.value);
+    .map((call) => call.value as ListingFormErrors);
+}
+
+function lastErrors(): ListingFormErrors {
+  const calls = errorSetterValues();
+  return calls[calls.length - 1];
 }
 
 type FormState = Partial<Omit<ListingFormData, "sizes">>;
@@ -221,6 +248,158 @@ describe("deriveSellMode", () => {
   });
 });
 
+describe("hasListingErrors", () => {
+  it("is false for the empty errors object", () => {
+    expect(hasListingErrors(EMPTY_LISTING_ERRORS)).toBe(false);
+  });
+
+  it("is true when a field, a size, or the general line has an error", () => {
+    expect(
+      hasListingErrors({ fields: { title: "x" }, sizes: [], general: "" }),
+    ).toBe(true);
+    expect(
+      hasListingErrors({ fields: {}, sizes: [{ price: "x" }], general: "" }),
+    ).toBe(true);
+    expect(hasListingErrors({ fields: {}, sizes: [], general: "g" })).toBe(
+      true,
+    );
+  });
+});
+
+describe("collectListingFieldErrors", () => {
+  it("routes issue paths to fields, size rows, and the general line", () => {
+    const errors = collectListingFieldErrors([
+      { path: ["title"], message: "Title bad" },
+      { path: ["sizes", 1, "price"], message: "Price bad" },
+      { path: ["sizes", 0, "size_group"], message: "Size bad" },
+      { path: ["contact_phone"], message: "raw phone message" },
+      { path: ["sell_mode"], message: "Set pricing requires two sizes." },
+    ]);
+
+    expect(errors.fields.title).toBe("Title bad");
+    expect(errors.sizes[1]?.price).toBe("Price bad");
+    expect(errors.sizes[0]?.size).toBe("Size bad");
+    expect(errors.fields.contact_phone).toBe(
+      "Leave phone blank, or enter a valid phone number.",
+    );
+    // Unmapped paths (sell_mode) fall through to the general line.
+    expect(errors.general).toBe("Set pricing requires two sizes.");
+  });
+
+  it("keeps the first message for each slot", () => {
+    const errors = collectListingFieldErrors([
+      { path: ["title"], message: "first" },
+      { path: ["title"], message: "second" },
+      { path: ["sizes", 0, "size"], message: "size first" },
+      { path: ["sizes", 0, "size_group"], message: "size second" },
+    ]);
+
+    expect(errors.fields.title).toBe("first");
+    expect(errors.sizes[0]?.size).toBe("size first");
+  });
+});
+
+describe("validateListingForm", () => {
+  const baseValid = {
+    form: {
+      title: "Valid Gown",
+      location: "Borough Park",
+      condition: "Brand New" as const,
+      category: "bridal" as const,
+      contact_email: "seller@example.com",
+      contact_phone: "",
+      status: "active" as const,
+    },
+    sizeRows: makeValidRows(),
+    sellMode: "individual" as SellMode,
+    bundle: null as number | null,
+    contactMethods: [] as ContactMethod[],
+    hasActivePhoto: true,
+  };
+
+  it("returns no errors for a valid form", () => {
+    expect(hasListingErrors(validateListingForm(baseValid))).toBe(false);
+  });
+
+  it("flags a blank title inline and sets the general line", () => {
+    const errors = validateListingForm({
+      ...baseValid,
+      form: { ...baseValid.form, title: "  " },
+    });
+    expect(errors.fields.title).toBe("Enter a title of at least 4 characters.");
+    expect(errors.general).toBe(FIX_HIGHLIGHTED);
+  });
+
+  it("flags a missing email/phone pair on the email field", () => {
+    const errors = validateListingForm({
+      ...baseValid,
+      form: { ...baseValid.form, contact_email: "", contact_phone: "" },
+    });
+    expect(errors.fields.contact_email).toBe(
+      "Add an email or phone number so buyers can reach you.",
+    );
+  });
+
+  it("maps a missing size to that row", () => {
+    const errors = validateListingForm({
+      ...baseValid,
+      sizeRows: [{ key: "row-0", size: "", size_group: null, price: "800" }],
+    });
+    expect(errors.sizes[0]?.size).toBe("Choose a size for every row.");
+  });
+
+  it("maps a missing per-size price to the right row index", () => {
+    const errors = validateListingForm({
+      ...baseValid,
+      sizeRows: [
+        { key: "row-0", size: "8", size_group: "adult", price: "800" },
+        { key: "row-1", size: "10", size_group: "adult", price: "" },
+      ],
+    });
+    expect(errors.sizes[0]?.price).toBeUndefined();
+    expect(errors.sizes[1]?.price).toBe("Enter a price for every size.");
+  });
+
+  it("puts a missing photo on the general line", () => {
+    const errors = validateListingForm({ ...baseValid, hasActivePhoto: false });
+    expect(errors.general).toBe(MISSING_PHOTO);
+  });
+
+  it("requires the set price in set_only mode", () => {
+    const errors = validateListingForm({
+      ...baseValid,
+      sizeRows: makeTwoRows(),
+      sellMode: "set_only",
+      bundle: null,
+    });
+    expect(errors.fields.bundle_price).toBe(
+      "Enter the price for the complete set.",
+    );
+  });
+
+  it("rejects an either set price that is not a discount", () => {
+    const errors = validateListingForm({
+      ...baseValid,
+      sizeRows: makeTwoRows(),
+      sellMode: "either",
+      bundle: 1650,
+    });
+    expect(errors.fields.bundle_price).toBe(
+      "The price for all sizes together should be less than the sizes priced individually.",
+    );
+  });
+
+  it("accepts an either set price below the per-size total", () => {
+    const errors = validateListingForm({
+      ...baseValid,
+      sizeRows: makeTwoRows(),
+      sellMode: "either",
+      bundle: 1500,
+    });
+    expect(hasListingErrors(errors)).toBe(false);
+  });
+});
+
 describe("useListingFormSubmit", () => {
   beforeEach(() => {
     hookState.callCount = 0;
@@ -231,6 +410,7 @@ describe("useListingFormSubmit", () => {
     mockCreateListing.mockReset();
     mockCreateListing.mockResolvedValue({});
     mockPush.mockReset();
+    mockToastError.mockReset();
     mockUnstableRethrow.mockReset();
     mockUnstableRethrow.mockImplementation(() => undefined);
     mockUpdateListing.mockReset();
@@ -338,6 +518,36 @@ describe("useListingFormSubmit", () => {
     );
   });
 
+  it("toasts a save error when updateListing returns one", async () => {
+    const initial = makeInitialForm();
+    hookState.refOverrides.set(REF_INITIAL_FORM, {
+      ...initial,
+      contact_phone: "5551112222",
+    });
+    hookState.overrides.set(STATE_FORM, {
+      ...initial,
+      title: "Updated Gown",
+      contact_phone: "5551112222",
+    });
+    mockUpdateListing.mockResolvedValue({ error: "Not authorized" });
+
+    const submit = useListingFormSubmit({
+      initial,
+      listingId: LISTING_ID,
+      slots: [makeSlot()],
+      resolveUploadFile: vi.fn(),
+    });
+
+    await submit.handleSubmit();
+
+    expect(mockToastError).toHaveBeenCalledWith("Couldn't save changes", {
+      description: "Not authorized",
+    });
+    expect(mockPush).not.toHaveBeenCalled();
+    expect(errorSetterValues()).toEqual([EMPTY_LISTING_ERRORS]);
+    expect(loadingSetterValues()).toEqual([true, false]);
+  });
+
   it("rethrows NEXT_REDIRECT from updateListing through unstable_rethrow", async () => {
     const initial = makeInitialForm();
     const redirectError = new Error("NEXT_REDIRECT");
@@ -366,7 +576,7 @@ describe("useListingFormSubmit", () => {
 
     expect(mockUnstableRethrow).toHaveBeenCalledOnce();
     expect(mockUnstableRethrow).toHaveBeenCalledWith(redirectError);
-    expect(errorSetterValues()).toEqual([""]);
+    expect(errorSetterValues()).toEqual([EMPTY_LISTING_ERRORS]);
     expect(loadingSetterValues()).toEqual([true, false]);
   });
 
@@ -408,7 +618,7 @@ describe("useListingFormSubmit", () => {
       expect(formData.get("image_file_0")).toBeNull();
       expect(resolveUploadFile).not.toHaveBeenCalled();
       expect(mockPush).not.toHaveBeenCalled();
-      expect(errorSetterValues()).toEqual([""]);
+      expect(errorSetterValues()).toEqual([EMPTY_LISTING_ERRORS]);
       expect(loadingSetterValues()).toEqual([true, false]);
     });
 
@@ -476,7 +686,7 @@ describe("useListingFormSubmit", () => {
       expect(formData.get("status")).toBe("active");
     });
 
-    it("surfaces the action error when createListing returns one", async () => {
+    it("toasts the action error when createListing returns one, staying off the inline surface", async () => {
       setValidCreateState();
       mockCreateListing.mockResolvedValue({ error: "Database is down." });
 
@@ -488,11 +698,15 @@ describe("useListingFormSubmit", () => {
       await submit.handleSubmit();
 
       expect(mockPush).not.toHaveBeenCalled();
-      expect(errorSetterValues()).toEqual(["", "Database is down."]);
+      expect(mockToastError).toHaveBeenCalledWith("Couldn't publish listing", {
+        description: "Database is down.",
+      });
+      // The server outcome toasts; only the initial reset touches inline errors.
+      expect(errorSetterValues()).toEqual([EMPTY_LISTING_ERRORS]);
       expect(loadingSetterValues()).toEqual([true, false]);
     });
 
-    it("shows a generic message when the action rejects with a non-Error", async () => {
+    it("shows a generic inline message when the action rejects with a non-Error", async () => {
       setValidCreateState();
       mockCreateListing.mockRejectedValue("kaboom");
 
@@ -504,7 +718,9 @@ describe("useListingFormSubmit", () => {
       await submit.handleSubmit();
 
       expect(mockUnstableRethrow).toHaveBeenCalledWith("kaboom");
-      expect(errorSetterValues()).toEqual(["", "Something went wrong."]);
+      expect(mockToastError).not.toHaveBeenCalled();
+      expect(lastErrors().general).toBe("Something went wrong.");
+      expect(lastErrors().fields).toEqual({});
       expect(loadingSetterValues()).toEqual([true, false]);
     });
   });
@@ -578,18 +794,45 @@ describe("useListingFormSubmit", () => {
     });
   });
 
-  describe("validation", () => {
-    const invalidCases: Array<[string, Record<string, unknown>]> = [
-      ["title is blank", { title: "   " }],
-      ["location is empty", { location: "" }],
-      ["condition is missing", { condition: undefined }],
-      ["category is missing", { category: null }],
-      ["category is not a known category", { category: "spacesuit" }],
+  describe("inline validation", () => {
+    const invalidFieldCases: Array<
+      [string, Record<string, unknown>, string, string]
+    > = [
+      [
+        "title is blank",
+        { title: "   " },
+        "title",
+        "Enter a title of at least 4 characters.",
+      ],
+      [
+        "location is empty",
+        { location: "" },
+        "location",
+        "Choose your location.",
+      ],
+      [
+        "condition is missing",
+        { condition: undefined },
+        "condition",
+        "Choose a condition.",
+      ],
+      [
+        "category is missing",
+        { category: null },
+        "category",
+        "Choose a category.",
+      ],
+      [
+        "category is not a known category",
+        { category: "spacesuit" },
+        "category",
+        "Choose a category.",
+      ],
     ];
 
-    it.each(invalidCases)(
-      "rejects and sets an error when %s",
-      async (_label, patch) => {
+    it.each(invalidFieldCases)(
+      "keeps validation inline and off the server when %s",
+      async (_label, patch, field, message) => {
         setValidCreateState(patch);
         const resolveUploadFile = vi.fn();
 
@@ -603,28 +846,39 @@ describe("useListingFormSubmit", () => {
         expect(mockCreateListing).not.toHaveBeenCalled();
         expect(mockUpdateListing).not.toHaveBeenCalled();
         expect(resolveUploadFile).not.toHaveBeenCalled();
-        expect(errorSetterValues()).toEqual([
-          "",
-          "Please fill in all required fields.",
-        ]);
-        expect(loadingSetterValues()).toEqual([true, false]);
+        expect(mockToastError).not.toHaveBeenCalled();
+        const errors = lastErrors();
+        expect(errors.fields[field as keyof typeof errors.fields]).toBe(
+          message,
+        );
+        expect(errors.general).toBe(FIX_HIGHLIGHTED);
+        // Validation runs before the loading flag flips, so no spinner flash.
+        expect(loadingSetterValues()).toEqual([]);
       },
     );
 
-    const invalidRowCases: Array<[string, ListingSizeRowState[], string]> = [
+    const invalidRowCases: Array<
+      [string, ListingSizeRowState[], number, "size" | "price", string]
+    > = [
       [
         "a row has no size",
         [{ key: "row-0", size: "", size_group: null, price: "800" }],
+        0,
+        "size",
         "Choose a size for every row.",
       ],
       [
         "a row has no price",
         [{ key: "row-0", size: "8", size_group: "adult", price: "" }],
+        0,
+        "price",
         "Enter a price for every size.",
       ],
       [
         "a row has a non-positive price",
         [{ key: "row-0", size: "8", size_group: "adult", price: "0" }],
+        0,
+        "price",
         "Enter a price for every size.",
       ],
       [
@@ -633,13 +887,15 @@ describe("useListingFormSubmit", () => {
           { key: "row-0", size: "8", size_group: "adult", price: "800" },
           { key: "row-1", size: "8", size_group: "adult", price: "850" },
         ],
+        1,
+        "size",
         "Each size can only be added once.",
       ],
     ];
 
     it.each(invalidRowCases)(
-      "rejects and sets an error when %s",
-      async (_label, rows, message) => {
+      "maps the inline error to the right row when %s",
+      async (_label, rows, index, key, message) => {
         setValidCreateState();
         hookState.overrides.set(STATE_ROWS, rows);
 
@@ -651,11 +907,12 @@ describe("useListingFormSubmit", () => {
         await submit.handleSubmit();
 
         expect(mockCreateListing).not.toHaveBeenCalled();
-        expect(errorSetterValues()).toEqual(["", message]);
+        expect(lastErrors().sizes[index]?.[key]).toBe(message);
+        expect(lastErrors().general).toBe(FIX_HIGHLIGHTED);
       },
     );
 
-    it("rejects when neither an email nor a phone is provided", async () => {
+    it("flags a missing email and phone on the email field", async () => {
       setValidCreateState({ contact_email: "  ", contact_phone: "" });
       const resolveUploadFile = vi.fn();
 
@@ -668,10 +925,9 @@ describe("useListingFormSubmit", () => {
 
       expect(mockCreateListing).not.toHaveBeenCalled();
       expect(resolveUploadFile).not.toHaveBeenCalled();
-      expect(errorSetterValues()).toEqual([
-        "",
+      expect(lastErrors().fields.contact_email).toBe(
         "Add an email or phone number so buyers can reach you.",
-      ]);
+      );
     });
 
     it("accepts a phone-only form with a blank email", async () => {
@@ -692,7 +948,7 @@ describe("useListingFormSubmit", () => {
       expect(formData.get("contact_phone")).toBe("5551234567");
     });
 
-    it("rejects set_only with no set price", async () => {
+    it("flags set_only with no set price on the bundle price field", async () => {
       setValidCreateState();
       hookState.overrides.set(STATE_ROWS, makeTwoRows());
       hookState.overrides.set(STATE_SELL_ONLY_AS_SET, true);
@@ -705,13 +961,12 @@ describe("useListingFormSubmit", () => {
       await submit.handleSubmit();
 
       expect(mockCreateListing).not.toHaveBeenCalled();
-      expect(errorSetterValues()).toEqual([
-        "",
+      expect(lastErrors().fields.bundle_price).toBe(
         "Enter the price for the complete set.",
-      ]);
+      );
     });
 
-    it("rejects an 'either' bundle price that is not a discount", async () => {
+    it("flags an 'either' bundle price that is not a discount", async () => {
       setValidCreateState();
       hookState.overrides.set(STATE_ROWS, makeTwoRows());
       hookState.overrides.set(STATE_BUNDLE_PRICE, "1650");
@@ -724,13 +979,12 @@ describe("useListingFormSubmit", () => {
       await submit.handleSubmit();
 
       expect(mockCreateListing).not.toHaveBeenCalled();
-      expect(errorSetterValues()).toEqual([
-        "",
+      expect(lastErrors().fields.bundle_price).toBe(
         "The price for all sizes together should be less than the sizes priced individually.",
-      ]);
+      );
     });
 
-    it("rejects when no slot has a file or existing image", async () => {
+    it("puts a missing photo on the general line", async () => {
       setValidCreateState();
       const emptySlot = makeSlot({ existingUrl: null, imageFile: null });
       const resolveUploadFile = vi.fn();
@@ -744,11 +998,8 @@ describe("useListingFormSubmit", () => {
 
       expect(mockCreateListing).not.toHaveBeenCalled();
       expect(resolveUploadFile).not.toHaveBeenCalled();
-      expect(errorSetterValues()).toEqual([
-        "",
-        "Please add at least one gown photo.",
-      ]);
-      expect(loadingSetterValues()).toEqual([true, false]);
+      expect(lastErrors().general).toBe(MISSING_PHOTO);
+      expect(loadingSetterValues()).toEqual([]);
     });
   });
 
@@ -840,7 +1091,11 @@ describe("useListingFormSubmit", () => {
         initial,
         listingId: LISTING_ID,
         slots: [
-          makeSlot({ id: "slot-0", existingUrl: SECOND_URL, preview: SECOND_URL }),
+          makeSlot({
+            id: "slot-0",
+            existingUrl: SECOND_URL,
+            preview: SECOND_URL,
+          }),
           makeSlot({ id: "slot-1", existingUrl: EXISTING_URL }),
         ],
         resolveUploadFile,
@@ -910,8 +1165,12 @@ describe("useListingFormSubmit", () => {
 
       const [rowsUpdate] = rowSetterValues() as RowsUpdater[];
       expect(
-        rowsUpdate([{ key: "row-0", size: "8", size_group: "adult", price: "800" }]),
-      ).toEqual([{ key: "row-0", size: "8", size_group: "adult", price: "800" }]);
+        rowsUpdate([
+          { key: "row-0", size: "8", size_group: "adult", price: "800" },
+        ]),
+      ).toEqual([
+        { key: "row-0", size: "8", size_group: "adult", price: "800" },
+      ]);
     });
 
     it("setCategory clears row sizes that are invalid for the new category", () => {
@@ -924,7 +1183,9 @@ describe("useListingFormSubmit", () => {
 
       const [rowsUpdate] = rowSetterValues() as RowsUpdater[];
       expect(
-        rowsUpdate([{ key: "row-0", size: "8", size_group: "kids", price: "800" }]),
+        rowsUpdate([
+          { key: "row-0", size: "8", size_group: "kids", price: "800" },
+        ]),
       ).toEqual([{ key: "row-0", size: "", size_group: null, price: "800" }]);
     });
 
@@ -941,7 +1202,9 @@ describe("useListingFormSubmit", () => {
 
       const [rowsUpdate] = rowSetterValues() as RowsUpdater[];
       expect(
-        rowsUpdate([{ key: "row-0", size: "8", size_group: "adult", price: "800" }]),
+        rowsUpdate([
+          { key: "row-0", size: "8", size_group: "adult", price: "800" },
+        ]),
       ).toEqual([{ key: "row-0", size: "", size_group: null, price: "800" }]);
     });
 

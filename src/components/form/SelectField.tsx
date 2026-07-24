@@ -2,6 +2,7 @@
 
 import { FormField } from '@/components/form/FormField';
 import {
+  FORM_CONTROL_QUIET_INVALID_CLASS,
   FORM_SELECT_TRIGGER_CLASS,
   type SelectOption,
 } from '@/components/form/constants';
@@ -70,7 +71,11 @@ export function SelectField({
         <SelectTrigger
           id={id}
           aria-invalid={showInvalid || undefined}
-          className={cn(FORM_SELECT_TRIGGER_CLASS, triggerClassName)}
+          className={cn(
+            FORM_SELECT_TRIGGER_CLASS,
+            FORM_CONTROL_QUIET_INVALID_CLASS,
+            triggerClassName,
+          )}
         >
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>

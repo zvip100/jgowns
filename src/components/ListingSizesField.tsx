@@ -14,17 +14,26 @@ import { Label } from '@/components/ui/label';
 import { CHECKBOX_GOLD_CLASS } from '@/lib/styles';
 import { cn } from '@/lib/utils';
 
-import type { ListingSizesController } from '@/hooks/useListingFormSubmit';
+import type {
+  ListingSizesController,
+  SizeRowError,
+} from '@/hooks/useListingFormSubmit';
 import type { GownCategoryId } from '@/lib/types';
 
 type ListingSizesFieldProps = {
   category: GownCategoryId | null;
   controller: ListingSizesController;
+  /** Per-row size/price errors, indexed parallel to the rows. */
+  sizeErrors: SizeRowError[];
+  /** Inline error for the set/bundle price input. */
+  bundlePriceError?: string;
 };
 
 export function ListingSizesField({
   category,
   controller,
+  sizeErrors,
+  bundlePriceError,
 }: ListingSizesFieldProps) {
   const {
     rows,
@@ -66,6 +75,7 @@ export function ListingSizesField({
             )}
             canRemove={hasMultipleSizes}
             showPrice={!sellOnlyAsSet}
+            error={sizeErrors[index]}
             onChange={(patch) => updateRow(row.key, patch)}
             onRemove={() => removeRow(row.key)}
           />
@@ -107,6 +117,7 @@ export function ListingSizesField({
                 inputMode="decimal"
                 placeholder="1150"
                 value={bundlePrice}
+                error={bundlePriceError}
                 onChange={(e) => setBundlePrice(e.target.value)}
               />
               {!sellOnlyAsSet && (

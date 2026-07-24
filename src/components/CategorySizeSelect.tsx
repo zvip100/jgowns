@@ -6,7 +6,10 @@ import { getSizeSelectGroups } from '@/lib/gown-sizes';
 import type { GownCategoryId, SizeGroupSlug } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import { FormField } from '@/components/form/FormField';
-import { FORM_CONTROL_CLASS } from '@/components/form/constants';
+import {
+  FORM_CONTROL_CLASS,
+  FORM_CONTROL_QUIET_INVALID_CLASS,
+} from '@/components/form/constants';
 import {
   Accordion,
   AccordionContent,
@@ -39,6 +42,8 @@ type CategorySizeSelectProps = {
   id?: string;
   /** Sizes taken by other rows — shown but not selectable. */
   disabledSizes?: readonly { sizeGroup: SizeGroupSlug; size: string }[];
+  /** Inline validation message shown below the picker. */
+  error?: string;
 };
 
 export function CategorySizeSelect({
@@ -48,6 +53,7 @@ export function CategorySizeSelect({
   onChange,
   id = 'size-picker',
   disabledSizes,
+  error,
 }: CategorySizeSelectProps) {
   const disabledKeys = new Set(
     (disabledSizes ?? []).map((p) => `${p.sizeGroup}:${p.size}`),
@@ -84,7 +90,7 @@ export function CategorySizeSelect({
   const displayValue = size;
 
   return (
-    <FormField id={id} label="Size" required>
+    <FormField id={id} label="Size" required error={error}>
       <div ref={rootRef} className="relative">
         <button
           id={id}
@@ -92,12 +98,14 @@ export function CategorySizeSelect({
           disabled={disabled}
           aria-haspopup="listbox"
           aria-expanded={pickerOpen}
+          aria-invalid={Boolean(error) || undefined}
           onClick={() => {
             if (!disabled) setPickerOpen((open) => !open);
           }}
           className={cn(
             sizePickerTriggerClass,
             FORM_CONTROL_CLASS,
+            FORM_CONTROL_QUIET_INVALID_CLASS,
             !displayValue && 'text-muted-foreground',
           )}
         >

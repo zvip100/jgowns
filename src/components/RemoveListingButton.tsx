@@ -20,6 +20,7 @@ export default function RemoveListingButton({ id }: RemoveListingButtonProps) {
       buttonLabel="Remove"
       icon={Trash2}
       confirmVariant="destructive"
+      successMessage="Listing removed"
       triggerClassName="text-destructive hover:bg-destructive/10 hover:text-destructive"
       onConfirm={() => removeListing(id)}
     />

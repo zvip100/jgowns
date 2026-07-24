@@ -87,7 +87,7 @@ export async function signOut(): Promise<void> {
   if (error) console.error("Sign-out failed:", error.message);
 
   revalidatePath("/", "layout");
-  redirect("/");
+  redirect("/browse");
 }
 
 export async function signIn(

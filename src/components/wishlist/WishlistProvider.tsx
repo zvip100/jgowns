@@ -16,7 +16,7 @@ import {
   removeFromWishlist,
   type WishlistActionResult,
 } from '@/lib/actions/wishlist';
-import { WishlistWriteErrorToast } from '@/components/wishlist/WishlistWriteErrorToast';
+import { toast } from '@/lib/toast';
 import { WISHLIST_STORAGE_KEY, WISHLIST_STORAGE_VERSION } from '@/lib/types';
 import {
   addWishlistItem,
@@ -54,7 +54,7 @@ type WishlistContextValue = {
     listingId: string,
     snapshot: WishlistSnapshot,
     status: WishlistItemStatus,
-  ) => string | null;
+  ) => void;
   removeItem: (listingId: string) => void;
   syncFromServer: (payload: ServerPayload) => void;
   isOpen: boolean;
@@ -119,35 +119,28 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [serverPayload, setServerPayload] = useState<ServerPayload | null>(null);
-  const [writeError, setWriteError] = useState<string | null>(null);
 
   const itemsRef = useRef<WishlistItem[]>(items);
   const ownerIdRef = useRef<string | null>(null);
   const authedRef = useRef(false);
   const lastSyncedAuthRef = useRef<boolean | null>(null);
   const lastRefreshedAtRef = useRef<number | null>(null);
-  const writeErrorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
 
   // A failed background write is surfaced, never reverted (§ optimistic writes);
-  // the item stays locally and self-heals on the next sign-in merge.
-  const flashWriteError = useCallback(() => {
-    setWriteError(
-      "This change is saved on this device but didn't reach your account.",
-    );
-    if (writeErrorTimeoutRef.current) clearTimeout(writeErrorTimeoutRef.current);
-    writeErrorTimeoutRef.current = setTimeout(() => setWriteError(null), 6000);
+  // the item stays locally and self-heals on the next sign-in merge. When the
+  // failure follows an optimistic success toast, pass its id so this notice
+  // replaces it in place rather than stacking a second toast.
+  const flashWriteError = useCallback((replaceId?: string | number) => {
+    toast.error('Not synced', {
+      id: replaceId,
+      description:
+        'This change is saved on this device but did not reach your account.',
+    });
   }, []);
-
-  useEffect(
-    () => () => {
-      if (writeErrorTimeoutRef.current) clearTimeout(writeErrorTimeoutRef.current);
-    },
-    [],
-  );
 
   // Read localStorage only after mount; an initializer would forfeit static
   // prerendering and cause a hydration mismatch (browser-only API).
@@ -258,17 +251,21 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
   // change already landed and is never reverted on failure; a failed write is
   // surfaced via the toast (and self-heals on the next sign-in merge).
   const mirrorWrite = useCallback(
-    (label: string, run: () => Promise<WishlistActionResult>): void => {
+    (
+      label: string,
+      run: () => Promise<WishlistActionResult>,
+      optimisticToastId?: string | number,
+    ): void => {
       run()
         .then((result) => {
           if (!result.success) {
             console.error(`[wishlist] ${label} failed`, result.error);
-            flashWriteError();
+            flashWriteError(optimisticToastId);
           }
         })
         .catch((err) => {
           console.error(`[wishlist] ${label} failed`, err);
-          flashWriteError();
+          flashWriteError(optimisticToastId);
         });
     },
     [flashWriteError],
@@ -279,36 +276,41 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
       listingId: string,
       snapshot: WishlistSnapshot,
       status: WishlistItemStatus,
-    ): string | null => {
+    ): void => {
       const existing = itemsRef.current.find(
         (item) => item.listingId === listingId,
       );
-      let error: string | null = null;
 
-      setItems((current) => {
-        if (current.some((item) => item.listingId === listingId)) {
-          return removeWishlistItem(current, listingId);
+      if (existing) {
+        setItems((current) => removeWishlistItem(current, listingId));
+        const toastId = toast.success('Removed from wishlist');
+        // Mirror the change to the account in the background when signed in; a
+        // failed write replaces the success toast above via its id.
+        if (authedRef.current) {
+          mirrorWrite('Remove', () => removeFromWishlist(listingId), toastId);
         }
-        const result = addWishlistItem(current, {
-          listingId,
-          addedAt: new Date().toISOString(),
-          status,
-          snapshot,
-        });
-        error = result.error;
-        return sortWishlistItems(result.items);
-      });
-
-      // Mirror the change to the account in the background when signed in.
-      if (authedRef.current) {
-        if (existing) {
-          mirrorWrite('Remove', () => removeFromWishlist(listingId));
-        } else if (!error) {
-          mirrorWrite('Add', () => addToWishlist(listingId, snapshot));
-        }
+        return;
       }
 
-      return error;
+      const result = addWishlistItem(itemsRef.current, {
+        listingId,
+        addedAt: new Date().toISOString(),
+        status,
+        snapshot,
+      });
+
+      if (result.error) {
+        // Add rejected (wishlist full) — surface the reason rather than the
+        // silent no-op the local state now is.
+        toast.error(result.error);
+        return;
+      }
+
+      setItems(sortWishlistItems(result.items));
+      const toastId = toast.success('Saved to wishlist');
+      if (authedRef.current) {
+        mirrorWrite('Add', () => addToWishlist(listingId, snapshot), toastId);
+      }
     },
     [mirrorWrite],
   );
@@ -320,8 +322,11 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
       );
       setItems((current) => removeWishlistItem(current, listingId));
 
-      if (authedRef.current && removed) {
-        mirrorWrite('Remove', () => removeFromWishlist(listingId));
+      if (removed) {
+        const toastId = toast.success('Removed from wishlist');
+        if (authedRef.current) {
+          mirrorWrite('Remove', () => removeFromWishlist(listingId), toastId);
+        }
       }
     },
     [mirrorWrite],
@@ -389,7 +394,6 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
       }}
     >
       {children}
-      <WishlistWriteErrorToast message={writeError} />
     </WishlistContext.Provider>
   );
 }

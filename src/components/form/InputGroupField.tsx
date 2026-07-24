@@ -2,8 +2,12 @@
 
 import type { ReactNode } from 'react';
 import { X } from 'lucide-react';
+
 import { FormField, type FormFieldProps } from '@/components/form/FormField';
-import { FORM_CONTROL_CLASS } from '@/components/form/constants';
+import {
+  FORM_CONTROL_CLASS,
+  FORM_GROUP_QUIET_INVALID_CLASS,
+} from '@/components/form/constants';
 import {
   InputGroup,
   InputGroupAddon,
@@ -51,7 +55,13 @@ export function InputGroupField({
       disabled={disabled}
       className={className}
     >
-      <InputGroup className={cn(FORM_CONTROL_CLASS, groupClassName)}>
+      <InputGroup
+        className={cn(
+          FORM_CONTROL_CLASS,
+          FORM_GROUP_QUIET_INVALID_CLASS,
+          groupClassName,
+        )}
+      >
         {leading != null ? (
           <InputGroupAddon>
             {typeof leading === 'string' ? (

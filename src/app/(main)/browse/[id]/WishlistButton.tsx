@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { Heart } from 'lucide-react';
 
 import { useWishlist } from '@/components/wishlist/WishlistProvider';
@@ -31,7 +30,6 @@ export function WishlistButton({
   sold,
 }: WishlistButtonProps) {
   const { isSaved, toggleItem, isHydrated } = useWishlist();
-  const [error, setError] = useState<string | null>(null);
 
   // Before hydration, always render unsaved — localStorage hasn't been read
   // yet, so trusting it here would flash the wrong state.
@@ -42,42 +40,28 @@ export function WishlistButton({
   // the button disappears with no way to re-add.
   if (sold && !saved) return null;
 
+  // A rejected add (wishlist full) is surfaced by toggleItem via a toast.
   function handleClick() {
-    const result = toggleItem(
-      listingId,
-      { title, priceLabel, image, blurDataUrl },
-      status,
-    );
-    setError(result);
-    if (result) {
-      setTimeout(() => setError(null), 3000);
-    }
+    toggleItem(listingId, { title, priceLabel, image, blurDataUrl }, status);
   }
 
   return (
-    <div className="inline-flex flex-col items-end gap-1.5">
-      <button
-        type="button"
-        onClick={handleClick}
-        aria-pressed={saved}
-        aria-label={
-          saved ? `Remove ${title} from wishlist` : `Save ${title} to wishlist`
-        }
-        className={cn(
-          WISHLIST_HEART_BUTTON_CLASS,
-          saved ? WISHLIST_HEART_SAVED_CLASS : WISHLIST_HEART_UNSAVED_CLASS,
-        )}
-      >
-        <Heart
-          className={cn('size-5', saved && 'fill-current')}
-          aria-hidden="true"
-        />
-      </button>
-      {error && (
-        <p role="alert" className="max-w-40 text-right text-xs font-medium text-[#b3541e]">
-          {error}
-        </p>
+    <button
+      type="button"
+      onClick={handleClick}
+      aria-pressed={saved}
+      aria-label={
+        saved ? `Remove ${title} from wishlist` : `Save ${title} to wishlist`
+      }
+      className={cn(
+        WISHLIST_HEART_BUTTON_CLASS,
+        saved ? WISHLIST_HEART_SAVED_CLASS : WISHLIST_HEART_UNSAVED_CLASS,
       )}
-    </div>
+    >
+      <Heart
+        className={cn('size-5', saved && 'fill-current')}
+        aria-hidden="true"
+      />
+    </button>
   );
 }

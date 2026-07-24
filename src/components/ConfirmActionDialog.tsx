@@ -14,6 +14,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { toast } from '@/lib/toast';
 import { PRIMARY_CTA_CLASS } from '@/lib/styles';
 
 import type { ReactNode } from 'react';
@@ -30,6 +31,7 @@ type ConfirmActionDialogProps = {
   confirmLabel: string;
   pendingLabel?: string;
   confirmVariant?: 'default' | 'destructive';
+  successMessage?: string;
   onConfirm: () => Promise<ServerActionErrorResult>;
   renderTrigger: (state: ConfirmActionDialogState) => ReactNode;
 };
@@ -40,6 +42,7 @@ export default function ConfirmActionDialog({
   confirmLabel,
   pendingLabel = 'Working...',
   confirmVariant = 'default',
+  successMessage,
   onConfirm,
   renderTrigger,
 }: ConfirmActionDialogProps) {
@@ -66,6 +69,7 @@ export default function ConfirmActionDialog({
       }
 
       setIsOpen(false);
+      if (successMessage) toast.success(successMessage);
     } catch (actionError: unknown) {
       console.error('Confirmed action failed:', actionError);
       setError('Something went wrong. Please try again.');
