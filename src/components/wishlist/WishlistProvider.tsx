@@ -23,6 +23,7 @@ import {
   applyWishlistStatusRefresh,
   parseWishlistStorage,
   planWishlistReconcile,
+  reconcileMergeResult,
   removeWishlistItem,
   serializeWishlistStorage,
   sortWishlistItems,
@@ -142,6 +143,30 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
     });
   }, []);
 
+  // Mirror an optimistic local change to the account in the background. The local
+  // change already landed and is never reverted on failure; a failed write is
+  // surfaced via the toast (and self-heals on the next sign-in merge).
+  const mirrorWrite = useCallback(
+    (
+      label: string,
+      run: () => Promise<WishlistActionResult>,
+      optimisticToastId?: string | number,
+    ): void => {
+      run()
+        .then((result) => {
+          if (!result.success) {
+            console.error(`[wishlist] ${label} failed`, result.error);
+            flashWriteError(optimisticToastId);
+          }
+        })
+        .catch((err) => {
+          console.error(`[wishlist] ${label} failed`, err);
+          flashWriteError(optimisticToastId);
+        });
+    },
+    [flashWriteError],
+  );
+
   // Read localStorage only after mount; an initializer would forfeit static
   // prerendering and cause a hydration mismatch (browser-only API).
   useEffect(() => {
@@ -225,11 +250,23 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
     // plan.type === 'merge' — fold local items into this user's account, then
     // adopt the canonical list. This also self-heals any earlier failed writes,
     // since a locally-cached item missing from the DB is simply upserted now.
+    // Snapshot the list sent to the merge so edits made during the round-trip
+    // (the drawer stays interactive) are re-applied instead of clobbered by the
+    // canonical list; a removed item the merge upsert resurrected is re-deleted.
+    const baseline = itemsRef.current;
     mergeWishlist(plan.payload)
       .then((result) => {
         if (result.success) {
           ownerIdRef.current = userId;
-          setItems(sortWishlistItems(result.items));
+          const reconciled = reconcileMergeResult(
+            baseline,
+            itemsRef.current,
+            result.items,
+          );
+          setItems(reconciled.items);
+          for (const id of reconciled.resurrectedRemovedIds) {
+            mirrorWrite('Remove', () => removeFromWishlist(id));
+          }
         } else {
           // Keep local items; the next sign-in retries the merge.
           console.error('[wishlist] Merge on sign-in failed', result.error);
@@ -240,35 +277,11 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
         console.error('[wishlist] Merge on sign-in failed', err);
         flashWriteError();
       });
-  }, [isHydrated, serverPayload, flashWriteError]);
+  }, [isHydrated, serverPayload, flashWriteError, mirrorWrite]);
 
   const isSaved = useCallback(
     (listingId: string) => items.some((item) => item.listingId === listingId),
     [items],
-  );
-
-  // Mirror an optimistic local change to the account in the background. The local
-  // change already landed and is never reverted on failure; a failed write is
-  // surfaced via the toast (and self-heals on the next sign-in merge).
-  const mirrorWrite = useCallback(
-    (
-      label: string,
-      run: () => Promise<WishlistActionResult>,
-      optimisticToastId?: string | number,
-    ): void => {
-      run()
-        .then((result) => {
-          if (!result.success) {
-            console.error(`[wishlist] ${label} failed`, result.error);
-            flashWriteError(optimisticToastId);
-          }
-        })
-        .catch((err) => {
-          console.error(`[wishlist] ${label} failed`, err);
-          flashWriteError(optimisticToastId);
-        });
-    },
-    [flashWriteError],
   );
 
   const toggleItem = useCallback(

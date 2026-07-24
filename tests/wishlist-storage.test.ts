@@ -5,6 +5,7 @@ import {
   applyWishlistStatusRefresh,
   parseWishlistStorage,
   planWishlistReconcile,
+  reconcileMergeResult,
   removeWishlistItem,
   serializeWishlistStorage,
   sortWishlistItems,
@@ -274,6 +275,84 @@ describe("toWishlistMergePayload", () => {
     expect(toWishlistMergePayload([item])).toEqual([
       { listingId: ID_A, snapshot: item.snapshot },
     ]);
+  });
+});
+
+describe("reconcileMergeResult", () => {
+  it("adopts the canonical server list unchanged when nothing changed in the window", () => {
+    const baseline = [makeItem(ID_A)];
+    const server = [makeItem(ID_A), makeItem(ID_B)];
+
+    const result = reconcileMergeResult(baseline, baseline, server);
+
+    expect(result.items.map((i) => i.listingId).sort()).toEqual([ID_A, ID_B]);
+    expect(result.resurrectedRemovedIds).toEqual([]);
+  });
+
+  it("keeps an item added during the window that the server list is missing", () => {
+    const baseline = [makeItem(ID_A)];
+    const current = [makeItem(ID_A), makeItem(ID_B)];
+    const server = [makeItem(ID_A)];
+
+    const result = reconcileMergeResult(baseline, current, server);
+
+    expect(result.items.map((i) => i.listingId).sort()).toEqual([ID_A, ID_B]);
+    expect(result.resurrectedRemovedIds).toEqual([]);
+  });
+
+  it("does not duplicate an added item the server list already contains", () => {
+    const baseline = [makeItem(ID_A)];
+    const current = [makeItem(ID_A), makeItem(ID_B)];
+    const server = [makeItem(ID_A), makeItem(ID_B)];
+
+    const result = reconcileMergeResult(baseline, current, server);
+
+    expect(result.items.map((i) => i.listingId).sort()).toEqual([ID_A, ID_B]);
+  });
+
+  it("drops an item removed during the window and reports the server resurrection", () => {
+    const baseline = [makeItem(ID_A), makeItem(ID_B)];
+    const current = [makeItem(ID_A)];
+    // The merge upsert re-inserted ID_B (its payload was snapshotted with it).
+    const server = [makeItem(ID_A), makeItem(ID_B)];
+
+    const result = reconcileMergeResult(baseline, current, server);
+
+    expect(result.items.map((i) => i.listingId)).toEqual([ID_A]);
+    expect(result.resurrectedRemovedIds).toEqual([ID_B]);
+  });
+
+  it("drops a removed item without a compensating delete when the server list lacks it", () => {
+    const baseline = [makeItem(ID_A), makeItem(ID_B)];
+    const current = [makeItem(ID_A)];
+    // ID_B failed the existence check, so the merge never re-inserted it.
+    const server = [makeItem(ID_A)];
+
+    const result = reconcileMergeResult(baseline, current, server);
+
+    expect(result.items.map((i) => i.listingId)).toEqual([ID_A]);
+    expect(result.resurrectedRemovedIds).toEqual([]);
+  });
+
+  it("applies a simultaneous add and remove made during the window", () => {
+    const baseline = [makeItem(ID_A)];
+    const current = [makeItem(ID_C)];
+    const server = [makeItem(ID_A), makeItem(ID_B)];
+
+    const result = reconcileMergeResult(baseline, current, server);
+
+    expect(result.items.map((i) => i.listingId).sort()).toEqual([ID_B, ID_C]);
+    expect(result.resurrectedRemovedIds).toEqual([ID_A]);
+  });
+
+  it("returns items sorted newest-first", () => {
+    const baseline: WishlistItem[] = [];
+    const older = makeItem(ID_A, { addedAt: "2026-01-01T00:00:00.000Z" });
+    const newer = makeItem(ID_B, { addedAt: "2026-06-01T00:00:00.000Z" });
+
+    const result = reconcileMergeResult(baseline, baseline, [older, newer]);
+
+    expect(result.items.map((i) => i.listingId)).toEqual([ID_B, ID_A]);
   });
 });
 

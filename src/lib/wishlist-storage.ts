@@ -178,3 +178,46 @@ export function applyWishlistStatusRefresh(
     return { ...item, status: entry.status, snapshot: entry.snapshot };
   });
 }
+
+export type WishlistMergeReconcileResult = {
+  items: WishlistItem[];
+  /** Ids removed during the in-flight merge that the canonical server list still
+   * carries: the merge upsert re-inserted them (its payload was snapshotted
+   * before the removal), so the caller must fire a compensating delete. */
+  resurrectedRemovedIds: string[];
+};
+
+/**
+ * Folds edits made during an in-flight sign-in merge back onto the canonical
+ * server list, so a save/remove that lands while `mergeWishlist` is resolving
+ * isn't clobbered by the wholesale replace. `baseline` is the list snapshotted
+ * into the merge payload; `current` is the live list at resolve time. Adds made
+ * in the window are kept; removes are re-applied and reported for a compensating
+ * account delete. Pure, so the interleavings are unit-testable.
+ */
+export function reconcileMergeResult(
+  baseline: WishlistItem[],
+  current: WishlistItem[],
+  serverItems: WishlistItem[],
+): WishlistMergeReconcileResult {
+  const baseIds = new Set(baseline.map((item) => item.listingId));
+  const currentIds = new Set(current.map((item) => item.listingId));
+
+  const removedIds = new Set(
+    [...baseIds].filter((id) => !currentIds.has(id)),
+  );
+  const addedItems = current.filter((item) => !baseIds.has(item.listingId));
+
+  const merged = serverItems.filter((item) => !removedIds.has(item.listingId));
+  for (const item of addedItems) {
+    if (!merged.some((existing) => existing.listingId === item.listingId)) {
+      merged.push(item);
+    }
+  }
+
+  const resurrectedRemovedIds = [...removedIds].filter((id) =>
+    serverItems.some((item) => item.listingId === id),
+  );
+
+  return { items: sortWishlistItems(merged), resurrectedRemovedIds };
+}

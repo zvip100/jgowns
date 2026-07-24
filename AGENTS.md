@@ -42,6 +42,7 @@ No in-app transactions yet. Stripe is planned but **not implemented** — do not
 - **No over-commenting.** A single JSDoc-style comment above a complex function is fine, but keep it to a few lines. A multi-paragraph JSDoc is itself over-commenting. Never comment above random lines, never write paragraph-style comments in code. If a file being modified has excessive comments, remove or trim them as part of the task.
 - **Code review / suggestion evaluation:** Compile all findings into a single list before editing any file. Wait for explicit "apply all" or selective approval. Never auto-apply a finding the moment it is identified.
 - **Search exhaustiveness:** When asked to update "all" occurrences of something, search the full codebase before reporting done. Do not stop at the first match.
+- **A stated preference is a codebase-wide instruction.** When the user expresses a design/UX/behavior preference ("I don't like red borders", "always X", "never Y"), apply it to every instance across the codebase — not just the file currently open — even if they showed it in one spot. This is the aesthetic/behavioral counterpart to Search exhaustiveness; it scopes the stated preference fully and does not license unrelated changes.
 - **User-facing copy** (labels, hints, banners, empty states) is concise, professional, modern e-commerce English for a US audience: direct address, a short bold lead plus at most one supporting sentence, no parenthetical qualifiers or hedging. Example: "Sell as a complete set only" — not "Sell only as a complete set (not individually)".
 - **No em dashes in user-facing copy — ever.** Never use the em dash (—) anywhere on the site: labels, hints, banners, empty states, page and body copy, legal documents (Terms/Privacy), email templates, and metadata `title`/`description`. Rewrite with a period, comma, colon, or parentheses instead. Hyphens in compound words and en dashes in numeric ranges are fine; the ban is specifically the em dash.
 - **Never run `git commit` or `git push`.** The developer commits personally. When asked "to commit," prepare the tree (stage files, split hunks if needed) and suggest message(s) in the `/commit-msg` format — then stop. Never add a `Co-Authored-By` trailer or any other automated trailer to anything in this repo.
@@ -151,6 +152,8 @@ src/lib/actions/
 
 **Read-only data fetchers** (server-side only, never called from the client) live in `src/lib/queries/`, grouped by domain. Currently `src/lib/` may have flat query files — as the project grows, move them into this folder.
 
+**Shared validation schemas** live in `src/lib/validations/`, one kebab-case file per domain (`contact-schema.ts`, `listing-schema.ts`). A zod schema is the single source of truth shared by the server action (the authority) and the client form (inline field validation via `safeParse`) — never duplicate the rules or messages in both places.
+
 ---
 
 ## 4. TypeScript
@@ -209,6 +212,8 @@ Imports must appear at the top of the file. No code, declarations, or exports go
 - Never swallow errors silently (`catch (e) {}`).
 - Log errors server-side; return a sanitized message to the client.
 - **Client calls to redirecting server actions:** a server action that `redirect()`s on success throws `NEXT_REDIRECT`. Any client code that wraps such a call in `try/catch` must call `unstable_rethrow(e)` at the top of the `catch` (before showing an error) so the redirect/`notFound` signal isn't swallowed and rendered as a form error.
+- **Field validation stays inline; toasts are for outcomes.** Field-level validation renders inline (message below the field); transient feedback uses the toast helper (`src/lib/toast.ts`), which fires only on submit/action OUTCOMES (success, or a server/network failure) and background events — never duplicating an inline field error. Don't hand-roll a bespoke inline/timeout notice for something the toast helper covers. Auth pages are the deliberate exception (persistent inline banners, no toasts).
+- **An invalid form control shows only its error message, no red chrome.** Suppress shadcn's destructive border/ring/text on invalid controls at the shared `src/components/form/` wrapper layer; keep `aria-invalid` for accessibility and re-assert the focus ring so a focused invalid control still has a visible (non-red) indicator.
 
 ---
 
