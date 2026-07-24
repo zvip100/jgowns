@@ -56,7 +56,7 @@ export default function ListingForm({
     toggleContactMethod,
     sizesController,
     loading,
-    error,
+    errors,
     handleSubmit,
     isEdit,
   } = useListingFormSubmit({
@@ -83,6 +83,7 @@ export default function ListingForm({
           required
           placeholder="e.g. Vera Wang Ball Gown, Ivory"
           value={form.title || ''}
+          error={errors.fields.title}
           onChange={(e) => setField('title', e.target.value)}
         />
 
@@ -106,6 +107,7 @@ export default function ListingForm({
               value: c.id,
               label: c.label,
             }))}
+            error={errors.fields.category}
             onChange={setCategory}
           />
           <SelectField
@@ -115,6 +117,7 @@ export default function ListingForm({
             required
             value={form.condition || ''}
             options={toSelectOptions(GOWN_CONDITIONS)}
+            error={errors.fields.condition}
             onChange={(v) => setField('condition', v as GownCondition)}
           />
           <SelectField
@@ -132,6 +135,7 @@ export default function ListingForm({
             required
             value={form.location || ''}
             options={toSelectOptions(LOCATIONS)}
+            error={errors.fields.location}
             onChange={(v) => setField('location', v)}
           />
         </FormFieldGrid>
@@ -139,6 +143,8 @@ export default function ListingForm({
         <ListingSizesField
           category={form.category ?? null}
           controller={sizesController}
+          sizeErrors={errors.sizes}
+          bundlePriceError={errors.fields.bundle_price}
         />
 
         <ListingPhotoField
@@ -159,6 +165,7 @@ export default function ListingForm({
               placeholder="example@gmail.com"
               autoComplete="email"
               value={form.contact_email || ''}
+              error={errors.fields.contact_email}
               onChange={(e) => setField('contact_email', e.target.value)}
               onClear={() => setField('contact_email', '')}
               leading={<Mail />}
@@ -171,6 +178,7 @@ export default function ListingForm({
                 placeholder="(555) 000-0000"
                 autoComplete="tel"
                 value={form.contact_phone || ''}
+                error={errors.fields.contact_phone}
                 onChange={(e) => setContactPhone(e.target.value)}
                 onClear={() => setContactPhone('')}
                 leading={<Phone />}
@@ -209,7 +217,7 @@ export default function ListingForm({
           <AlertDescription>This is a limited time offer.</AlertDescription>
         </Alert>
 
-        {error && <FieldError>{error}</FieldError>}
+        {errors.general && <FieldError>{errors.general}</FieldError>}
 
         <Button
           type="submit"

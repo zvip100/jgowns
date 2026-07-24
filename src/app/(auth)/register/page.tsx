@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 type RegisterPageProps = {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; error?: string }>;
 };
 
 export default function RegisterPage({
@@ -19,7 +19,7 @@ export default function RegisterPage({
   return (
     <AuthScreen
       title="Create Account"
-      subtitle="Start selling your wedding gown today"
+      subtitle="Sell your gown or save the ones you love"
       searchParams={searchParams}
       renderForm={(next) => <RegisterForm next={next} />}
     />

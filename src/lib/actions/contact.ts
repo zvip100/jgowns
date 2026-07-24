@@ -1,17 +1,7 @@
 "use server";
 
-import { z } from "zod";
-
 import { createClient } from "@/lib/supabase/server";
-
-const contactSchema = z.object({
-  email: z.email("Enter a valid email address."),
-  message: z
-    .string()
-    .trim()
-    .min(10, "Your message must be at least 10 characters.")
-    .max(2000, "Your message must be 2,000 characters or less."),
-});
+import { contactSchema } from "@/lib/validations/contact-schema";
 
 export type ContactActionResult =
   | { success: true }

@@ -1,7 +1,10 @@
 'use client';
 
 import { FormField, type FormFieldProps } from '@/components/form/FormField';
-import { FORM_CONTROL_CLASS } from '@/components/form/constants';
+import {
+  FORM_CONTROL_CLASS,
+  FORM_CONTROL_QUIET_INVALID_CLASS,
+} from '@/components/form/constants';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 
@@ -38,7 +41,11 @@ export function TextareaField({
         id={id}
         disabled={disabled}
         aria-invalid={invalid || Boolean(error) || undefined}
-        className={cn(FORM_CONTROL_CLASS, textareaClassName)}
+        className={cn(
+          FORM_CONTROL_CLASS,
+          FORM_CONTROL_QUIET_INVALID_CLASS,
+          textareaClassName,
+        )}
         {...textareaProps}
       />
     </FormField>

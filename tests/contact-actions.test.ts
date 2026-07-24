@@ -92,7 +92,7 @@ describe("submitContactMessage", () => {
 
     expect(result).toEqual({
       success: false,
-      error: "Your message must be 2,000 characters or less.",
+      error: "Your message must be less than 2,000 characters.",
     });
     expect(mockInsert).not.toHaveBeenCalled();
   });

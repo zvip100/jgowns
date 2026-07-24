@@ -24,6 +24,7 @@ export default function MarkSizeSoldButton({
       pendingLabel="Marking sold..."
       ariaLabel={`Mark size ${size} as sold`}
       icon={CheckCircle2}
+      successMessage={`Size ${size} marked as sold`}
       triggerClassName="inline-flex items-center text-(--accent-deep)/70 transition hover:text-(--accent-deep) disabled:opacity-50"
       triggerStyle="inline-icon"
       onConfirm={() => markSizeSold(listingId, sizeId)}

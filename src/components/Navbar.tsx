@@ -8,6 +8,8 @@ import {
   MobileMenuProvider,
   MobileMenuTrigger,
 } from "@/components/MobileMenu";
+import { WishlistSheet } from "@/components/wishlist/WishlistSheet";
+import { WishlistTrigger } from "@/components/wishlist/WishlistTrigger";
 
 const DESKTOP_LINK_CLASS =
   "text-[0.9rem] font-semibold tracking-[0.06em] uppercase text-[#6d5a49] hover:text-[#a0733f]";
@@ -39,9 +41,14 @@ export default function Navbar() {
             </Suspense>
           </div>
 
-          {/* Mobile hamburger */}
-          <MobileMenuTrigger />
+          {/* Mobile: wishlist trigger stays inline next to the hamburger */}
+          <div className="flex items-center gap-2 md:hidden">
+            <WishlistTrigger />
+            <MobileMenuTrigger />
+          </div>
         </nav>
+
+        <WishlistSheet />
 
         {/* Mobile menu */}
         <MobileMenuPanel>

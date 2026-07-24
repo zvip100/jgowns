@@ -558,6 +558,82 @@
   animation: rail-slide-out 0.2s ease-in both;
 }
 
+/* Sonner toast — mapped onto the JGowns palette. Every type shares the neutral
+   cream surface; the type is signalled by a colored left bar + matching icon
+   (success olive, warning amber, info accent, error brick) so it reads at a
+   glance without tinting the whole toast. The `.toaster` class raises specificity
+   above Sonner's own injected rules so these overrides win regardless of load
+   order; all richColors *-bg/-border/-text vars are flattened to neutral. */
+.toaster[data-sonner-toaster] {
+  --border-radius: var(--radius);
+  font-family: var(--font-body);
+
+  --toast-success: #6f7a4a;
+  --toast-warning: #c68a2c;
+  --toast-info: var(--accent);
+  --toast-error: #b4531f;
+}
+
+.toaster[data-sonner-toaster][data-sonner-theme="light"] {
+  --normal-bg: var(--bg-cream);
+  --normal-text: var(--ink);
+  --normal-border: var(--border);
+
+  --success-bg: var(--bg-cream);
+  --success-border: var(--border);
+  --success-text: var(--ink);
+
+  --warning-bg: var(--bg-cream);
+  --warning-border: var(--border);
+  --warning-text: var(--ink);
+
+  --info-bg: var(--bg-cream);
+  --info-border: var(--border);
+  --info-text: var(--ink);
+
+  --error-bg: var(--bg-cream);
+  --error-border: var(--border);
+  --error-text: var(--ink);
+}
+
+.toaster [data-sonner-toast][data-styled="true"] {
+  box-shadow: 0 16px 40px rgba(74, 52, 30, 0.22);
+}
+
+.toaster [data-sonner-toast][data-styled="true"][data-type="success"] {
+  border-left: 4px solid var(--toast-success);
+}
+.toaster [data-sonner-toast][data-styled="true"][data-type="warning"] {
+  border-left: 4px solid var(--toast-warning);
+}
+.toaster [data-sonner-toast][data-styled="true"][data-type="info"] {
+  border-left: 4px solid var(--toast-info);
+}
+.toaster [data-sonner-toast][data-styled="true"][data-type="error"] {
+  border-left: 4px solid var(--toast-error);
+}
+
+.toaster [data-sonner-toast][data-type="success"] [data-icon] {
+  color: var(--toast-success);
+}
+.toaster [data-sonner-toast][data-type="warning"] [data-icon] {
+  color: var(--toast-warning);
+}
+.toaster [data-sonner-toast][data-type="info"] [data-icon] {
+  color: var(--toast-info);
+}
+.toaster [data-sonner-toast][data-type="error"] [data-icon] {
+  color: var(--toast-error);
+}
+
+/* Sonner disables all motion under prefers-reduced-motion; restore a plain
+   opacity fade so a toast still appears/leaves perceptibly (§ reduced-motion). */
+@media (prefers-reduced-motion: reduce) {
+  .toaster [data-sonner-toast] {
+    transition: opacity 200ms ease !important;
+  }
+}
+
 @theme inline {
   /* Bridge our typography into Tailwind's font utilities so any shadcn
      component using font-sans / font-serif inherits Manrope / Fraunces. */

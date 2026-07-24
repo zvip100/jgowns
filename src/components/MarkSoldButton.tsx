@@ -33,6 +33,7 @@ export default function MarkSoldButton({
       ariaLabel="Mark as sold"
       buttonLabel="Mark Sold"
       icon={CheckCircle2}
+      successMessage="Marked as sold"
       triggerClassName="text-(--accent-deep) hover:bg-(--accent-deep)/10 hover:text-(--accent-deep)"
       onConfirm={() => markListingSold(id)}
     />

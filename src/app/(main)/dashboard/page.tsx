@@ -16,6 +16,8 @@ import DashboardStats from '@/components/DashboardStats';
 import DashboardPageSkeleton from '@/components/DashboardPageSkeleton';
 import ListingRow from '@/components/ListingRow';
 
+import { DashboardFlashToast } from './DashboardFlashToast';
+
 import type { Metadata } from 'next';
 import type { ListingWithSizes } from '@/lib/types';
 
@@ -109,6 +111,7 @@ export default async function DashboardPage() {
 
   return (
     <div className="flex flex-col gap-8 sm:gap-10">
+      <DashboardFlashToast />
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[0.65rem] font-semibold uppercase tracking-[0.22em] text-(--accent-deep)">

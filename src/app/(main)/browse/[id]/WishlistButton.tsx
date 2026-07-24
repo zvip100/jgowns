@@ -1,0 +1,67 @@
+'use client';
+
+import { Heart } from 'lucide-react';
+
+import { useWishlist } from '@/components/wishlist/WishlistProvider';
+import {
+  WISHLIST_HEART_BUTTON_CLASS,
+  WISHLIST_HEART_SAVED_CLASS,
+  WISHLIST_HEART_UNSAVED_CLASS,
+} from '@/lib/styles';
+import { cn } from '@/lib/utils';
+
+type WishlistButtonProps = {
+  listingId: string;
+  title: string;
+  priceLabel: string;
+  image: string | null;
+  blurDataUrl: string | null;
+  status: 'active' | 'sold';
+  sold: boolean;
+};
+
+export function WishlistButton({
+  listingId,
+  title,
+  priceLabel,
+  image,
+  blurDataUrl,
+  status,
+  sold,
+}: WishlistButtonProps) {
+  const { isSaved, toggleItem, isHydrated } = useWishlist();
+
+  // Before hydration, always render unsaved — localStorage hasn't been read
+  // yet, so trusting it here would flash the wrong state.
+  const saved = isHydrated && isSaved(listingId);
+
+  // A sold listing can't be newly saved: show the button only to someone who
+  // already saved it, so they can remove it. Removing flips `saved` to false and
+  // the button disappears with no way to re-add.
+  if (sold && !saved) return null;
+
+  // A rejected add (wishlist full) is surfaced by toggleItem via a toast.
+  function handleClick() {
+    toggleItem(listingId, { title, priceLabel, image, blurDataUrl }, status);
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      aria-pressed={saved}
+      aria-label={
+        saved ? `Remove ${title} from wishlist` : `Save ${title} to wishlist`
+      }
+      className={cn(
+        WISHLIST_HEART_BUTTON_CLASS,
+        saved ? WISHLIST_HEART_SAVED_CLASS : WISHLIST_HEART_UNSAVED_CLASS,
+      )}
+    >
+      <Heart
+        className={cn('size-5', saved && 'fill-current')}
+        aria-hidden="true"
+      />
+    </button>
+  );
+}

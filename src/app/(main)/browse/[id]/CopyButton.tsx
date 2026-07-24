@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 
+import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 
 type CopyButtonProps = {
@@ -18,9 +19,11 @@ export function CopyButton({ value, label, className }: CopyButtonProps) {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
+      toast.success('Link copied');
       setTimeout(() => setCopied(false), 1500);
     } catch (error) {
       console.error('Copy to clipboard failed:', error);
+      toast.error("Couldn't copy link");
     }
   };
 

@@ -13,3 +13,11 @@ export const CHECKBOX_GOLD_CLASS =
 /** Inline underlined gold text link (legal documents + the contact intro). */
 export const LEGAL_LINK_CLASS =
   "text-(--accent-deep) underline underline-offset-2 transition-colors hover:text-[#a0733f]";
+
+/** Circular heart-icon button shared by the wishlist heart toggle and navbar trigger. */
+export const WISHLIST_HEART_BUTTON_CLASS =
+  "inline-flex size-11 shrink-0 items-center justify-center rounded-full border transition-colors";
+export const WISHLIST_HEART_UNSAVED_CLASS =
+  "border-[#decdb8] bg-[#fff9f0] text-[#a08a72] hover:text-[#8a6232]";
+export const WISHLIST_HEART_SAVED_CLASS =
+  "border-[#b58d5f]/70 bg-[#b3854c]/12 text-[#8a6232]";

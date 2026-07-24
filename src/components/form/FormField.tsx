@@ -8,6 +8,7 @@ import {
   FieldLabel,
 } from '@/components/ui/field';
 import { FORM_LABEL_CLASS } from '@/components/form/constants';
+import { cn } from '@/lib/utils';
 
 export type FormFieldProps = {
   id: string;
@@ -38,7 +39,9 @@ export function FormField({
     <Field
       data-invalid={showInvalid || undefined}
       data-disabled={disabled || undefined}
-      className={className}
+      // Keep the control text/label normal on invalid; only the FieldError below
+      // stays red (it sets its own color). Overrides ui/field's group red text.
+      className={cn('data-[invalid=true]:text-foreground', className)}
     >
       <FieldLabel htmlFor={id} className={FORM_LABEL_CLASS}>
         {label}

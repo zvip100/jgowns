@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 };
 
 type LoginPageProps = {
-  searchParams: Promise<{ next?: string }>;
+  searchParams: Promise<{ next?: string; error?: string }>;
 };
 
 export default function LoginPage({
@@ -19,7 +19,7 @@ export default function LoginPage({
   return (
     <AuthScreen
       title="Welcome Back"
-      subtitle="Sign in to manage your listings"
+      subtitle="Sign in to manage your listings and saved gowns"
       searchParams={searchParams}
       renderForm={(next) => <LoginForm next={next} />}
     />

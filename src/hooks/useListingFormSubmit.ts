@@ -5,7 +5,9 @@ import { unstable_rethrow, useRouter } from "next/navigation";
 
 import { isValidSizePair } from "@/lib/gown-sizes";
 import { createListing, updateListing } from "@/lib/actions/sell";
+import { toast } from "@/lib/toast";
 import { digitsOnlyPhone, imageSlotFormKeys } from "@/lib/utils";
+import { listingInputSchema } from "@/lib/validations/listing-schema";
 
 import {
   GOWN_CATEGORIES,
@@ -15,7 +17,6 @@ import {
   type ListingSizeInput,
   type ListingSizeRowState,
   type SellMode,
-  type SizeGroupSlug,
   type ImageSlotState,
 } from "@/lib/types";
 
@@ -23,6 +24,169 @@ import {
 type ListingScalarFormData = Partial<
   Omit<ListingFormData, "sizes" | "contact_methods">
 >;
+
+/** Fields that surface an inline error directly below the control. */
+export type ListingFieldName =
+  | "title"
+  | "location"
+  | "condition"
+  | "category"
+  | "contact_email"
+  | "contact_phone"
+  | "bundle_price";
+
+/** Per-row inline errors for a size row (size picker + price). */
+export type SizeRowError = { size?: string; price?: string };
+
+export type ListingFormErrors = {
+  fields: Partial<Record<ListingFieldName, string>>;
+  /** Indexed parallel to the size rows. */
+  sizes: SizeRowError[];
+  /** Shown next to the submit button; the catch-all for the form. */
+  general: string;
+};
+
+export const EMPTY_LISTING_ERRORS: ListingFormErrors = {
+  fields: {},
+  sizes: [],
+  general: "",
+};
+
+const FIX_HIGHLIGHTED_FIELDS = "Please fix the highlighted fields.";
+const CONTACT_PHONE_ERROR = "Leave phone blank, or enter a valid phone number.";
+const EITHER_NOT_DISCOUNTED_ERROR =
+  "The price for all sizes together should be less than the sizes priced individually.";
+const MISSING_PHOTO_ERROR = "Please add at least one gown photo.";
+
+const SCALAR_FIELD_NAMES = new Set<ListingFieldName>([
+  "title",
+  "location",
+  "condition",
+  "category",
+  "contact_email",
+  "bundle_price",
+]);
+
+type IssueLike = { path: PropertyKey[]; message: string };
+
+/** Route each zod issue to the control it belongs to; unmapped issues (sell_mode,
+ * contact_methods) fall through to the general line. First message per slot wins. */
+export function collectListingFieldErrors(
+  issues: readonly IssueLike[],
+): ListingFormErrors {
+  const fields: ListingFormErrors["fields"] = {};
+  const sizes: SizeRowError[] = [];
+  let general = "";
+
+  const setField = (name: ListingFieldName, message: string) => {
+    if (!fields[name]) fields[name] = message;
+  };
+  const setSize = (index: number, key: keyof SizeRowError, message: string) => {
+    const row = (sizes[index] ??= {});
+    if (!row[key]) row[key] = message;
+  };
+
+  for (const issue of issues) {
+    const [head, second, third] = issue.path;
+    if (head === "sizes" && typeof second === "number") {
+      setSize(second, third === "price" ? "price" : "size", issue.message);
+      continue;
+    }
+    if (head === "contact_phone") {
+      setField("contact_phone", CONTACT_PHONE_ERROR);
+      continue;
+    }
+    if (
+      typeof head === "string" &&
+      SCALAR_FIELD_NAMES.has(head as ListingFieldName)
+    ) {
+      setField(head as ListingFieldName, issue.message);
+      continue;
+    }
+    if (!general) general = issue.message;
+  }
+
+  return { fields, sizes, general };
+}
+
+function hasFieldOrSizeErrors(errors: ListingFormErrors): boolean {
+  return (
+    Object.keys(errors.fields).length > 0 ||
+    errors.sizes.some((row) => Boolean(row?.size || row?.price))
+  );
+}
+
+export function hasListingErrors(errors: ListingFormErrors): boolean {
+  return hasFieldOrSizeErrors(errors) || errors.general.length > 0;
+}
+
+type ListingValidationInput = {
+  form: ListingScalarFormData;
+  sizeRows: ListingSizeRowState[];
+  sellMode: SellMode;
+  bundle: number | null;
+  contactMethods: ContactMethod[];
+  hasActivePhoto: boolean;
+};
+
+/** Validate the whole form against the shared schema, then layer the two
+ * client-only rules (photo required, "either" set price must be a discount). */
+export function validateListingForm({
+  form,
+  sizeRows,
+  sellMode,
+  bundle,
+  contactMethods,
+  hasActivePhoto,
+}: ListingValidationInput): ListingFormErrors {
+  const parseInput = {
+    title: form.title ?? "",
+    description: form.description?.trim() || undefined,
+    color: form.color?.trim() || undefined,
+    location: form.location ?? "",
+    condition: form.condition ?? "",
+    category: form.category ?? undefined,
+    sizes: sizeRows.map((row) => ({
+      size: row.size,
+      size_group: row.size_group ?? undefined,
+      ...(sellMode === "set_only"
+        ? {}
+        : { price: row.price.trim() === "" ? undefined : row.price }),
+    })),
+    sell_mode: sellMode,
+    bundle_price:
+      sellMode === "individual" || bundle == null ? undefined : String(bundle),
+    contact_email: form.contact_email?.trim() || undefined,
+    contact_phone: form.contact_phone?.trim() || undefined,
+    contact_methods: contactMethods,
+    status: form.status ?? "active",
+  };
+
+  const result = listingInputSchema.safeParse(parseInput);
+  const errors: ListingFormErrors = result.success
+    ? { fields: {}, sizes: [], general: "" }
+    : collectListingFieldErrors(result.error.issues);
+
+  // Client-only: an "either" set price must undercut the per-size total. Only
+  // meaningful once every field parsed, so guard on a clean schema result.
+  if (result.success && sellMode === "either" && bundle != null) {
+    const individualTotal = sizeRows.reduce(
+      (sum, row) => sum + (Number(row.price) || 0),
+      0,
+    );
+    if (individualTotal > 0 && bundle >= individualTotal) {
+      errors.fields.bundle_price = EITHER_NOT_DISCOUNTED_ERROR;
+    }
+  }
+
+  if (hasFieldOrSizeErrors(errors)) {
+    errors.general = FIX_HIGHLIGHTED_FIELDS;
+  } else if (!hasActivePhoto) {
+    errors.general = MISSING_PHOTO_ERROR;
+  }
+
+  return errors;
+}
 
 export type ListingSizesController = {
   rows: ListingSizeRowState[];
@@ -52,8 +216,11 @@ export function deriveSellMode(
 function buildInitialForm(
   initial?: Partial<ListingFormData>,
 ): ListingScalarFormData {
-  const { sizes: _sizes, contact_methods: _contactMethods, ...rest } =
-    initial ?? {};
+  const {
+    sizes: _sizes,
+    contact_methods: _contactMethods,
+    ...rest
+  } = initial ?? {};
   const base: ListingScalarFormData = {
     title: "",
     description: "",
@@ -153,7 +320,7 @@ export function useListingFormSubmit({
 }: UseListingFormSubmitOptions) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [errors, setErrors] = useState<ListingFormErrors>(EMPTY_LISTING_ERRORS);
   const [form, setForm] = useState<ListingScalarFormData>(() =>
     buildInitialForm(initial),
   );
@@ -266,7 +433,7 @@ export function useListingFormSubmit({
   };
 
   const handleSubmit = useCallback(async () => {
-    setError("");
+    setErrors(EMPTY_LISTING_ERRORS);
 
     // Editing with no changes: skip the server round-trip and just return to the dashboard.
     if (
@@ -281,87 +448,47 @@ export function useListingFormSubmit({
       return;
     }
 
+    const sellMode = deriveSellMode(
+      sizeRows.length,
+      sellOnlyAsSet,
+      bundlePrice,
+    );
+    const bundle = bundlePrice.trim() ? Number(bundlePrice) : null;
+    const hasActivePhoto = slots.some((s) => s.imageFile || s.existingUrl);
+
+    const validationErrors = validateListingForm({
+      form,
+      sizeRows,
+      sellMode,
+      bundle,
+      contactMethods,
+      hasActivePhoto,
+    });
+    if (hasListingErrors(validationErrors)) {
+      setErrors(validationErrors);
+      return;
+    }
+
     setLoading(true);
 
     try {
-      if (
-        !form.title?.trim() ||
-        !form.location ||
-        !form.condition ||
-        !form.category ||
-        !GOWN_CATEGORIES.some((c) => c.id === form.category)
-      ) {
-        throw new Error("Please fill in all required fields.");
-      }
-
-      if (!form.contact_email?.trim() && !form.contact_phone?.trim()) {
-        throw new Error(
-          "Add an email or phone number so buyers can reach you.",
-        );
-      }
-
-      const seenSizes = new Set<string>();
-      for (const row of sizeRows) {
-        if (!row.size || !row.size_group) {
-          throw new Error("Choose a size for every row.");
-        }
-        const sizeKey = `${row.size_group}:${row.size}`;
-        if (seenSizes.has(sizeKey)) {
-          throw new Error("Each size can only be added once.");
-        }
-        seenSizes.add(sizeKey);
-      }
-
-      const sellMode = deriveSellMode(
-        sizeRows.length,
-        sellOnlyAsSet,
-        bundlePrice,
-      );
-      const bundle = bundlePrice.trim() ? Number(bundlePrice) : null;
-
-      if (sellMode === "set_only") {
-        if (bundle == null || Number.isNaN(bundle) || bundle <= 0) {
-          throw new Error("Enter the price for the complete set.");
-        }
-      }
-
       // Set-only variants carry no per-size price — the server stamps each one
-      // with the shared set price. Every other mode needs a price per size.
-      const sizes: {
-        size: string;
-        size_group: SizeGroupSlug | null;
-        price?: number;
-      }[] = sizeRows.map((row) => {
-        if (sellMode === "set_only") {
-          return { size: row.size, size_group: row.size_group };
-        }
-        const price = Number(row.price);
-        if (!row.price.trim() || Number.isNaN(price) || price <= 0) {
-          throw new Error("Enter a price for every size.");
-        }
-        return { size: row.size, size_group: row.size_group, price };
-      });
-
-      if (sellMode === "either") {
-        if (bundle == null || Number.isNaN(bundle) || bundle <= 0) {
-          throw new Error("Enter a valid price for all sizes together.");
-        }
-        const individualTotal = sizes.reduce((sum, s) => sum + (s.price ?? 0), 0);
-        if (bundle >= individualTotal) {
-          throw new Error(
-            "The price for all sizes together should be less than the sizes priced individually.",
-          );
-        }
-      }
+      // with the shared set price. Every other mode sends its per-size price.
+      const sizes = sizeRows.map((row) =>
+        sellMode === "set_only"
+          ? { size: row.size, size_group: row.size_group }
+          : {
+              size: row.size,
+              size_group: row.size_group,
+              price: Number(row.price),
+            },
+      );
 
       const activeSlots = slots.filter((s) => s.imageFile || s.existingUrl);
-      if (activeSlots.length === 0) {
-        throw new Error("Please add at least one gown photo.");
-      }
 
       const formData = new FormData();
 
-      formData.set("title", form.title.trim());
+      formData.set("title", (form.title ?? "").trim());
       formData.set("description", form.description?.trim() || "");
       formData.set("color", form.color?.trim() || "");
       formData.set("location", String(form.location));
@@ -402,10 +529,18 @@ export function useListingFormSubmit({
         ? await updateListing(listingId, formData)
         : await createListing(formData);
 
-      if (result?.error) throw new Error(result.error);
+      // Server-action outcome errors surface as a toast; field validation
+      // (above) stays inline via setErrors.
+      if (result?.error) {
+        toast.error(
+          listingId ? "Couldn't save changes" : "Couldn't publish listing",
+          { description: result.error },
+        );
+        return;
+      }
     } catch (e: unknown) {
       unstable_rethrow(e);
-      setError(e instanceof Error ? e.message : "Something went wrong.");
+      setErrors({ fields: {}, sizes: [], general: "Something went wrong." });
     } finally {
       setLoading(false);
     }
@@ -430,7 +565,7 @@ export function useListingFormSubmit({
     toggleContactMethod,
     sizesController,
     loading,
-    error,
+    errors,
     handleSubmit,
     isEdit: Boolean(listingId),
   };

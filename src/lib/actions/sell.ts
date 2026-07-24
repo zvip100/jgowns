@@ -5,117 +5,19 @@ import { updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { isValidSizePair, sizeOptionIndex } from "@/lib/gown-sizes";
+import { sizeOptionIndex } from "@/lib/gown-sizes";
 import {
-  CONTACT_METHODS,
-  GOWN_CATEGORIES,
   MAX_LISTING_IMAGES,
-  SELL_MODES,
   SIZE_GROUPS,
-  type GownCategoryId,
   type ServerActionErrorResult,
 } from "@/lib/types";
-import { imageSlotFormKeys, optionalPhoneSchema } from "@/lib/utils";
+import { imageSlotFormKeys } from "@/lib/utils";
 import { getAuthClient, type SupabaseServer } from "@/lib/actions/auth";
 import { deleteListingImages } from "@/lib/actions/images";
-
-const CATEGORY_IDS = GOWN_CATEGORIES.map((c) => c.id) as [
-  GownCategoryId,
-  ...GownCategoryId[],
-];
-
-const sizeEntrySchema = z.object({
-  size: z.string().trim().min(1),
-  size_group: z.enum(SIZE_GROUPS),
-  // Omitted for set-only listings; required for every other mode (see superRefine).
-  price: z.coerce.number().positive().optional(),
-});
-
-const listingInputSchema = z
-  .object({
-    title: z.string().trim().min(4),
-    description: z.string().trim().optional(),
-    color: z.string().trim().optional(),
-    location: z.string().trim().min(1),
-    condition: z.string().trim().min(1),
-    category: z.enum(CATEGORY_IDS),
-    sizes: z.array(sizeEntrySchema).min(1),
-    sell_mode: z.enum(SELL_MODES).default("individual"),
-    bundle_price: z.coerce.number().positive().optional(),
-    contact_email: z.email().optional(),
-    contact_phone: optionalPhoneSchema,
-    contact_methods: z.array(z.enum(CONTACT_METHODS)).default([]),
-    status: z.enum(["active", "sold", "removed"]).default("active"),
-  })
-  .superRefine((data, ctx) => {
-    if (!data.contact_email && !data.contact_phone) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["contact_email"],
-        message: "Add an email or phone number so buyers can reach you.",
-      });
-    }
-    if (data.contact_methods.length > 0 && !data.contact_phone) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["contact_methods"],
-        message: "Add a phone number to offer call or text.",
-      });
-    }
-    const seen = new Set<string>();
-    for (const [i, entry] of data.sizes.entries()) {
-      if (!isValidSizePair(data.category, entry.size_group, entry.size)) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["sizes", i, "size"],
-          message: "Size is not valid for this category.",
-        });
-      }
-      const key = `${entry.size_group}:${entry.size}`;
-      if (seen.has(key)) {
-        ctx.addIssue({
-          code: "custom",
-          path: ["sizes", i, "size"],
-          message: "Each size can only be added once.",
-        });
-      }
-      seen.add(key);
-    }
-    if (data.sell_mode !== "individual" && data.sizes.length < 2) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["sell_mode"],
-        message: "Set pricing requires at least two sizes.",
-      });
-    }
-    if (data.sell_mode !== "set_only") {
-      for (const [i, entry] of data.sizes.entries()) {
-        if (entry.price == null) {
-          ctx.addIssue({
-            code: "custom",
-            path: ["sizes", i, "price"],
-            message: "Enter a price for every size.",
-          });
-        }
-      }
-    }
-    if (data.sell_mode === "individual" && data.bundle_price != null) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["bundle_price"],
-        message: "A set price is only allowed when selling sizes together.",
-      });
-    }
-    if (data.sell_mode === "set_only" && data.bundle_price == null) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["bundle_price"],
-        message: "Enter the price for the complete set.",
-      });
-    }
-  });
-
-type ParsedListing = z.infer<typeof listingInputSchema>;
+import {
+  listingInputSchema,
+  type ParsedListing,
+} from "@/lib/validations/listing-schema";
 
 type VariantRow = {
   size: string;
@@ -131,8 +33,7 @@ type VariantRow = {
  * keeps its own per-size price.
  */
 function variantRowsPayload(parsed: ParsedListing): VariantRow[] {
-  const setPrice =
-    parsed.sell_mode === "set_only" ? parsed.bundle_price : null;
+  const setPrice = parsed.sell_mode === "set_only" ? parsed.bundle_price : null;
   return [...parsed.sizes]
     .sort(
       (a, b) =>
@@ -250,7 +151,9 @@ function sanitizeBlur(value: FormDataEntryValue | null): string {
 }
 
 /** Collect image slots from formData, compacted (skip empty slots), at least 1 required. */
-function collectImageSlots(formData: FormData): ImageSlot[] | { error: string } {
+function collectImageSlots(
+  formData: FormData,
+): ImageSlot[] | { error: string } {
   const slots: ImageSlot[] = [];
 
   for (let n = 0; n < MAX_LISTING_IMAGES; n++) {
@@ -497,12 +400,14 @@ export async function updateListing(
 
     shouldRedirect = true;
   } catch (e) {
-    if (newlyUploadedUrls.length > 0) await deleteListingImages(newlyUploadedUrls);
+    if (newlyUploadedUrls.length > 0)
+      await deleteListingImages(newlyUploadedUrls);
     return catchSellActionError(e);
   }
 
   if (shouldRedirect) {
-    redirect("/dashboard");
+    // One-shot flag consumed by DashboardFlashToast to confirm the edit.
+    redirect("/dashboard?toast=listing-updated");
   }
   return {};
 }
