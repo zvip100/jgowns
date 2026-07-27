@@ -15,7 +15,7 @@ type BrowsePaginationProps = {
 };
 
 const navLinkBase =
-  "inline-flex items-center gap-1.5 text-sm font-medium text-[#6f5947] transition-colors hover:text-[#3f3023] focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--focus-ring)";
+  "inline-flex min-h-8 items-center gap-1.5 text-sm font-medium text-[#6f5947] transition-colors hover:text-[#3f3023] focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--focus-ring)";
 
 const pageLinkBase =
   "inline-flex min-h-8 min-w-8 items-center justify-center text-sm tabular-nums text-[#8e7962] transition-colors hover:text-[#3f3023] focus-visible:rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--focus-ring)";

@@ -1,4 +1,4 @@
-import { SearchX } from "lucide-react";
+import { SearchX, TriangleAlert } from "lucide-react";
 
 import {
   Empty,
@@ -37,9 +37,19 @@ export default function ListingsGrid({
 
   if (error) {
     return (
-      <div className='rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700'>
-        Could not load gowns right now. Please try again in a moment.
-      </div>
+      <Empty className='surface-panel hairline rounded-[1.8rem] border-0 py-20 text-[#8e7962]'>
+        <EmptyHeader>
+          <EmptyMedia className='mb-2 size-auto bg-transparent text-6xl text-[#a02238]'>
+            <TriangleAlert className='size-12' strokeWidth={1.4} />
+          </EmptyMedia>
+          <EmptyTitle className='text-base font-medium text-[#a02238]'>
+            Couldn&apos;t load gowns
+          </EmptyTitle>
+          <EmptyDescription className='text-[#8e7962]'>
+            Please try again in a moment.
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     );
   }
 

@@ -124,6 +124,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
   const itemsRef = useRef<WishlistItem[]>(items);
   const ownerIdRef = useRef<string | null>(null);
   const authedRef = useRef(false);
+  const currentUserIdRef = useRef<string | null>(null);
   const lastSyncedAuthRef = useRef<boolean | null>(null);
   const lastRefreshedAtRef = useRef<number | null>(null);
 
@@ -224,6 +225,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
 
     setIsAuthenticated(serverPayload.isAuthenticated);
     authedRef.current = serverPayload.isAuthenticated;
+    currentUserIdRef.current = serverPayload.userId;
 
     const plan = planWishlistReconcile({
       isAuthenticated: serverPayload.isAuthenticated,
@@ -256,6 +258,9 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
     const baseline = itemsRef.current;
     mergeWishlist(plan.payload)
       .then((result) => {
+        // Sign-out or an account switch may have landed during the round-trip;
+        // drop the stale result rather than clobber the current mirror/ownerId.
+        if (!authedRef.current || currentUserIdRef.current !== userId) return;
         if (result.success) {
           ownerIdRef.current = userId;
           const reconciled = reconcileMergeResult(

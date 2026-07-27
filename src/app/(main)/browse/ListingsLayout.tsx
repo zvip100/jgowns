@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { flushSync } from "react-dom";
 import { useSearchParams } from "next/navigation";
-import { ChevronDown, SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { countActiveBrowseFilters } from "@/lib/browse-params";
@@ -13,7 +13,7 @@ import FilterBar from "./FilterBar";
 import FilterCountBadge from "./FilterCountBadge";
 
 const STICKY_BAR_CHROME =
-  "border-[#d5c4b0] bg-[rgba(252,246,236,0.82)] shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] backdrop-blur-lg";
+  "bg-[rgba(252,246,236,0.82)] backdrop-blur-lg";
 
 type ListingsLayoutProps = {
   minBound: number;
@@ -110,7 +110,7 @@ export default function ListingsLayout({
             ancestor isolates the subtree and kills the backdrop-filter frost. */}
         <div
           className={cn(
-            "relative left-1/2 -ml-[50vw] w-screen border-b",
+            "relative left-1/2 -ml-[50vw] w-screen",
             STICKY_BAR_CHROME,
           )}
           style={{ viewTransitionName: "browse-subnav" }}
@@ -124,19 +124,13 @@ export default function ListingsLayout({
                 aria-expanded={false}
                 aria-controls='listings-filter-rail'
                 style={{ viewTransitionName: "rail-toggle" }}
-                className='group/sub-toggle h-auto w-72 shrink-0 justify-between rounded-full border-[#c9b39a] bg-white/85 px-4 py-2.5 text-[0.66rem] font-semibold uppercase tracking-[0.13em] text-[#6f5947] shadow-[0_10px_26px_rgba(97,71,42,0.14)] backdrop-blur-sm hover:bg-white'
+                className='group/sub-toggle h-auto shrink-0 rounded-full border-[#c9b39a] bg-white/85 px-4 py-2.5 text-[0.66rem] font-semibold uppercase tracking-[0.13em] text-[#6f5947] shadow-[0_10px_26px_rgba(97,71,42,0.14)] backdrop-blur-sm hover:bg-white'
               >
                 <span className='inline-flex items-center gap-2'>
                   <SlidersHorizontal data-icon='inline-start' />
                   <span>Show Filters</span>
                 </span>
-                <span className='inline-flex items-center gap-2'>
-                  <FilterCountBadge count={activeFilterCount} />
-                  <ChevronDown
-                    data-icon='inline-end'
-                    className='transition-transform duration-500 ease-out'
-                  />
-                </span>
+                <FilterCountBadge count={activeFilterCount} />
               </Button>
             )}
             <div className='min-h-0 min-w-0 flex-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'>

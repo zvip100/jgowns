@@ -53,8 +53,10 @@ export default function FilterPanel({
   return (
     <div
       className={cn(
-        "surface-panel hairline px-4 py-4 sm:px-5 [box-shadow:inset_0_1px_0_rgba(255,255,255,0.74)]!",
-        isDrawer ? "rounded-[1.75rem]" : "rounded-b-[1.75rem]",
+        "surface-panel hairline px-4 py-4 sm:px-5",
+        isDrawer
+          ? "[box-shadow:inset_0_1px_0_rgba(255,255,255,0.74)]! rounded-[1.75rem]"
+          : "rail-open-top rounded-b-[1.75rem]",
       )}
     >
       <div className="mb-3 flex items-center justify-between gap-2 px-1">

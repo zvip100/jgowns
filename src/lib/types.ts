@@ -120,8 +120,8 @@ export type GownCategoryId = (typeof GOWN_CATEGORIES)[number]["id"];
 export const SIZE_GROUPS = ["toddler", "kids", "junior", "adult"] as const;
 export type SizeGroupSlug = (typeof SIZE_GROUPS)[number];
 
-export const GOWN_COLORS = ['Ivory', 'White', 'Champagne', 'Black', 'Pink', 'Blush', 'Silver', 'Gold', 'Light Blue', 'Other'];
-export const LOCATIONS = ['Borough Park', 'Williamsburg', 'Monsey', 'Monroe', 'Lakewood', 'Catskills', 'Other'];
+export const GOWN_COLORS = ['Beige', 'Black', 'Blush', 'Champagne', 'Dusty Blue', 'Emerald', 'Gold', 'Ivory', 'Light Blue', 'Mauve', 'Navy', 'Pink', 'Plum', 'Silver', 'White', 'Other'];
+export const LOCATIONS = ['Borough Park', 'Catskills', 'Lakewood', 'Monroe', 'Monsey', 'Williamsburg', 'Other'];
 export const GOWN_CONDITIONS = ['Brand New', 'Perfect Condition', 'Needs Alterations'] as const;
 export type GownCondition = typeof GOWN_CONDITIONS[number];
 
