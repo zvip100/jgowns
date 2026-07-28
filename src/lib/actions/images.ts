@@ -3,7 +3,7 @@
 import sharp from "sharp";
 import vision from "@google-cloud/vision";
 
-import { getAuthClient } from "@/lib/actions/auth";
+import { getAuthClient, type SupabaseServer } from "@/lib/actions/auth";
 
 export type OptimizeListingPhotoResult =
   | { dataUrl: string }
@@ -182,6 +182,8 @@ function padAndClamp({ left, top, width, height }: Region): Region {
   return { left: l, top: t, width: w, height: h };
 }
 
+type StorageCapableClient = { storage: SupabaseServer["storage"] };
+
 /**
  * Removes previously uploaded listing images from Supabase Storage.
  *
@@ -189,9 +191,15 @@ function padAndClamp({ left, top, width, height }: Region): Region {
  * are skipped silently. Security is enforced by the storage RLS policy
  * "Users can delete own images" — only the original uploader can delete
  * their own files.
+ *
+ * Session-based callers (the create/edit actions) omit `client` and get the
+ * caller's own session, gated by that RLS policy. The retention cleanup
+ * sweep runs with no user session, so it passes the service-role client
+ * explicitly, which bypasses storage RLS the same way it bypasses table RLS.
  */
 export async function deleteListingImages(
   imageUrls: string[],
+  client?: StorageCapableClient,
 ): Promise<DeleteListingImageResult> {
   const paths = imageUrls
     .map((url) => listingImagePathFromUrl(url))
@@ -199,10 +207,14 @@ export async function deleteListingImages(
 
   if (paths.length === 0) return { ok: true };
 
-  const auth = await getAuthClient();
-  if (!auth.ok) return { error: auth.error };
+  let supabase = client;
+  if (!supabase) {
+    const auth = await getAuthClient();
+    if (!auth.ok) return { error: auth.error };
+    supabase = auth.supabase;
+  }
 
-  const { error } = await auth.supabase.storage
+  const { error } = await supabase.storage
     .from(LISTING_IMAGE_BUCKET)
     .remove(paths);
 

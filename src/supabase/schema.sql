@@ -25,7 +25,7 @@ create table listings (
   contact_email text,
   contact_phone text,
   contact_methods text[] not null default '{}',
-  status text default 'active' check (status in ('active', 'sold', 'removed')),
+  status text default 'active' check (status in ('active', 'sold', 'removed', 'pending_payment')),
   created_at timestamp with time zone default now(),
   constraint listings_image_arrays_check check (
     cardinality(image_urls) between 1 and 3
@@ -79,16 +79,23 @@ create index listing_sizes_group_size_available_idx
 create index listing_sizes_price_available_idx
   on listing_sizes (price) where status = 'available';
 
-create table payment_intents (
+-- One row per Stripe Checkout attempt for a listing's publishing fee. No
+-- update/delete policies: status transitions happen only through
+-- record_listing_payment (service-role only, see below), and rows ride the
+-- listing FK cascade.
+create table listing_payments (
   id uuid default uuid_generate_v4() primary key,
-  user_id uuid references auth.users(id) on delete cascade,
-  listing_id uuid references listings(id) on delete cascade,
-  amount numeric(10,2),
-  currency text default 'usd',
-  status text default 'pending',
-  stripe_payment_intent_id text,
-  created_at timestamp with time zone default now()
+  listing_id uuid not null references listings(id) on delete cascade,
+  user_id uuid not null references auth.users(id) on delete cascade,
+  stripe_session_id text not null unique,
+  amount_cents integer not null check (amount_cents > 0),
+  currency text not null default 'usd',
+  status text not null default 'pending'
+    check (status in ('pending', 'succeeded', 'expired')),
+  created_at timestamptz not null default now(),
+  paid_at timestamptz
 );
+create index listing_payments_listing_id_idx on listing_payments (listing_id);
 
 -- Contact form submissions. Write-only from the app: insert is granted to anon
 -- + authenticated (buyers have no accounts), with no select/update/delete
@@ -179,13 +186,28 @@ create policy "Owners can insert own wishlist items" on wishlist_items
 create policy "Owners can delete own wishlist items" on wishlist_items
   for delete using ((select auth.uid()) = user_id);
 
+alter table listing_payments enable row level security;
+
+create policy "Sellers can insert own payment rows" on listing_payments
+  for insert with check (
+    auth.uid() = user_id
+    and exists (
+      select 1 from listings l
+      where l.id = listing_id and l.user_id = (select auth.uid())
+    )
+  );
+create policy "Sellers can view own payment rows" on listing_payments
+  for select using (auth.uid() = user_id);
+
 create policy "Public image access" on storage.objects for select using (bucket_id = 'gown-images');
 create policy "Auth users can upload images" on storage.objects for insert with check (bucket_id = 'gown-images' and auth.role() = 'authenticated');
 create policy "Users can delete own images" on storage.objects for delete using (bucket_id = 'gown-images' and auth.uid() = owner);
 
 -- Atomic "mark listing sold": flip the listing status and all of its size
 -- variants in one transaction, so a mid-way failure can't leave the listing
--- sold while some variants stay available.
+-- sold while some variants stay available. Guarded to active-only so a
+-- pending/removed listing can't be routed to sold (see reactivate_listing's
+-- sold-only guard below for the matching half of this bypass close).
 create or replace function mark_listing_sold(p_listing_id uuid)
 returns void
 language plpgsql
@@ -202,7 +224,7 @@ begin
 
   update public.listings
      set status = 'sold'
-   where id = p_listing_id and user_id = v_uid;
+   where id = p_listing_id and user_id = v_uid and status = 'active';
 
   get diagnostics v_count = row_count;
   if v_count = 0 then
@@ -220,7 +242,9 @@ grant execute on function mark_listing_sold(uuid) to authenticated;
 -- Atomic "reactivate listing": flip the listing status back to active and all
 -- of its size variants back to available in one transaction, undoing a
 -- mark-sold so a mid-way failure can't leave the listing active while some
--- variants stay sold.
+-- variants stay sold. Guarded to sold-only: without it, a replayed
+-- mark_listing_sold on a pending_payment listing (pending -> sold) followed
+-- by this RPC (sold -> active) would publish the listing without paying.
 create or replace function reactivate_listing(p_listing_id uuid)
 returns void
 language plpgsql
@@ -237,7 +261,7 @@ begin
 
   update public.listings
      set status = 'active'
-   where id = p_listing_id and user_id = v_uid;
+   where id = p_listing_id and user_id = v_uid and status = 'sold';
 
   get diagnostics v_count = row_count;
   if v_count = 0 then
@@ -258,7 +282,8 @@ grant execute on function reactivate_listing(uuid) to authenticated;
 -- listing sold off one size at a time disappears from browse exactly like one
 -- sold via mark_listing_sold. Ownership is enforced by RLS on listing_sizes
 -- (via parent) for the size update, and by the explicit user_id guard on the
--- listing update.
+-- listing update. Guarded to an active parent for consistency with the two
+-- RPCs above, though its cascade only ever sets 'sold', never 'active'.
 create or replace function mark_size_sold(p_listing_id uuid, p_size_id uuid)
 returns void
 language plpgsql
@@ -274,9 +299,14 @@ begin
     raise exception 'Not authenticated' using errcode = '28000';
   end if;
 
-  update public.listing_sizes
+  update public.listing_sizes ls
      set status = 'sold'
-   where id = p_size_id and listing_id = p_listing_id;
+   where ls.id = p_size_id
+     and ls.listing_id = p_listing_id
+     and exists (
+       select 1 from public.listings l
+        where l.id = ls.listing_id and l.status = 'active'
+     );
 
   get diagnostics v_count = row_count;
   if v_count = 0 then
@@ -296,6 +326,47 @@ end;
 $$;
 
 grant execute on function mark_size_sold(uuid, uuid) to authenticated;
+
+-- Atomic listing-fee activation: flips a listing_payments row to 'succeeded'
+-- and its parent listing to 'active' in one transaction. Idempotent (safe for
+-- the webhook and the success-page fast path to call concurrently or in
+-- either order). Restricted to service_role: the webhook carries no user
+-- session, and RLS correctly blocks anonymous status writes, so activation
+-- is confined to code paths that have already verified the event/session
+-- against Stripe's own API — never reachable from a seller session directly.
+create or replace function record_listing_payment(p_session_id text)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_listing_id uuid;
+  v_already_succeeded boolean;
+begin
+  select listing_id, (status = 'succeeded')
+    into v_listing_id, v_already_succeeded
+    from public.listing_payments
+   where stripe_session_id = p_session_id;
+
+  if v_listing_id is null then
+    raise exception 'Listing payment not found' using errcode = 'P0002';
+  end if;
+
+  if not v_already_succeeded then
+    update public.listing_payments
+       set status = 'succeeded', paid_at = now()
+     where stripe_session_id = p_session_id;
+  end if;
+
+  update public.listings
+     set status = 'active'
+   where id = v_listing_id and status = 'pending_payment';
+end;
+$$;
+
+revoke execute on function record_listing_payment(text) from public;
+grant execute on function record_listing_payment(text) to service_role;
 
 -- Atomic listing edit: update the shared listing row and reconcile its size
 -- variants (delete removed, re-price/re-order kept ones while preserving their

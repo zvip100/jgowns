@@ -1,6 +1,6 @@
 'use client';
 
-import { CircleDollarSign, Mail, Phone } from 'lucide-react';
+import { Mail, Phone } from 'lucide-react';
 import {
   CONTACT_METHODS,
   CONTACT_METHOD_LABELS,
@@ -26,7 +26,6 @@ import { TextareaField } from '@/components/form/TextareaField';
 import { useListingFormSubmit } from '@/hooks/useListingFormSubmit';
 import { useListingImageSlots } from '@/hooks/useListingImageSlots';
 import { CHECKBOX_GOLD_CLASS, PRIMARY_CTA_CLASS } from '@/lib/styles';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { FieldError, FieldGroup } from '@/components/ui/field';
@@ -35,11 +34,19 @@ import { Label } from '@/components/ui/label';
 type ListingFormProps = {
   initial?: Partial<ListingFormData>;
   listingId?: string;
+  listingFeeCents?: number;
 };
+
+/** `500` -> "$5", `550` -> "$5.50". */
+function formatFeeDollars(cents: number): string {
+  const dollars = cents / 100;
+  return Number.isInteger(dollars) ? `$${dollars}` : `$${dollars.toFixed(2)}`;
+}
 
 export default function ListingForm({
   initial,
   listingId,
+  listingFeeCents,
 }: ListingFormProps) {
   const { slots, onFileSelected, onClear, resolveUploadFile } =
     useListingImageSlots({
@@ -209,13 +216,23 @@ export default function ListingForm({
           </FormFieldGrid>
         </FormSection>
 
-        <Alert className="border-(--line) bg-(--bg-cream)">
-          <CircleDollarSign className="text-(--accent-deep)" />
-          <AlertTitle className="font-semibold tracking-tight">
-            Listing fee: free for a limited time
-          </AlertTitle>
-          <AlertDescription>This is a limited time offer.</AlertDescription>
-        </Alert>
+        {!isEdit && (
+          <div className="flex items-center gap-4 rounded-2xl border border-[#b58d5f]/40 bg-(--bg-ivory) p-4 sm:p-5">
+            <span className="flex shrink-0 items-center justify-center rounded-xl gold-gradient px-3.5 py-2 text-lg font-semibold text-white shadow-[0_8px_18px_rgba(106,74,39,0.22)]">
+              {listingFeeCents ? formatFeeDollars(listingFeeCents) : 'Free'}
+            </span>
+            <div className="min-w-0">
+              <p className="font-semibold tracking-tight text-(--ink)">
+                Publishing fee
+              </p>
+              <p className="text-sm text-(--muted-ink)">
+                {listingFeeCents
+                  ? 'Pay securely with Stripe at checkout.'
+                  : 'Waived for a limited time.'}
+              </p>
+            </div>
+          </div>
+        )}
 
         {errors.general && <FieldError>{errors.general}</FieldError>}
 

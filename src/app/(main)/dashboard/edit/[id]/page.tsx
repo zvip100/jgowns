@@ -1,6 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
-import { Lock } from 'lucide-react';
+import { CreditCard, Lock } from 'lucide-react';
 
 import { createClient } from '@/lib/supabase/server';
 import { getCurrentUser } from '@/lib/queries/auth';
@@ -47,6 +47,18 @@ export default async function EditListingPage({ params }: EditListingPageProps) 
         icon={Lock}
         title='Listing Sold'
         description='Reactivate this listing from your dashboard to edit it.'
+        href='/dashboard'
+        linkLabel='Back to dashboard'
+      />
+    );
+  }
+
+  if (listingWithSizes.status === 'pending_payment') {
+    return (
+      <NoticePanel
+        icon={CreditCard}
+        title='Payment Required'
+        description='Complete payment for this listing from your dashboard before editing it.'
         href='/dashboard'
         linkLabel='Back to dashboard'
       />

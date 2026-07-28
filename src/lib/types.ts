@@ -14,8 +14,21 @@ export type Listing = {
   contact_email: string | null;
   contact_phone: string | null;
   contact_methods: ContactMethod[];
-  status: 'active' | 'sold' | 'removed';
+  status: 'active' | 'sold' | 'removed' | 'pending_payment';
   created_at: string;
+};
+
+/** One Stripe Checkout attempt for a listing's one-time publishing fee. */
+export type ListingPayment = {
+  id: string;
+  listing_id: string;
+  user_id: string;
+  stripe_session_id: string;
+  amount_cents: number;
+  currency: string;
+  status: 'pending' | 'succeeded' | 'expired';
+  created_at: string;
+  paid_at: string | null;
 };
 
 export const SELL_MODES = ['individual', 'set_only', 'either'] as const;

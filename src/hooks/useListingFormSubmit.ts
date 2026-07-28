@@ -22,7 +22,7 @@ import {
 
 /** Scalar form fields — size rows, set pricing, and contact methods live in their own state. */
 type ListingScalarFormData = Partial<
-  Omit<ListingFormData, "sizes" | "contact_methods">
+  Omit<ListingFormData, "sizes" | "contact_methods" | "status">
 >;
 
 /** Fields that surface an inline error directly below the control. */
@@ -159,7 +159,6 @@ export function validateListingForm({
     contact_email: form.contact_email?.trim() || undefined,
     contact_phone: form.contact_phone?.trim() || undefined,
     contact_methods: contactMethods,
-    status: form.status ?? "active",
   };
 
   const result = listingInputSchema.safeParse(parseInput);
@@ -219,6 +218,7 @@ function buildInitialForm(
   const {
     sizes: _sizes,
     contact_methods: _contactMethods,
+    status: _status,
     ...rest
   } = initial ?? {};
   const base: ListingScalarFormData = {
@@ -229,7 +229,6 @@ function buildInitialForm(
     condition: undefined,
     contact_email: "",
     contact_phone: "",
-    status: "active",
     ...rest,
   };
   const raw = base.category;
@@ -503,7 +502,6 @@ export function useListingFormSubmit({
       formData.set("contact_email", form.contact_email?.trim() || "");
       formData.set("contact_phone", form.contact_phone?.trim() || "");
       formData.set("contact_methods", JSON.stringify(contactMethods));
-      formData.set("status", String(form.status ?? "active"));
 
       const slotPayloads = await Promise.all(
         activeSlots.map(async (slot) => {

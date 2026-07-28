@@ -4,6 +4,7 @@ import { Eye, Pencil } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import CompletePaymentButton from '@/components/CompletePaymentButton';
 import MarkSizeSoldButton from '@/components/MarkSizeSoldButton';
 import MarkSoldButton from '@/components/MarkSoldButton';
 import ReactivateListingButton from '@/components/ReactivateListingButton';
@@ -17,14 +18,24 @@ const statusStyles: Record<Listing['status'], string> = {
   active: 'bg-[#e8f4ec] text-[#2d7a4f]',
   sold: 'bg-(--sold) text-white',
   removed: 'bg-[#fef4e0] text-[#8a6a30]',
+  pending_payment: 'bg-(--accent)/15 text-(--accent-deep)',
+};
+
+const statusLabels: Record<Listing['status'], string> = {
+  active: 'active',
+  sold: 'sold',
+  removed: 'removed',
+  pending_payment: 'Payment required',
 };
 
 type ListingRowProps = {
   listing: ListingWithSizes;
+  listingFeeActive: boolean;
 };
 
 export default function ListingRow({
   listing,
+  listingFeeActive,
 }: ListingRowProps) {
   const sizes = sortListingSizes(listing.sizes);
   const isSetOnly = listing.sell_mode === 'set_only';
@@ -65,7 +76,7 @@ export default function ListingRow({
               </Link>
             </h3>
             <Badge variant="secondary" className={statusStyles[listing.status]}>
-              {listing.status}
+              {statusLabels[listing.status]}
             </Badge>
           </div>
           <div className="mt-1.5 flex flex-col gap-1 text-sm text-(--muted-ink)">
@@ -114,12 +125,14 @@ export default function ListingRow({
       </div>
 
       <div className="flex shrink-0 items-center justify-end gap-1 border-t border-(--line) pt-2 lg:border-t-0 lg:pt-0">
-        <Button asChild variant="ghost" size="sm">
-          <Link href={href} aria-label="View listing">
-            <Eye data-icon="inline-start" />
-            <span className="hidden sm:inline">View</span>
-          </Link>
-        </Button>
+        {listing.status !== 'pending_payment' && (
+          <Button asChild variant="ghost" size="sm">
+            <Link href={href} aria-label="View listing">
+              <Eye data-icon="inline-start" />
+              <span className="hidden sm:inline">View</span>
+            </Link>
+          </Button>
+        )}
         {listing.status === 'active' && (
           <Button asChild variant="ghost" size="sm">
             <Link href={`/dashboard/edit/${listing.id}`} aria-label="Edit listing">
@@ -127,6 +140,12 @@ export default function ListingRow({
               <span className="hidden sm:inline">Edit</span>
             </Link>
           </Button>
+        )}
+        {listing.status === 'pending_payment' && (
+          <CompletePaymentButton
+            listingId={listing.id}
+            label={listingFeeActive ? 'Complete Payment' : 'Publish'}
+          />
         )}
         <MarkSoldButton
           id={listing.id}

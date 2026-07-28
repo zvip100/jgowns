@@ -43,6 +43,7 @@ next-env.d.ts
 # DB migrations
 /src/supabase/migrations
 
-docs/
+docs
 
 .playwright-mcp
+.mcp.json

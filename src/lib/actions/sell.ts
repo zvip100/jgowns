@@ -6,18 +6,24 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { sizeOptionIndex } from "@/lib/gown-sizes";
+import { isListingFeeActive } from "@/lib/listing-fee";
 import {
   MAX_LISTING_IMAGES,
   SIZE_GROUPS,
+  type Listing,
   type ServerActionErrorResult,
 } from "@/lib/types";
 import { imageSlotFormKeys } from "@/lib/utils";
 import { getAuthClient, type SupabaseServer } from "@/lib/actions/auth";
+import { createListingCheckout } from "@/lib/actions/payments";
 import { deleteListingImages } from "@/lib/actions/images";
 import {
   listingInputSchema,
   type ParsedListing,
 } from "@/lib/validations/listing-schema";
+
+/** One-shot flag consumed by DashboardFlashToast, mirroring the edit flow. */
+const CHECKOUT_UNAVAILABLE_REDIRECT = "/dashboard?toast=checkout-unavailable";
 
 type VariantRow = {
   size: string;
@@ -113,6 +119,7 @@ function listingRowPayload(
   parsed: ParsedListing,
   image_urls: string[],
   image_blur_data_urls: string[],
+  status: Listing["status"],
 ) {
   return {
     title: parsed.title,
@@ -128,7 +135,7 @@ function listingRowPayload(
     contact_email: parsed.contact_email ?? null,
     contact_phone: parsed.contact_phone ?? null,
     contact_methods: parsed.contact_methods,
-    status: parsed.status,
+    status,
   };
 }
 
@@ -212,7 +219,9 @@ export async function createListing(
   if (!auth.ok) return { error: auth.error };
   const { supabase, user } = auth;
 
+  const feeActive = isListingFeeActive();
   let shouldRedirect = false;
+  let createdListingId: string | null = null;
   const uploadedUrls: string[] = [];
 
   try {
@@ -245,7 +254,12 @@ export async function createListing(
     const image_blur_data_urls = slots.map((s) => s.blur);
 
     const payload = {
-      ...listingRowPayload(parsed, uploadedUrls, image_blur_data_urls),
+      ...listingRowPayload(
+        parsed,
+        uploadedUrls,
+        image_blur_data_urls,
+        feeActive ? "pending_payment" : "active",
+      ),
       user_id: user.id,
     };
 
@@ -272,14 +286,29 @@ export async function createListing(
       return { error: sizesError.message };
     }
 
-    updateTag("listings");
+    createdListingId = created.id as string;
+    // A pending listing is invisible to browse until it activates, so there's
+    // nothing to invalidate yet in the fee-active branch (see §6.1 instead).
+    if (!feeActive) updateTag("listings");
     shouldRedirect = true;
   } catch (e) {
     if (uploadedUrls.length > 0) await deleteListingImages(uploadedUrls);
     return catchSellActionError(e);
   }
 
-  if (shouldRedirect) {
+  // Runs after the try/catch on purpose: the listing + variants are already
+  // committed by this point, so a Checkout-creation failure must never delete
+  // the seller's work.
+  if (shouldRedirect && createdListingId) {
+    if (feeActive) {
+      const checkout = await createListingCheckout(createdListingId);
+      // Only reachable when checkout failed; success redirects to Stripe. The
+      // listing is committed, so leave the populated form behind rather than
+      // returning the error into it and inviting a duplicate submission. The
+      // flag carries the reason across the redirect (DashboardFlashToast).
+      if (checkout?.error) redirect(CHECKOUT_UNAVAILABLE_REDIRECT);
+      return checkout;
+    }
     redirect("/dashboard");
   }
   return {};
@@ -357,10 +386,15 @@ export async function updateListing(
       nextBlurUrls.push(slot.blur);
     }
 
-    // An edit never changes listing status: the RPC no longer writes the status
-    // column, and non-active listings are rejected above. Status transitions go
-    // through their dedicated actions (markListingSold / reactivateListing).
-    const payload = listingRowPayload(parsed, nextImageUrls, nextBlurUrls);
+    // An edit never changes listing status: the RPC ignores the status column,
+    // and non-active listings are rejected above. Status transitions go through
+    // their dedicated actions (markListingSold / reactivateListing).
+    const payload = listingRowPayload(
+      parsed,
+      nextImageUrls,
+      nextBlurUrls,
+      "active",
+    );
 
     const { error: dbError } = await supabase.rpc(
       "update_listing_with_variants",

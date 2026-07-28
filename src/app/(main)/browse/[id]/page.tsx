@@ -5,7 +5,7 @@ import {
   listingPriceSummary,
   listingSizeSummary,
 } from "@/lib/listing-variants";
-import { fetchListingWithFallback } from "@/lib/listings-queries";
+import { fetchListing } from "@/lib/queries/listings";
 import { isValidUUID } from "@/lib/utils";
 
 import { ListingDetail } from "./ListingDetail";
@@ -25,7 +25,7 @@ export async function generateMetadata({
   const { id } = await params;
   if (!isValidUUID(id)) return { title: "Listing Not Found" };
 
-  const { listing, error } = await fetchListingWithFallback(id);
+  const { listing, error } = await fetchListing(id);
   if (error) return { title: "Something went wrong" };
   if (!listing) return { title: "Listing Not Found" };
 
@@ -72,7 +72,7 @@ export default async function ListingPage({
   const backHref = fromDashboard ? '/dashboard' : browseHrefFromBack(back);
   const backLabel = fromDashboard ? 'Back to dashboard' : 'Browse all gowns';
 
-  const { listing, error } = await fetchListingWithFallback(id);
+  const { listing, error } = await fetchListing(id);
   if (error) throw new Error(error.message);
   if (!listing) notFound();
 

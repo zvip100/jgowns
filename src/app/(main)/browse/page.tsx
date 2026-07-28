@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 
 import type { PageSearchParams } from "@/lib/types";
-import { fetchPriceBounds } from "@/lib/listings-queries";
+import { fetchPriceBounds } from "@/lib/queries/listings";
 
 import BrowseCategoryNav from "./BrowseCategoryNav";
 import BrowseListings from "./BrowseListings";
