@@ -333,8 +333,13 @@ export async function updateListing(
   if (existingError) return { error: existingError.message };
   if (!existing) return { error: "Listing not found" };
   if (existing.user_id !== user.id) return { error: "Not authorized" };
-  if (existing.status !== "active") {
-    return { error: "Only active listings can be edited." };
+  // Active (live) and pending_payment (saved, fee unpaid) are editable.
+  // Sold/removed stay blocked; editing never flips status (RPC ignores it).
+  if (
+    existing.status !== "active" &&
+    existing.status !== "pending_payment"
+  ) {
+    return { error: "Only active or unpaid listings can be edited." };
   }
 
   const oldImageUrls: string[] = existing.image_urls ?? [];
@@ -387,13 +392,13 @@ export async function updateListing(
     }
 
     // An edit never changes listing status: the RPC ignores the status column,
-    // and non-active listings are rejected above. Status transitions go through
-    // their dedicated actions (markListingSold / reactivateListing).
+    // and sold/removed listings are rejected above. Status transitions go
+    // through their dedicated actions / payment confirmation.
     const payload = listingRowPayload(
       parsed,
       nextImageUrls,
       nextBlurUrls,
-      "active",
+      existing.status,
     );
 
     const { error: dbError } = await supabase.rpc(

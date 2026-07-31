@@ -42,12 +42,16 @@ export default function ListingRow({
   const showPerSizeActions =
     listing.status === 'active' && !isSetOnly && sizes.length > 1;
   const category = GOWN_CATEGORIES.find((c) => c.id === listing.category)?.label;
-  const href = `/browse/${listing.id}?from=dash`;
+  const isPendingPayment = listing.status === 'pending_payment';
+  const browseHref = `/browse/${listing.id}?from=dash`;
+  const editHref = `/dashboard/edit/${listing.id}`;
+  // Pending listings 404 on the public detail page; send sellers to edit instead.
+  const primaryHref = isPendingPayment ? editHref : browseHref;
 
   return (
     <article className="surface-panel hairline group flex flex-col gap-3 rounded-2xl p-3 transition hover:-translate-y-0.5 hover:shadow-[0_22px_44px_rgba(99,72,40,0.14)] sm:p-4 lg:flex-row lg:items-center lg:gap-5">
       <div className="flex min-w-0 flex-1 items-center gap-4 sm:gap-5">
-        <Link href={href} className="shrink-0">
+        <Link href={primaryHref} className="shrink-0">
           <div className="relative aspect-4/5 w-20 overflow-hidden rounded-xl bg-(--bg-ivory) sm:w-24">
             <Image
               src={listing.image_urls[0]}
@@ -69,7 +73,7 @@ export default function ListingRow({
           <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
             <h3 className="truncate font-display text-base font-medium text-(--ink) sm:text-lg">
               <Link
-                href={href}
+                href={primaryHref}
                 className="transition hover:text-(--accent-deep)"
               >
                 {listing.title}
@@ -125,27 +129,27 @@ export default function ListingRow({
       </div>
 
       <div className="flex shrink-0 items-center justify-end gap-1 border-t border-(--line) pt-2 lg:border-t-0 lg:pt-0">
-        {listing.status !== 'pending_payment' && (
+        {!isPendingPayment && (
           <Button asChild variant="ghost" size="sm">
-            <Link href={href} aria-label="View listing">
+            <Link href={browseHref} aria-label="View listing">
               <Eye data-icon="inline-start" />
               <span className="hidden sm:inline">View</span>
             </Link>
           </Button>
         )}
-        {listing.status === 'active' && (
-          <Button asChild variant="ghost" size="sm">
-            <Link href={`/dashboard/edit/${listing.id}`} aria-label="Edit listing">
-              <Pencil data-icon="inline-start" />
-              <span className="hidden sm:inline">Edit</span>
-            </Link>
-          </Button>
-        )}
-        {listing.status === 'pending_payment' && (
+        {isPendingPayment && (
           <CompletePaymentButton
             listingId={listing.id}
             label={listingFeeActive ? 'Complete Payment' : 'Publish'}
           />
+        )}
+        {(listing.status === 'active' || isPendingPayment) && (
+          <Button asChild variant="ghost" size="sm">
+            <Link href={editHref} aria-label="Edit listing">
+              <Pencil data-icon="inline-start" />
+              <span className="hidden sm:inline">Edit</span>
+            </Link>
+          </Button>
         )}
         <MarkSoldButton
           id={listing.id}

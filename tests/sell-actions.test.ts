@@ -1040,7 +1040,7 @@ describe("updateListing", () => {
 
     const result = await updateListing(LISTING_ID, fd);
 
-    expect(result).toEqual({ error: "Only active listings can be edited." });
+    expect(result).toEqual({ error: "Only active or unpaid listings can be edited." });
     expect(supabase._rpc).not.toHaveBeenCalled();
     expect(mockUpload).not.toHaveBeenCalled();
     expect(mockUpdateTag).not.toHaveBeenCalled();
@@ -1066,9 +1066,47 @@ describe("updateListing", () => {
 
     const result = await updateListing(LISTING_ID, fd);
 
-    expect(result).toEqual({ error: "Only active listings can be edited." });
+    expect(result).toEqual({ error: "Only active or unpaid listings can be edited." });
     expect(supabase._rpc).not.toHaveBeenCalled();
     expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("allows an edit to a pending_payment listing without changing status", async () => {
+    const capture: UpdateCapture = { payload: {} };
+    const supabase = makeUpdateSupabase(
+      [OLD_URL_0],
+      capture,
+      { error: null },
+      "pending_payment",
+    );
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase,
+    });
+
+    const fd = baseFormData();
+    fd.set("title", "Pending gown (edited)");
+    fd.set("existing_url_0", OLD_URL_0);
+    fd.set("blur_0", makeBlur("blur0"));
+
+    try {
+      await updateListing(LISTING_ID, fd);
+    } catch {
+      /* redirect */
+    }
+
+    expect(supabase._rpc).toHaveBeenCalledWith(
+      "update_listing_with_variants",
+      expect.objectContaining({ p_listing_id: LISTING_ID }),
+    );
+    expect(capture.payload).toEqual(
+      expect.objectContaining({
+        title: "Pending gown (edited)",
+        status: "pending_payment",
+      }),
+    );
+    expect(mockUpdateTag).toHaveBeenCalledWith("listings");
   });
 
   it("passes contact_methods through to the atomic RPC payload", async () => {

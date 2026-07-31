@@ -84,10 +84,11 @@ export async function createListingCheckout(
   }
 
   // Guard against a double charge. If this listing already has a pending
-  // payment, re-verify its session with Stripe before minting a new one:
+  // payment, inspect its Stripe session before minting a new one:
   //  - already paid  -> activate it and show the paid confirmation, no charge.
+  //  - still open    -> resume that session URL (do not mint a second payable one).
   //  - state unknown -> don't risk a second charge; send them to wait it out.
-  //  - cleanly unpaid (abandoned/expired) -> fall through and mint fresh.
+  //  - expired / complete-unpaid -> retire the DB row, then mint fresh below.
   const { data: priorPayment } = await supabase
     .from("listing_payments")
     .select("stripe_session_id")
@@ -98,12 +99,55 @@ export async function createListingCheckout(
     .maybeSingle();
 
   if (priorPayment) {
-    const prior = await confirmListingPayment(priorPayment.stripe_session_id);
-    if (prior.paid) {
-      redirect(`/dashboard/checkout/confirmed?outcome=paid&listing=${listingId}`);
-    }
-    if (prior.error) {
+    let priorSession: Stripe.Checkout.Session;
+    try {
+      priorSession = await getStripe().checkout.sessions.retrieve(
+        priorPayment.stripe_session_id,
+      );
+    } catch (e) {
+      console.error("Failed to retrieve prior Stripe Checkout session:", e);
       redirect("/dashboard/checkout/confirmed?outcome=processing");
+    }
+
+    if (priorSession.payment_status === "paid") {
+      const prior = await confirmListingPayment(priorPayment.stripe_session_id);
+      if (prior.paid) {
+        redirect(
+          `/dashboard/checkout/confirmed?outcome=paid&listing=${listingId}`,
+        );
+      }
+      redirect("/dashboard/checkout/confirmed?outcome=processing");
+    }
+
+    if (priorSession.status === "open" && priorSession.url) {
+      redirect(priorSession.url);
+    }
+
+    // Open but missing a URL (unusual): expire on Stripe so it can't stay
+    // payable alongside a newly minted session.
+    if (priorSession.status === "open") {
+      try {
+        await getStripe().checkout.sessions.expire(
+          priorPayment.stripe_session_id,
+        );
+      } catch (e) {
+        console.error("Failed to expire prior Stripe Checkout session:", e);
+        return CHECKOUT_UNAVAILABLE_ERROR;
+      }
+    }
+
+    const { error: expireError } = await createServiceClient()
+      .from("listing_payments")
+      .update({ status: "expired" })
+      .eq("stripe_session_id", priorPayment.stripe_session_id)
+      .eq("status", "pending");
+
+    if (expireError) {
+      console.error(
+        "Failed to mark prior listing payment expired:",
+        expireError.message,
+      );
+      return CHECKOUT_UNAVAILABLE_ERROR;
     }
   }
 

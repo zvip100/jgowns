@@ -10,7 +10,11 @@ const {
   mockGetSessionContact,
   mockCheckoutSessionsCreate,
   mockCheckoutSessionsRetrieve,
+  mockCheckoutSessionsExpire,
   mockRpc,
+  mockServiceUpdate,
+  mockServiceSessionEq,
+  mockServiceStatusEq,
 } = vi.hoisted(() => {
   const mockUpdateTag = vi.fn();
   const mockRevalidateTag = vi.fn();
@@ -23,7 +27,11 @@ const {
   const mockGetSessionContact = vi.fn();
   const mockCheckoutSessionsCreate = vi.fn();
   const mockCheckoutSessionsRetrieve = vi.fn();
+  const mockCheckoutSessionsExpire = vi.fn();
   const mockRpc = vi.fn();
+  const mockServiceUpdate = vi.fn();
+  const mockServiceSessionEq = vi.fn();
+  const mockServiceStatusEq = vi.fn();
 
   return {
     mockUpdateTag,
@@ -35,7 +43,11 @@ const {
     mockGetSessionContact,
     mockCheckoutSessionsCreate,
     mockCheckoutSessionsRetrieve,
+    mockCheckoutSessionsExpire,
     mockRpc,
+    mockServiceUpdate,
+    mockServiceSessionEq,
+    mockServiceStatusEq,
   };
 });
 
@@ -56,12 +68,16 @@ vi.mock("@/lib/stripe/client", () => ({
       sessions: {
         create: mockCheckoutSessionsCreate,
         retrieve: mockCheckoutSessionsRetrieve,
+        expire: mockCheckoutSessionsExpire,
       },
     },
   }),
 }));
 vi.mock("@/lib/supabase/service", () => ({
-  createServiceClient: () => ({ rpc: mockRpc }),
+  createServiceClient: () => ({
+    rpc: mockRpc,
+    from: vi.fn().mockReturnValue({ update: mockServiceUpdate }),
+  }),
 }));
 
 import { createListingCheckout, confirmListingPayment } from "@/lib/actions/payments";
@@ -163,6 +179,11 @@ describe("createListingCheckout", () => {
       id: "cs_test_123",
       url: "https://checkout.stripe.com/pay/cs_test_123",
     });
+    mockCheckoutSessionsExpire.mockReset();
+    mockCheckoutSessionsExpire.mockResolvedValue({ id: "cs_prior", status: "expired" });
+    mockServiceStatusEq.mockReset().mockResolvedValue({ error: null });
+    mockServiceSessionEq.mockReset().mockReturnValue({ eq: mockServiceStatusEq });
+    mockServiceUpdate.mockReset().mockReturnValue({ eq: mockServiceSessionEq });
   });
 
   it("rejects an invalid listing id", async () => {
@@ -327,6 +348,7 @@ describe("createListingCheckout", () => {
         mockGetAuthClient.mockResolvedValue({ ok: true, user: { id: USER_ID }, supabase });
         mockCheckoutSessionsRetrieve.mockResolvedValue({
           payment_status: "paid",
+          status: "complete",
           metadata: { listing_id: LISTING_ID, user_id: USER_ID },
         });
 
@@ -340,6 +362,7 @@ describe("createListingCheckout", () => {
         );
         expect(mockCheckoutSessionsCreate).not.toHaveBeenCalled();
         expect(supabase._paymentInsert).not.toHaveBeenCalled();
+        expect(mockServiceUpdate).not.toHaveBeenCalled();
       });
 
       it("sends the seller to the processing page when the prior session's state can't be verified", async () => {
@@ -360,21 +383,92 @@ describe("createListingCheckout", () => {
         consoleError.mockRestore();
       });
 
-      it("mints a fresh session when the prior session was cleanly abandoned (unpaid)", async () => {
+      it("resumes an open unpaid prior session instead of minting a second one", async () => {
+        const priorUrl = "https://checkout.stripe.com/pay/cs_prior";
         const supabase = makeCheckoutSupabase({
           priorPaymentResult: { data: { stripe_session_id: "cs_prior" }, error: null },
         });
         mockGetAuthClient.mockResolvedValue({ ok: true, user: { id: USER_ID }, supabase });
         mockCheckoutSessionsRetrieve.mockResolvedValue({
           payment_status: "unpaid",
+          status: "open",
+          url: priorUrl,
           metadata: { listing_id: LISTING_ID, user_id: USER_ID },
         });
 
         await expect(createListingCheckout(LISTING_ID)).rejects.toThrow("NEXT_REDIRECT");
 
-        expect(mockCheckoutSessionsCreate).toHaveBeenCalled();
-        expect(mockRedirect).toHaveBeenCalledWith("https://checkout.stripe.com/pay/cs_test_123");
+        expect(mockRedirect).toHaveBeenCalledWith(priorUrl);
+        expect(mockCheckoutSessionsCreate).not.toHaveBeenCalled();
+        expect(supabase._paymentInsert).not.toHaveBeenCalled();
+        expect(mockServiceUpdate).not.toHaveBeenCalled();
         expect(mockRpc).not.toHaveBeenCalled();
+      });
+
+      it("mints a fresh session when the prior session was expired (unpaid)", async () => {
+        const supabase = makeCheckoutSupabase({
+          priorPaymentResult: { data: { stripe_session_id: "cs_prior" }, error: null },
+        });
+        mockGetAuthClient.mockResolvedValue({ ok: true, user: { id: USER_ID }, supabase });
+        mockCheckoutSessionsRetrieve.mockResolvedValue({
+          payment_status: "unpaid",
+          status: "expired",
+          metadata: { listing_id: LISTING_ID, user_id: USER_ID },
+        });
+
+        await expect(createListingCheckout(LISTING_ID)).rejects.toThrow("NEXT_REDIRECT");
+
+        expect(mockServiceUpdate).toHaveBeenCalledWith({ status: "expired" });
+        expect(mockServiceSessionEq).toHaveBeenCalledWith(
+          "stripe_session_id",
+          "cs_prior",
+        );
+        expect(mockServiceStatusEq).toHaveBeenCalledWith("status", "pending");
+        expect(mockCheckoutSessionsExpire).not.toHaveBeenCalled();
+        expect(mockCheckoutSessionsCreate).toHaveBeenCalled();
+        expect(mockRedirect).toHaveBeenCalledWith(
+          "https://checkout.stripe.com/pay/cs_test_123",
+        );
+        expect(mockRpc).not.toHaveBeenCalled();
+      });
+
+      it("expires an open session missing a URL before minting a fresh one", async () => {
+        const supabase = makeCheckoutSupabase({
+          priorPaymentResult: { data: { stripe_session_id: "cs_prior" }, error: null },
+        });
+        mockGetAuthClient.mockResolvedValue({ ok: true, user: { id: USER_ID }, supabase });
+        mockCheckoutSessionsRetrieve.mockResolvedValue({
+          payment_status: "unpaid",
+          status: "open",
+          url: null,
+          metadata: { listing_id: LISTING_ID, user_id: USER_ID },
+        });
+
+        await expect(createListingCheckout(LISTING_ID)).rejects.toThrow("NEXT_REDIRECT");
+
+        expect(mockCheckoutSessionsExpire).toHaveBeenCalledWith("cs_prior");
+        expect(mockServiceUpdate).toHaveBeenCalledWith({ status: "expired" });
+        expect(mockCheckoutSessionsCreate).toHaveBeenCalled();
+      });
+
+      it("returns the retry error when retiring the prior payment row fails", async () => {
+        const supabase = makeCheckoutSupabase({
+          priorPaymentResult: { data: { stripe_session_id: "cs_prior" }, error: null },
+        });
+        mockGetAuthClient.mockResolvedValue({ ok: true, user: { id: USER_ID }, supabase });
+        mockCheckoutSessionsRetrieve.mockResolvedValue({
+          payment_status: "unpaid",
+          status: "expired",
+          metadata: { listing_id: LISTING_ID, user_id: USER_ID },
+        });
+        mockServiceStatusEq.mockResolvedValue({ error: { message: "db down" } });
+        const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+        const result = await createListingCheckout(LISTING_ID);
+
+        expect(result).toEqual(CHECKOUT_UNAVAILABLE_ERROR);
+        expect(mockCheckoutSessionsCreate).not.toHaveBeenCalled();
+        consoleError.mockRestore();
       });
     });
   });

@@ -2,12 +2,13 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { CreditCard, Lock } from 'lucide-react';
 
-import { createClient } from '@/lib/supabase/server';
-import { getCurrentUser } from '@/lib/queries/auth';
-import { sortListingSizes } from '@/lib/listing-variants';
-import { isValidUUID } from '@/lib/utils';
+import { FormInfoBanner } from '@/components/form/FormInfoBanner';
 import ListingForm from '@/components/ListingForm';
 import NoticePanel from '@/components/NoticePanel';
+import { getCurrentUser } from '@/lib/queries/auth';
+import { sortListingSizes } from '@/lib/listing-variants';
+import { createClient } from '@/lib/supabase/server';
+import { isValidUUID } from '@/lib/utils';
 
 import type { ListingFormData, ListingWithSizes } from '@/lib/types';
 
@@ -53,17 +54,7 @@ export default async function EditListingPage({ params }: EditListingPageProps) 
     );
   }
 
-  if (listingWithSizes.status === 'pending_payment') {
-    return (
-      <NoticePanel
-        icon={CreditCard}
-        title='Payment Required'
-        description='Complete payment for this listing from your dashboard before editing it.'
-        href='/dashboard'
-        linkLabel='Back to dashboard'
-      />
-    );
-  }
+  const isPendingPayment = listingWithSizes.status === 'pending_payment';
 
   const initial: Partial<ListingFormData> = {
     ...listingWithSizes,
@@ -78,6 +69,14 @@ export default async function EditListingPage({ params }: EditListingPageProps) 
         <h1 className='text-[2rem] text-[#2f241b] sm:text-[2.35rem]'>Edit Listing</h1>
         <p className='mt-2 text-sm text-[#7d6652]'>Update your gown details</p>
       </div>
+      {isPendingPayment && (
+        <div className='mx-auto mb-4 max-w-2xl'>
+          <FormInfoBanner icon={CreditCard} className='items-start px-3.5 py-3'>
+            <span className='font-semibold'>This listing isn&apos;t live yet.</span>{' '}
+            Save your changes, then complete payment from your dashboard.
+          </FormInfoBanner>
+        </div>
+      )}
       <ListingForm initial={initial} listingId={id} />
     </div>
   );
