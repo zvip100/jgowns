@@ -12,9 +12,10 @@ Read this file before every change.
 
 1. Seller creates an account and signs in.
 2. Seller lists a gown with: size, category, location, price, photos, and contact info.
-3. Buyer browses listings and contacts the seller directly.
+3. Seller pays a one-time publishing fee via Stripe-hosted Checkout; the listing goes live once payment is confirmed.
+4. Buyer browses listings and contacts the seller directly.
 
-No in-app transactions yet. Stripe is planned but **not implemented** — do not add or scaffold it until explicitly asked.
+**No buyer-to-seller transactions in app** — buyers contact sellers directly and money never moves between them here. Stripe **is implemented**, scoped to the seller publishing fee only (step 3): `listings.status` goes `pending_payment` → `active` on confirmed payment. Locked architecture in `docs/stripe-listing-fee-spec.md`.
 
 **Stack:**
 
@@ -24,7 +25,7 @@ No in-app transactions yet. Stripe is planned but **not implemented** — do not
 - **Styling:** Tailwind CSS v4 — strictly follow v4 syntax and conventions. Do not use v3 patterns.
 - **Component library:** shadcn/ui
 - **Icons:** `lucide-react`
-- **Payments:** Stripe — planned, not active. Do not touch until asked.
+- **Payments:** Stripe — **live**, scoped to the listing publishing fee: hosted Checkout redirect (never embedded payment UI), signature-verified webhook + a Checkout-success route handler that both confirm, `listing_payments` table, service-role-only `record_listing_payment` RPC, and a 30-day cleanup sweep of unpaid listings. Fee amount and a kill switch live in env (`LISTING_FEE_CENTS`, `PAYMENTS_SUSPENDED`). Truth always comes from re-fetching the Checkout Session from Stripe's API, never from a webhook payload or URL param alone. Spec: `docs/stripe-listing-fee-spec.md`; go-live steps: `docs/stripe-production-go-live.md`. Do not widen Stripe's scope (buyer payments, payouts, Connect, refunds) until asked.
 
 **Developer:** Junior full-stack developer. Briefly explain reasoning when introducing a non-obvious approach or pattern.
 

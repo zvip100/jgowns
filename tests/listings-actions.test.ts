@@ -1,18 +1,39 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockGetAuthClient, mockUpdateTag, mockRevalidateTag } = vi.hoisted(
-  () => ({
-    mockGetAuthClient: vi.fn(),
-    mockUpdateTag: vi.fn(),
-    mockRevalidateTag: vi.fn(),
-  }),
-);
+const {
+  mockGetAuthClient,
+  mockUpdateTag,
+  mockRevalidateTag,
+  mockRetrieveSession,
+  mockExpireSession,
+  mockServiceFrom,
+} = vi.hoisted(() => ({
+  mockGetAuthClient: vi.fn(),
+  mockUpdateTag: vi.fn(),
+  mockRevalidateTag: vi.fn(),
+  mockRetrieveSession: vi.fn(),
+  mockExpireSession: vi.fn(),
+  mockServiceFrom: vi.fn(),
+}));
 
 vi.mock("next/cache", () => ({
   updateTag: mockUpdateTag,
   revalidateTag: mockRevalidateTag,
 }));
 vi.mock("@/lib/actions/auth", () => ({ getAuthClient: mockGetAuthClient }));
+vi.mock("@/lib/stripe/client", () => ({
+  getStripe: () => ({
+    checkout: {
+      sessions: {
+        retrieve: mockRetrieveSession,
+        expire: mockExpireSession,
+      },
+    },
+  }),
+}));
+vi.mock("@/lib/supabase/service", () => ({
+  createServiceClient: () => ({ from: mockServiceFrom }),
+}));
 
 import {
   markListingSold,
@@ -25,9 +46,15 @@ import {
 
 const LISTING_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const SIZE_ID = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+const SESSION_ID = "cs_test_session";
 
 type UpdateResult = {
   data: { id: string }[] | null;
+  error: null | { message: string };
+};
+
+type PaymentsResult = {
+  data: { stripe_session_id: string }[] | null;
   error: null | { message: string };
 };
 
@@ -39,6 +66,7 @@ function makeSupabase(
     data: { status: string } | null;
     error: null | { message: string };
   } = { data: { status: "active" }, error: null },
+  paymentsResult: PaymentsResult = { data: [], error: null },
 ) {
   const sizesChain = {
     update: vi.fn().mockReturnThis(),
@@ -55,23 +83,48 @@ function makeSupabase(
     maybeSingle: vi.fn().mockResolvedValue(listingStatusResult),
     then: (resolve: (value: UpdateResult) => unknown) => resolve(listingsResult),
   };
+  const paymentsChain = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    then: (resolve: (value: PaymentsResult) => unknown) =>
+      resolve(paymentsResult),
+  };
   const rpc = vi.fn().mockResolvedValue(rpcResult);
 
   return {
-    from: vi.fn((table: string) =>
-      table === "listings" ? listingsChain : sizesChain,
-    ),
+    from: vi.fn((table: string) => {
+      if (table === "listings") return listingsChain;
+      if (table === "listing_payments") return paymentsChain;
+      return sizesChain;
+    }),
     rpc,
     _listingsChain: listingsChain,
     _sizesChain: sizesChain,
+    _paymentsChain: paymentsChain,
     _rpc: rpc,
   };
+}
+
+function mockServiceExpireUpdate(
+  result: { error: null | { message: string } } = { error: null },
+) {
+  const chain = {
+    update: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    then: (resolve: (value: { error: null | { message: string } }) => unknown) =>
+      resolve(result),
+  };
+  mockServiceFrom.mockReturnValue(chain);
+  return chain;
 }
 
 beforeEach(() => {
   mockGetAuthClient.mockReset();
   mockUpdateTag.mockReset();
   mockRevalidateTag.mockReset();
+  mockRetrieveSession.mockReset();
+  mockExpireSession.mockReset();
+  mockServiceFrom.mockReset();
 });
 
 describe("revalidateListings", () => {
@@ -144,7 +197,9 @@ describe("removeListing", () => {
     const result = await removeListing(LISTING_ID);
 
     expect(result).toEqual({});
+    expect(supabase.from).toHaveBeenCalledWith("listing_payments");
     expect(supabase.from).toHaveBeenCalledWith("listings");
+    expect(mockExpireSession).not.toHaveBeenCalled();
     expect(supabase._listingsChain.update).toHaveBeenCalledWith({
       status: "removed",
     });
@@ -155,6 +210,124 @@ describe("removeListing", () => {
     );
     expect(mockUpdateTag).toHaveBeenCalledWith(`listing:${LISTING_ID}`);
     expect(mockUpdateTag).toHaveBeenCalledWith("listings");
+  });
+
+  it("expires an open Checkout session before soft-removing", async () => {
+    const supabase = makeSupabase(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { data: [{ stripe_session_id: SESSION_ID }], error: null },
+    );
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+    mockRetrieveSession.mockResolvedValue({
+      payment_status: "unpaid",
+      status: "open",
+    });
+    mockExpireSession.mockResolvedValue({});
+    const serviceChain = mockServiceExpireUpdate();
+
+    const result = await removeListing(LISTING_ID);
+
+    expect(result).toEqual({});
+    expect(mockRetrieveSession).toHaveBeenCalledWith(SESSION_ID);
+    expect(mockExpireSession).toHaveBeenCalledWith(SESSION_ID);
+    expect(serviceChain.update).toHaveBeenCalledWith({ status: "expired" });
+    expect(serviceChain.eq).toHaveBeenCalledWith("stripe_session_id", SESSION_ID);
+    expect(serviceChain.eq).toHaveBeenCalledWith("status", "pending");
+    expect(supabase._listingsChain.update).toHaveBeenCalledWith({
+      status: "removed",
+    });
+    expect(mockUpdateTag).toHaveBeenCalledWith(`listing:${LISTING_ID}`);
+  });
+
+  it("marks the payment expired without Stripe expire when the session is already closed", async () => {
+    const supabase = makeSupabase(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { data: [{ stripe_session_id: SESSION_ID }], error: null },
+    );
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+    mockRetrieveSession.mockResolvedValue({
+      payment_status: "unpaid",
+      status: "expired",
+    });
+    mockServiceExpireUpdate();
+
+    const result = await removeListing(LISTING_ID);
+
+    expect(result).toEqual({});
+    expect(mockExpireSession).not.toHaveBeenCalled();
+    expect(supabase._listingsChain.update).toHaveBeenCalledWith({
+      status: "removed",
+    });
+  });
+
+  it("refuses to remove when Checkout is already paid", async () => {
+    const supabase = makeSupabase(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { data: [{ stripe_session_id: SESSION_ID }], error: null },
+    );
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+    mockRetrieveSession.mockResolvedValue({
+      payment_status: "paid",
+      status: "complete",
+    });
+
+    const result = await removeListing(LISTING_ID);
+
+    expect(result).toEqual({
+      error: "Payment is completing. Refresh and try again.",
+    });
+    expect(mockExpireSession).not.toHaveBeenCalled();
+    expect(supabase._listingsChain.update).not.toHaveBeenCalled();
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("returns an error and skips soft-remove when Stripe expire fails", async () => {
+    const supabase = makeSupabase(
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      { data: [{ stripe_session_id: SESSION_ID }], error: null },
+    );
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+    mockRetrieveSession.mockResolvedValue({
+      payment_status: "unpaid",
+      status: "open",
+    });
+    mockExpireSession.mockRejectedValue(new Error("stripe down"));
+
+    const result = await removeListing(LISTING_ID);
+
+    expect(result).toEqual({
+      error: "Couldn't cancel the open payment. Please try again.",
+    });
+    expect(supabase._listingsChain.update).not.toHaveBeenCalled();
+    expect(mockUpdateTag).not.toHaveBeenCalled();
   });
 
   it("returns an error for a blank id without touching the database", async () => {

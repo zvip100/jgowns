@@ -82,8 +82,9 @@ create index listing_sizes_price_available_idx
 -- One row per Stripe Checkout attempt for a listing's publishing fee. No
 -- update/delete policies for authenticated callers: status transitions are
 -- service-role only — `succeeded` via record_listing_payment, `expired` via
--- the Stripe webhook (and createListingCheckout when retiring a dead prior
--- session before minting a fresh one). Rows ride the listing FK cascade.
+-- the Stripe webhook, createListingCheckout (retiring a dead prior session
+-- before minting fresh), and removeListing (closing open Checkout so a
+-- soft-delete can't leave a payable orphan). Rows ride the listing FK cascade.
 create table listing_payments (
   id uuid default uuid_generate_v4() primary key,
   listing_id uuid not null references listings(id) on delete cascade,

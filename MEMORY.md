@@ -152,6 +152,8 @@ Categories: `decision` | `completed` | `never`
 
 - [07-31-2026] completed: createListingCheckout double-charge guard now resumes an open unpaid Checkout session URL instead of minting a second payable one; only after expired/complete-unpaid (or open-without-url, which Stripe-expires first) does it mark the prior listing_payments row `expired` via service-role and mint fresh. schema.sql listing_payments comment corrected: succeeded via record_listing_payment, expired via webhook + this retire path. Tests cover resume / expire-then-mint / expire-failure / open-no-url.
 
+- [07-31-2026] completed: removeListing retires open Checkout before soft-delete: for each pending listing_payments row, retrieve session; if paid refuse remove ("Payment is completing…"); if open Stripe-expire; mark row expired via service-role; then set listings.status=removed. Closes paid-orphan race (Remove then finish Checkout → fee collected, listing stays removed because record_listing_payment only activates pending_payment). schema.sql listing_payments comment notes this expire path. Tests in listings-actions.test.ts.
+
 ## Never
 
 - [05-28-2026] never: Do not add runtime legacy/backfill/migration-bridge logic (inferring missing fields, aliasing old formats, guessing from partial data) unless the user explicitly asks. Assume the DB and APIs are on the current schema.
