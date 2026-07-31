@@ -55,12 +55,14 @@ export function ListingDetail({
       </Link>
 
       <div className='grid grid-cols-1 gap-8 md:grid-cols-2 md:gap-12'>
-        <ImageViewer
-          imageUrls={listing.image_urls}
-          blurDataUrls={listing.image_blur_data_urls}
-          title={listing.title}
-          isSold={sold}
-        />
+        <div className='md:sticky md:top-[calc(var(--navbar-h)+1.5rem)] md:self-start'>
+          <ImageViewer
+            imageUrls={listing.image_urls}
+            blurDataUrls={listing.image_blur_data_urls}
+            title={listing.title}
+            isSold={sold}
+          />
+        </div>
 
         <div className='flex flex-col py-2'>
           {listing.color && (

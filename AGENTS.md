@@ -296,6 +296,16 @@ Each entry is a single line:
 
 Categories: `decision`, `completed`, `never`.
 
+**Every entry goes at the bottom of its own category section, never at the bottom of the file.** `MEMORY.md` is split into three sections, and the file ends with `## Never`, so appending blindly files the entry under the wrong category. Find the section header first, then append after that section's last entry.
+
+| Category    | Section        |
+| ----------- | -------------- |
+| `decision`  | `## Decisions` |
+| `completed` | `## Completed` |
+| `never`     | `## Never`     |
+
+Within a section, entries stay in the order they were added (oldest first), so a new one always goes immediately above the next `##` header.
+
 ### Rules
 
 - **Append-only.** Never modify or delete existing entries — except to correct your own same-session entries (see **Same-session upkeep** below).
@@ -309,13 +319,14 @@ Categories: `decision`, `completed`, `never`.
 ## Checklist
 
 - [ ] Read `MEMORY.md` before starting?
+- [ ] New `MEMORY.md` entry appended to its **matching category section** (`decision` → `## Decisions`), not to the end of the file?
 - [ ] Checked `node_modules/next/dist/docs/` and available skills before writing Next.js code?
 - [ ] Server Component unless a hook / event handler / browser API forced otherwise?
 - [ ] `"use client"` on the smallest possible leaf?
 - [ ] Every read cached with `"use cache"` + `cacheLife({ stale: 60, revalidate: 3600, expire: 86400 })` + `cacheTag`?
 - [ ] Every CRUD action invalidates matching tags via `updateTag` / `revalidateTag`?
 - [ ] All server actions in `src/lib/actions/*` with `"use server";` at top?
-- [ ] Read-only data fetchers in `src/lib/queries/` (or `src/lib/` if not yet migrated)?
+- [ ] Read-only data fetchers in `src/lib/queries/`?
 - [ ] No `any`, no untyped params, no unsafe `as` casts?
 - [ ] Checked `src/components/` and shadcn CLI before creating a new component?
 - [ ] No edits to `src/components/ui/`?
