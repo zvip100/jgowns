@@ -3,8 +3,15 @@
 import { revalidateTag, updateTag } from "next/cache";
 
 import { getAuthClient } from "@/lib/actions/auth";
+import { getStripe } from "@/lib/stripe/client";
+import { createServiceClient } from "@/lib/supabase/service";
 
 import type { ServerActionErrorResult } from "@/lib/types";
+import type Stripe from "stripe";
+
+const CHECKOUT_CANCEL_ERROR: ServerActionErrorResult = {
+  error: "Couldn't cancel the open payment. Please try again.",
+};
 
 export async function revalidateListings() {
   revalidateTag("listings", "max");
@@ -31,6 +38,11 @@ export async function markListingSold(
   return {};
 }
 
+/**
+ * Soft-delete a seller-owned listing. Any open Checkout for a still-pending
+ * fee is expired first so Remove can't leave a payable session that charges
+ * without activating (activation only flips pending_payment → active).
+ */
 export async function removeListing(
   id: string,
 ): Promise<ServerActionErrorResult> {
@@ -39,6 +51,53 @@ export async function removeListing(
   const auth = await getAuthClient();
   if (!auth.ok) return { error: auth.error };
   const { supabase, user } = auth;
+
+  const { data: pendingPayments, error: pendingError } = await supabase
+    .from("listing_payments")
+    .select("stripe_session_id")
+    .eq("listing_id", id)
+    .eq("status", "pending");
+
+  if (pendingError) return { error: pendingError.message };
+
+  if (pendingPayments?.length) {
+    const stripe = getStripe();
+    const service = createServiceClient();
+
+    for (const row of pendingPayments) {
+      let session: Stripe.Checkout.Session;
+      try {
+        session = await stripe.checkout.sessions.retrieve(row.stripe_session_id);
+      } catch (e) {
+        console.error("Failed to retrieve Checkout session on remove:", e);
+        return CHECKOUT_CANCEL_ERROR;
+      }
+
+      // Paid but not yet activated: don't expire or soft-remove; let confirm/webhook finish.
+      if (session.payment_status === "paid") {
+        return {
+          error: "Payment is completing. Refresh and try again.",
+        };
+      }
+
+      if (session.status === "open") {
+        try {
+          await stripe.checkout.sessions.expire(row.stripe_session_id);
+        } catch (e) {
+          console.error("Failed to expire Checkout session on remove:", e);
+          return CHECKOUT_CANCEL_ERROR;
+        }
+      }
+
+      const { error: expireError } = await service
+        .from("listing_payments")
+        .update({ status: "expired" })
+        .eq("stripe_session_id", row.stripe_session_id)
+        .eq("status", "pending");
+
+      if (expireError) return { error: expireError.message };
+    }
+  }
 
   const { data: updated, error } = await supabase
     .from("listings")

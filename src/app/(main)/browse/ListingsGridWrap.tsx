@@ -19,7 +19,7 @@ export default function ListingsGridWrap({
   return (
     <div
       className={cn(
-        "grid w-full min-w-0 grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4 sm:gap-5",
+        "mx-auto grid w-full min-w-0 max-w-6xl grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4 sm:gap-5",
         className,
       )}
     >

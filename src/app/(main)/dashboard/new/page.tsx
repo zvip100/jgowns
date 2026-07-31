@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 
+import { getListingFeeCents, isListingFeeActive } from '@/lib/listing-fee';
 import { getSessionContact } from '@/lib/queries/auth';
 import ListingForm from '@/components/ListingForm';
 
@@ -16,6 +17,7 @@ export default async function NewListingPage() {
     contact_email: contact?.email ?? '',
     contact_phone: contact?.phone ?? '',
   };
+  const listingFeeCents = isListingFeeActive() ? getListingFeeCents() : undefined;
 
   return (
     <div>
@@ -23,7 +25,7 @@ export default async function NewListingPage() {
         <h1 className='text-[2rem] text-[#2f241b] sm:text-[2.35rem]'>List Your Gown</h1>
         <p className='mt-2 text-sm text-[#7d6652]'>Connect directly with buyers looking for exactly this</p>
       </div>
-      <ListingForm initial={initial} />
+      <ListingForm initial={initial} listingFeeCents={listingFeeCents} />
     </div>
   );
 }

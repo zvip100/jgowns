@@ -612,7 +612,9 @@ describe("useListingFormSubmit", () => {
       expect(formData.get("contact_email")).toBe("seller@example.com");
       expect(formData.get("contact_phone")).toBe("5551112222");
       expect(formData.get("contact_methods")).toBe("[]");
-      expect(formData.get("status")).toBe("active");
+      // The server owns status (fee-active listings start pending_payment),
+      // so the form never submits it.
+      expect(formData.get("status")).toBeNull();
       expect(formData.get("existing_url_0")).toBe(EXISTING_URL);
       expect(formData.get("blur_0")).toBe(BLUR_DATA_URL);
       expect(formData.get("image_file_0")).toBeNull();
@@ -667,23 +669,6 @@ describe("useListingFormSubmit", () => {
       expect(formData.get("contact_methods")).toBe(
         JSON.stringify(["call", "text"]),
       );
-    });
-
-    it("defaults status to active when the form has no status", async () => {
-      setValidCreateState({ status: undefined });
-
-      const submit = useListingFormSubmit({
-        slots: [makeSlot()],
-        resolveUploadFile: vi.fn(),
-      });
-
-      await submit.handleSubmit();
-
-      const formData = mockCreateListing.mock.calls[0]?.[0];
-      if (!(formData instanceof FormData)) {
-        throw new Error("Expected createListing to receive FormData.");
-      }
-      expect(formData.get("status")).toBe("active");
     });
 
     it("toasts the action error when createListing returns one, staying off the inline surface", async () => {

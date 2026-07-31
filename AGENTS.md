@@ -12,9 +12,10 @@ Read this file before every change.
 
 1. Seller creates an account and signs in.
 2. Seller lists a gown with: size, category, location, price, photos, and contact info.
-3. Buyer browses listings and contacts the seller directly.
+3. Seller pays a one-time publishing fee via Stripe-hosted Checkout; the listing goes live once payment is confirmed.
+4. Buyer browses listings and contacts the seller directly.
 
-No in-app transactions yet. Stripe is planned but **not implemented** — do not add or scaffold it until explicitly asked.
+**No buyer-to-seller transactions in app** — buyers contact sellers directly and money never moves between them here. Stripe **is implemented**, scoped to the seller publishing fee only (step 3): `listings.status` goes `pending_payment` → `active` on confirmed payment. Locked architecture in `docs/stripe-listing-fee-spec.md`.
 
 **Stack:**
 
@@ -24,7 +25,7 @@ No in-app transactions yet. Stripe is planned but **not implemented** — do not
 - **Styling:** Tailwind CSS v4 — strictly follow v4 syntax and conventions. Do not use v3 patterns.
 - **Component library:** shadcn/ui
 - **Icons:** `lucide-react`
-- **Payments:** Stripe — planned, not active. Do not touch until asked.
+- **Payments:** Stripe — **live**, scoped to the listing publishing fee: hosted Checkout redirect (never embedded payment UI), signature-verified webhook + a Checkout-success route handler that both confirm, `listing_payments` table, service-role-only `record_listing_payment` RPC, and a 30-day cleanup sweep of unpaid listings. Fee amount and a kill switch live in env (`LISTING_FEE_CENTS`, `PAYMENTS_SUSPENDED`). Truth always comes from re-fetching the Checkout Session from Stripe's API, never from a webhook payload or URL param alone. Spec: `docs/stripe-listing-fee-spec.md`; go-live steps: `docs/stripe-production-go-live.md`. Do not widen Stripe's scope (buyer payments, payouts, Connect, refunds) until asked.
 
 **Developer:** Junior full-stack developer. Briefly explain reasoning when introducing a non-obvious approach or pattern.
 
@@ -37,6 +38,7 @@ No in-app transactions yet. Stripe is planned but **not implemented** — do not
 - **Clarify before acting** on anything ambiguous or underspecified.
 - **Confirm before destructive changes** (deleting files, removing logic, breaking APIs).
 - **When multiple valid approaches exist**, list them briefly and wait for approval before writing code. Survey the real option space first — don't artificially cap at two, and don't lead with the heaviest solution. Include the lighter/simpler alternatives with each one's trade-off, even when you have a recommendation.
+- **Multiple visual options go in one artifact**, rendered side by side in the app's real palette and context with each trade-off. A prose list or an injected page mock is not a substitute. Wait for the pick before coding.
 - **Always choose the simplest, cleanest, best-practice solution.** Don't over-engineer.
 - **Responses mirror the task.** Simple question → short answer. Complex task → full but concise. No filler phrases.
 - **No over-commenting.** A single JSDoc-style comment above a complex function is fine, but keep it to a few lines. A multi-paragraph JSDoc is itself over-commenting. Never comment above random lines, never write paragraph-style comments in code. If a file being modified has excessive comments, remove or trim them as part of the task.
@@ -249,6 +251,7 @@ Before writing any Next.js-related code:
   1. A small component that owns the styling (preferred when it has semantic meaning).
   2. A `cva`/`tv` variant or utility constant in `src/lib/`.
   3. A `@layer components` rule in `globals.css` only when 1 and 2 don't fit.
+- **Shared class constants go in the existing `src/lib/styles.ts`** — never a new per-feature or per-segment styles file. Colocation governs components and hooks, not style constants.
 - Never duplicate long class strings across JSX blocks.
 - Co-locate variant logic with the component that owns it. Don't scatter `cn(...)` ternaries throughout the tree.
 - Buttons get `cursor-pointer` from a base rule in `globals.css` (`button:not(:disabled)`, `[role="button"]`) — Tailwind v4 preflight resets buttons to `cursor: default` and shadcn's `Button` doesn't restore it. Don't add `cursor-pointer` per-element. Non-button dropzones/divs (e.g. react-dropzone roots, which get `role="presentation"`) still need it explicitly.
@@ -264,8 +267,9 @@ Before writing any Next.js-related code:
 - Every migration added to `src/supabase/migrations/` must also be folded into `src/supabase/schema.sql` — that file is the maintained fresh-install snapshot of the current schema, not a historical artifact. A migration without the matching schema.sql edit is incomplete.
 - All auth and contact form inputs must carry the correct `autocomplete` attribute: `email`, `new-password`, `current-password`, `tel`, etc.
 - Supabase auth email templates (confirm signup, reset password, etc.) are versioned in `docs/email-templates/*.html` — one file per template, sharing the same branded shell (inline-styled table layout, cream/gold palette, `{{ .ConfirmationURL }}` as both button and plain fallback link). Edit the file first, then paste into the dashboard; the dashboard copy is a deployment, not the source.
-- **Verify layout/visual changes with a real render before reporting done.** Strongly prefer the `playwright` MCP server (drives Edge) — it is far more capable than a static screenshot (real interaction, device emulation, a logged-in profile for auth-gated pages, console access). Run the dev server on `localhost:3000`, then navigate, interact to reach the state under test (click, scroll), screenshot, and check console errors. Check at least one desktop and one narrow width for responsive work. Reaching the state and screenshotting it is not the same as confirming it is correct: judge the rendered result against what the user asked for, not against your own intended diff. If the screenshot shows something off (dead space, misalignment, overlap, an element that reads as broken), that is a failure even when the computed numbers match your plan, so fix it before reporting done. Exercise the awkward states where spacing/layout bugs surface, a list scrolled with many items, the empty state, and the signed-out variant, not just the happy path. Reuse an already-running dev server rather than starting a fresh one, and leave it running when you finish — don't kill or restart it between checks (the developer iterates repeatedly). A Playwright browser context that drops between turns is not the server dying; just re-navigate to reopen it. When the change is a color/style override that competes with an existing rule (a shadcn primitive default, a theme token, cascade/specificity), a screenshot glance is not proof it worked — confirm the override actually took effect by reading the element's computed styles (`browser_evaluate` + `getComputedStyle`), not just that the page rendered. If the playwright tools appear missing or disconnected, that is usually just a dropped connection, not a permanent absence — ask the developer to reconnect it (`/mcp` → reconnect) and retry; the agent cannot reconnect it itself. Only after a reconnect genuinely fails, fall back to a static headless screenshot (no interaction): `"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --headless --disable-gpu --window-size=1440,900 --screenshot=<out.png> <url>`.
+- **Verify layout/visual changes with a real render before reporting done.** Strongly prefer the `playwright` MCP server (drives Edge) — it is far more capable than a static screenshot (real interaction, device emulation, a logged-in profile for auth-gated pages, console access). Run the dev server on `localhost:3000`, then navigate, interact to reach the state under test (click, scroll), screenshot, and check console errors. Check at least one desktop and one narrow width for responsive work. Reaching the state and screenshotting it is not the same as confirming it is correct: judge the rendered result against what the user asked for, not against your own intended diff. If the screenshot shows something off (dead space, misalignment, overlap, an element that reads as broken), that is a failure even when the computed numbers match your plan, so fix it before reporting done. Exercise the awkward states where spacing/layout bugs surface, a list scrolled with many items, the empty state, and the signed-out variant, not just the happy path. Reuse an already-running dev server rather than starting a fresh one, and leave it running when you finish — don't kill or restart it between checks (the developer iterates repeatedly). A Playwright browser context that drops between turns is not the server dying; just re-navigate to reopen it. When the change is a color/style override that competes with an existing rule (a shadcn primitive default, a theme token, cascade/specificity), a screenshot glance is not proof it worked — confirm the override actually took effect by reading the element's computed styles (`browser_evaluate` + `getComputedStyle`), not just that the page rendered. If the playwright tools appear missing or disconnected, that is usually just a dropped connection, not a permanent absence — ask the developer to reconnect it (`/mcp` → reconnect) and retry; the agent cannot reconnect it itself. `Browser is already in use for …\ms-playwright-mcp\…` is different: a profile lock from an orphaned Edge that reconnecting won't clear — find the holder with `Get-CimInstance Win32_Process` filtered on `ms-playwright-mcp` and ask before killing it (never blanket-kill `msedge.exe`). Save screenshots to `.playwright-mcp/<name>.png`; a bare filename lands in the repo root. The headless fallback needs an absolute `--screenshot=` path plus its own `--user-data-dir`, and cannot click. Only after a reconnect genuinely fails, fall back to a static headless screenshot (no interaction): `"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --headless --disable-gpu --window-size=1440,900 --screenshot=<out.png> <url>`.
 - **Make requested visual changes clearly perceptible in one step.** When the user asks to increase spacing, size, or emphasis, a marginal bump (roughly ≤16px, or a single Tailwind step) often reads as "nothing changed" and wastes a round trip. If the target amount is unspecified, err on the larger side and invite them to dial it back.
+- **Check contrast before proposing a new color-on-color element.** Small text on a fill needs 4.5:1 (WCAG AA); it often decides between candidates that look equally good.
 
 ---
 
@@ -296,6 +300,16 @@ Each entry is a single line:
 
 Categories: `decision`, `completed`, `never`.
 
+**Every entry goes at the bottom of its own category section, never at the bottom of the file.** `MEMORY.md` is split into three sections, and the file ends with `## Never`, so appending blindly files the entry under the wrong category. Find the section header first, then append after that section's last entry.
+
+| Category    | Section        |
+| ----------- | -------------- |
+| `decision`  | `## Decisions` |
+| `completed` | `## Completed` |
+| `never`     | `## Never`     |
+
+Within a section, entries stay in the order they were added (oldest first), so a new one always goes immediately above the next `##` header.
+
 ### Rules
 
 - **Append-only.** Never modify or delete existing entries — except to correct your own same-session entries (see **Same-session upkeep** below).
@@ -309,13 +323,14 @@ Categories: `decision`, `completed`, `never`.
 ## Checklist
 
 - [ ] Read `MEMORY.md` before starting?
+- [ ] New `MEMORY.md` entry appended to its **matching category section** (`decision` → `## Decisions`), not to the end of the file?
 - [ ] Checked `node_modules/next/dist/docs/` and available skills before writing Next.js code?
 - [ ] Server Component unless a hook / event handler / browser API forced otherwise?
 - [ ] `"use client"` on the smallest possible leaf?
 - [ ] Every read cached with `"use cache"` + `cacheLife({ stale: 60, revalidate: 3600, expire: 86400 })` + `cacheTag`?
 - [ ] Every CRUD action invalidates matching tags via `updateTag` / `revalidateTag`?
 - [ ] All server actions in `src/lib/actions/*` with `"use server";` at top?
-- [ ] Read-only data fetchers in `src/lib/queries/` (or `src/lib/` if not yet migrated)?
+- [ ] Read-only data fetchers in `src/lib/queries/`?
 - [ ] No `any`, no untyped params, no unsafe `as` casts?
 - [ ] Checked `src/components/` and shadcn CLI before creating a new component?
 - [ ] No edits to `src/components/ui/`?

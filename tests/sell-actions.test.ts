@@ -14,6 +14,8 @@ const {
   mockRedirect,
   mockDeleteListingImages,
   mockGetAuthClient,
+  mockIsListingFeeActive,
+  mockCreateListingCheckout,
 } = vi.hoisted(() => {
   let urlCounter = 0;
   const mockGetPublicUrl = vi.fn().mockImplementation(() => ({
@@ -27,6 +29,8 @@ const {
   });
   const mockDeleteListingImages = vi.fn().mockResolvedValue({ ok: true });
   const mockGetAuthClient = vi.fn();
+  const mockIsListingFeeActive = vi.fn().mockReturnValue(false);
+  const mockCreateListingCheckout = vi.fn();
 
   return {
     mockInsert,
@@ -36,6 +40,8 @@ const {
     mockRedirect,
     mockDeleteListingImages,
     mockGetAuthClient,
+    mockIsListingFeeActive,
+    mockCreateListingCheckout,
   };
 });
 
@@ -44,6 +50,12 @@ vi.mock("next/navigation", () => ({ redirect: mockRedirect }));
 vi.mock("@/lib/actions/auth", () => ({ getAuthClient: mockGetAuthClient }));
 vi.mock("@/lib/actions/images", () => ({
   deleteListingImages: mockDeleteListingImages,
+}));
+vi.mock("@/lib/listing-fee", () => ({
+  isListingFeeActive: mockIsListingFeeActive,
+}));
+vi.mock("@/lib/actions/payments", () => ({
+  createListingCheckout: mockCreateListingCheckout,
 }));
 
 import { createListing, updateListing } from "@/lib/actions/sell";
@@ -182,6 +194,10 @@ describe("createListing", () => {
     mockDeleteListingImages.mockClear();
     mockDeleteListingImages.mockResolvedValue({ ok: true });
     mockRedirect.mockImplementation(() => { throw new Error("NEXT_REDIRECT"); });
+    mockIsListingFeeActive.mockReset();
+    mockIsListingFeeActive.mockReturnValue(false);
+    mockCreateListingCheckout.mockReset();
+    mockCreateListingCheckout.mockResolvedValue({});
     let counter = 0;
     mockGetPublicUrl.mockImplementation(() => ({
       data: { publicUrl: makeSupabaseUrl(`img-${++counter}.webp`) },
@@ -683,6 +699,95 @@ describe("createListing", () => {
     expect(mockUpload).not.toHaveBeenCalled();
     expect(mockUpdateTag).not.toHaveBeenCalled();
   });
+
+  it("free mode (fee inactive): inserts status 'active', calls updateTag, and never touches checkout", async () => {
+    const capture = { payload: {} as unknown };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture),
+    });
+    mockIsListingFeeActive.mockReturnValue(false);
+
+    const fd = baseFormData();
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    try { await createListing(fd); } catch { /* redirect */ }
+
+    const payload = capture.payload as Record<string, unknown>;
+    expect(payload.status).toBe("active");
+    expect(mockUpdateTag).toHaveBeenCalledWith("listings");
+    expect(mockCreateListingCheckout).not.toHaveBeenCalled();
+    expect(mockRedirect).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("fee active: inserts status 'pending_payment', skips updateTag, and delegates to createListingCheckout", async () => {
+    const capture: CreateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture),
+    });
+    mockIsListingFeeActive.mockReturnValue(true);
+
+    const fd = baseFormData();
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    await createListing(fd);
+
+    const payload = capture.payload as Record<string, unknown>;
+    expect(payload.status).toBe("pending_payment");
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+    expect(mockCreateListingCheckout).toHaveBeenCalledWith(CREATED_LISTING_ID);
+    expect(mockRedirect).not.toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("fee active: redirects with the toast flag when checkout returns an error, leaving the form behind", async () => {
+    const capture: CreateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture),
+    });
+    mockIsListingFeeActive.mockReturnValue(true);
+    mockCreateListingCheckout.mockResolvedValue({
+      error: "Your listing is saved. Please retry payment.",
+    });
+
+    const fd = baseFormData();
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    await expect(createListing(fd)).rejects.toThrow("NEXT_REDIRECT");
+
+    // Redirected rather than returned: the seller must leave the populated
+    // form so a retry can't create a duplicate listing.
+    expect(mockRedirect).toHaveBeenCalledWith(
+      "/dashboard?toast=checkout-unavailable",
+    );
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+  });
+
+  it("fee active: never deletes uploaded images when createListingCheckout fails after the listing already committed", async () => {
+    const capture: CreateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture),
+    });
+    mockIsListingFeeActive.mockReturnValue(true);
+    mockCreateListingCheckout.mockRejectedValue(new Error("stripe down"));
+
+    const fd = baseFormData();
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    await expect(createListing(fd)).rejects.toThrow("stripe down");
+
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+  });
 });
 
 describe("updateListing", () => {
@@ -935,7 +1040,7 @@ describe("updateListing", () => {
 
     const result = await updateListing(LISTING_ID, fd);
 
-    expect(result).toEqual({ error: "Only active listings can be edited." });
+    expect(result).toEqual({ error: "Only active or unpaid listings can be edited." });
     expect(supabase._rpc).not.toHaveBeenCalled();
     expect(mockUpload).not.toHaveBeenCalled();
     expect(mockUpdateTag).not.toHaveBeenCalled();
@@ -961,9 +1066,47 @@ describe("updateListing", () => {
 
     const result = await updateListing(LISTING_ID, fd);
 
-    expect(result).toEqual({ error: "Only active listings can be edited." });
+    expect(result).toEqual({ error: "Only active or unpaid listings can be edited." });
     expect(supabase._rpc).not.toHaveBeenCalled();
     expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("allows an edit to a pending_payment listing without changing status", async () => {
+    const capture: UpdateCapture = { payload: {} };
+    const supabase = makeUpdateSupabase(
+      [OLD_URL_0],
+      capture,
+      { error: null },
+      "pending_payment",
+    );
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase,
+    });
+
+    const fd = baseFormData();
+    fd.set("title", "Pending gown (edited)");
+    fd.set("existing_url_0", OLD_URL_0);
+    fd.set("blur_0", makeBlur("blur0"));
+
+    try {
+      await updateListing(LISTING_ID, fd);
+    } catch {
+      /* redirect */
+    }
+
+    expect(supabase._rpc).toHaveBeenCalledWith(
+      "update_listing_with_variants",
+      expect.objectContaining({ p_listing_id: LISTING_ID }),
+    );
+    expect(capture.payload).toEqual(
+      expect.objectContaining({
+        title: "Pending gown (edited)",
+        status: "pending_payment",
+      }),
+    );
+    expect(mockUpdateTag).toHaveBeenCalledWith("listings");
   });
 
   it("passes contact_methods through to the atomic RPC payload", async () => {

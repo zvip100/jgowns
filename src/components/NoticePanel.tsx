@@ -8,6 +8,8 @@ type NoticePanelProps = {
   description: string;
   href: string;
   linkLabel: string;
+  secondaryHref?: string;
+  secondaryLinkLabel?: string;
 };
 
 export default function NoticePanel({
@@ -16,6 +18,8 @@ export default function NoticePanel({
   description,
   href,
   linkLabel,
+  secondaryHref,
+  secondaryLinkLabel,
 }: NoticePanelProps) {
   return (
     <div className='mx-auto mt-16 max-w-md text-center sm:mt-24'>
@@ -29,6 +33,14 @@ export default function NoticePanel({
         >
           {linkLabel}
         </Link>
+        {secondaryHref && secondaryLinkLabel && (
+          <Link
+            href={secondaryHref}
+            className='mt-4 inline-flex w-full items-center justify-center text-xs font-semibold uppercase tracking-[0.12em] text-(--accent-deep) transition hover:text-[#2f241b]'
+          >
+            {secondaryLinkLabel}
+          </Link>
+        )}
       </div>
     </div>
   );

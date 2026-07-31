@@ -10,6 +10,14 @@ export const PRIMARY_CTA_CLASS =
 export const CHECKBOX_GOLD_CLASS =
   "data-[state=checked]:gold-gradient data-[state=checked]:border-[#a67841]!";
 
+/**
+ * Ring treatment shared by the two browse filter count badges: the per-section
+ * count in the rail and the total on the filter trigger. Each call site adds
+ * its own sizing.
+ */
+export const FILTER_COUNT_BADGE_CLASS =
+  "rounded-full border-transparent bg-[#fffdfa] font-semibold text-[#8e6330] shadow-[inset_0_0_0_1.5px_#b3854c]";
+
 /** Inline underlined gold text link (legal documents + the contact intro). */
 export const LEGAL_LINK_CLASS =
   "text-(--accent-deep) underline underline-offset-2 transition-colors hover:text-[#a0733f]";

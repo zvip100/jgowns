@@ -5,7 +5,7 @@ import {
 import type { PageSearchParams } from "@/lib/types";
 import { firstParam } from "@/lib/utils";
 
-export const BROWSE_PAGE_SIZE = 8;
+export const BROWSE_PAGE_SIZE = 12;
 
 const MAX_PAGE = 10_000;
 

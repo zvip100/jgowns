@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { Suspense } from 'react';
 import { PackageOpen, Plus, Sparkles } from 'lucide-react';
 
+import { isListingFeeActive } from '@/lib/listing-fee';
 import { createClient } from '@/lib/supabase/server';
 import { Button } from '@/components/ui/button';
 import {
@@ -50,6 +51,7 @@ async function DashboardContent({
 }: DashboardContentProps) {
   const listings = await listingsPromise;
   const hasListings = listings.length > 0;
+  const listingFeeActive = isListingFeeActive();
 
   return (
     <>
@@ -58,7 +60,7 @@ async function DashboardContent({
           <DashboardStats listings={listings} />
           <div className="flex flex-col gap-3">
             {listings.map((l) => (
-              <ListingRow key={l.id} listing={l} />
+              <ListingRow key={l.id} listing={l} listingFeeActive={listingFeeActive} />
             ))}
           </div>
         </>

@@ -1,15 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const {
-  anonMaybeSingle,
-  sessionMaybeSingle,
-  anonChain,
-  sessionChain,
-  anonClient,
-  mockCreateClient,
-} = vi.hoisted(() => {
+const { anonMaybeSingle, anonChain, anonClient } = vi.hoisted(() => {
     const anonMaybeSingle = vi.fn();
-    const sessionMaybeSingle = vi.fn();
 
     const makeChain = (terminal: ReturnType<typeof vi.fn>) => {
       const chain: Record<string, unknown> = {};
@@ -25,56 +17,44 @@ const {
     };
 
     const anonChain = makeChain(anonMaybeSingle);
-    const sessionChain = makeChain(sessionMaybeSingle);
 
     return {
       anonMaybeSingle,
-      sessionMaybeSingle,
       anonChain,
-      sessionChain,
       anonClient: { from: vi.fn().mockReturnValue(anonChain) },
-      mockCreateClient: vi
-        .fn()
-        .mockResolvedValue({ from: vi.fn().mockReturnValue(sessionChain) }),
     };
   });
 
 vi.mock("next/cache", () => ({ cacheLife: vi.fn(), cacheTag: vi.fn() }));
 vi.mock("@/lib/supabase/anon", () => ({ anonClient }));
-vi.mock("@/lib/supabase/server", () => ({ createClient: mockCreateClient }));
 
 import {
   fetchActiveListingsForSitemap,
-  fetchListingWithFallback,
+  fetchListing,
   fetchPriceBounds,
-} from "@/lib/listings-queries";
+} from "@/lib/queries/listings";
 
-const ID_PUBLIC_HIT    = "11111111-1111-1111-1111-111111111111";
-const ID_SESSION_HIT   = "22222222-2222-2222-2222-222222222222";
-const ID_PUBLIC_ERROR  = "33333333-3333-3333-3333-333333333333";
-const ID_SORTED_SIZES  = "44444444-4444-4444-4444-444444444444";
-const ID_REMOVED_OWNER = "55555555-5555-5555-5555-555555555555";
+const ID_HIT             = "11111111-1111-1111-1111-111111111111";
+const ID_ERROR           = "33333333-3333-3333-3333-333333333333";
+const ID_SORTED_SIZES    = "44444444-4444-4444-4444-444444444444";
+const ID_EXCLUDED_STATUS = "55555555-5555-5555-5555-555555555555";
 
-describe("fetchListingWithFallback", () => {
+describe("fetchListing", () => {
   beforeEach(() => {
     anonMaybeSingle.mockReset();
-    sessionMaybeSingle.mockReset();
     (anonChain.eq as ReturnType<typeof vi.fn>).mockClear();
     (anonChain.in as ReturnType<typeof vi.fn>).mockClear();
-    (sessionChain.eq as ReturnType<typeof vi.fn>).mockClear();
-    (sessionChain.neq as ReturnType<typeof vi.fn>).mockClear();
   });
 
-  it("returns the listing when the public query finds it", async () => {
-    const listing = { id: ID_PUBLIC_HIT, title: "Test Gown", sizes: [] };
+  it("returns the listing when the query finds it", async () => {
+    const listing = { id: ID_HIT, title: "Test Gown", sizes: [] };
     anonMaybeSingle.mockResolvedValue({ data: listing, error: null });
 
-    const result = await fetchListingWithFallback(ID_PUBLIC_HIT);
+    const result = await fetchListing(ID_HIT);
 
     expect(result.listing).toEqual(listing);
     expect(result.error).toBeNull();
     expect(anonChain.in).toHaveBeenCalledWith("status", ["active", "sold"]);
-    expect(sessionMaybeSingle).not.toHaveBeenCalled();
   });
 
   it("orders embedded sizes by sort_order then size", async () => {
@@ -93,53 +73,37 @@ describe("fetchListingWithFallback", () => {
       error: null,
     });
 
-    const result = await fetchListingWithFallback(ID_SORTED_SIZES);
+    const result = await fetchListing(ID_SORTED_SIZES);
 
     expect(result.listing?.sizes.map((s) => s.size)).toEqual(["8", "10", "12"]);
   });
 
-  it("falls back to session query when the public query returns no listing", async () => {
-    const listing = { id: ID_SESSION_HIT, title: "Test Gown", sizes: [] };
+  it("returns no listing for a row the status filter excludes (removed or pending_payment)", async () => {
     anonMaybeSingle.mockResolvedValue({ data: null, error: null });
-    sessionMaybeSingle.mockResolvedValue({ data: listing, error: null });
 
-    const result = await fetchListingWithFallback(ID_SESSION_HIT);
-
-    expect(result.listing).toEqual(listing);
-    expect(result.error).toBeNull();
-    expect(sessionMaybeSingle).toHaveBeenCalledOnce();
-    expect(sessionChain.neq).toHaveBeenCalledWith("status", "removed");
-  });
-
-  it("returns no listing when the owner fallback excludes a removed row", async () => {
-    anonMaybeSingle.mockResolvedValue({ data: null, error: null });
-    sessionMaybeSingle.mockResolvedValue({ data: null, error: null });
-
-    const result = await fetchListingWithFallback(ID_REMOVED_OWNER);
+    const result = await fetchListing(ID_EXCLUDED_STATUS);
 
     expect(result).toEqual({ listing: null, error: null });
-    expect(sessionChain.neq).toHaveBeenCalledWith("status", "removed");
+    expect(anonChain.in).toHaveBeenCalledWith("status", ["active", "sold"]);
   });
 
-  it("returns the error and skips the session query when the public query errors", async () => {
+  it("returns the error when the query fails", async () => {
     anonMaybeSingle.mockResolvedValue({
       data: null,
       error: { message: "connection failed", details: "", hint: "", code: "PGRST" },
     });
 
-    const result = await fetchListingWithFallback(ID_PUBLIC_ERROR);
+    const result = await fetchListing(ID_ERROR);
 
     expect(result.listing).toBeNull();
     expect(result.error).toEqual({ message: "connection failed" });
-    expect(sessionMaybeSingle).not.toHaveBeenCalled();
   });
 
   it("returns { listing: null, error: null } for a blank id without querying", async () => {
-    const result = await fetchListingWithFallback("   ");
+    const result = await fetchListing("   ");
 
     expect(result).toEqual({ listing: null, error: null });
     expect(anonMaybeSingle).not.toHaveBeenCalled();
-    expect(sessionMaybeSingle).not.toHaveBeenCalled();
   });
 });
 

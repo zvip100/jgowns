@@ -43,7 +43,6 @@ export const listingInputSchema = z
       .optional(),
     contact_phone: optionalPhoneSchema,
     contact_methods: z.array(z.enum(CONTACT_METHODS)).default([]),
-    status: z.enum(["active", "sold", "removed"]).default("active"),
   })
   .superRefine((data, ctx) => {
     if (!data.contact_email && !data.contact_phone) {

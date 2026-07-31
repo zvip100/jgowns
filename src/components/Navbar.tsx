@@ -20,7 +20,7 @@ export default function Navbar() {
   return (
     <MobileMenuProvider>
       <header
-        className="sticky top-0 z-50 border-b border-[#d5c4b0] bg-[rgba(252,246,236,0.78)] backdrop-blur-lg"
+        className="sticky top-0 z-50 bg-[rgba(252,246,236,0.78)] backdrop-blur-lg"
         style={{ viewTransitionName: "site-nav" }}
       >
         <nav

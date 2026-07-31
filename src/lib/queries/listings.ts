@@ -1,13 +1,10 @@
-import { cache } from "react";
 import { cacheLife, cacheTag } from "next/cache";
-import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { BROWSE_PAGE_SIZE, totalPagesFromCount } from "@/lib/browse-pagination";
 import { decodeSizeFilterToken } from "@/lib/gown-sizes";
 import { sortListingSizes } from "@/lib/listing-variants";
 import type { BrowseFilters } from "@/lib/types";
 import { anonClient } from "@/lib/supabase/anon";
-import { createClient } from "@/lib/supabase/server";
 import type {
   ListingByIdResult,
   ListingReadError,
@@ -52,33 +49,26 @@ function normalizeId(id: unknown): string | null {
 }
 
 async function selectListingById(
-  supabase: SupabaseClient,
   normalizedId: string,
-  logContext: "anon" | "session",
 ): Promise<ListingByIdResult> {
-  const query = supabase
+  // 'removed' is soft-deleted and 'pending_payment' is unpaid and not yet
+  // published, so neither is viewable here, including by its own seller (who
+  // manages those from the dashboard, not a public-shaped detail page).
+  const { data: listing, error } = await anonClient
     .from("listings")
     .select(LISTING_WITH_SIZES_SELECT)
-    .eq("id", normalizedId);
-
-  const visibleQuery =
-    logContext === "anon"
-      ? query.in("status", ["active", "sold"])
-      : query.neq("status", "removed");
-
-  const { data: listing, error } = await visibleQuery.maybeSingle();
+    .eq("id", normalizedId)
+    .in("status", ["active", "sold"])
+    .maybeSingle();
 
   if (error) {
-    console.error(
-      `[listings-queries] Failed to load listing by id (${logContext})`,
-      {
-        message: error.message,
-        details: error.details,
-        hint: error.hint,
-        code: error.code,
-        id: normalizedId,
-      },
-    );
+    console.error("[queries/listings] Failed to load listing by id", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+      id: normalizedId,
+    });
     return { listing: null, error: { message: error.message } };
   }
 
@@ -195,7 +185,7 @@ export async function fetchListingsPage(
   let totalPages = totalPagesFromCount(totalCount, pageSize);
 
   if (error) {
-    console.error("[listings-queries] Failed to load listings page", {
+    console.error("[queries/listings] Failed to load listings page", {
       message: error.message,
       details: error.details,
       hint: error.hint,
@@ -252,32 +242,9 @@ export async function fetchListing(id: string): Promise<ListingByIdResult> {
   applyListingsCachePolicy();
   cacheTag(`listing:${normalizedId}`);
 
-  return selectListingById(anonClient, normalizedId, "anon");
+  return selectListingById(normalizedId);
 }
 
-/** Uncached: request cookies so RLS can return active/sold rows to the owning seller. */
-export async function fetchListingAsOwner(
-  id: string,
-): Promise<ListingByIdResult> {
-  const normalizedId = normalizeId(id);
-  if (!normalizedId) {
-    return { listing: null, error: null };
-  }
-
-  const supabase = await createClient();
-  return selectListingById(supabase, normalizedId, "session");
-}
-
-/** Public active lookup first; falls back to session-scoped query for sold listings visible to the owner. */
-export const fetchListingWithFallback = cache(
-  async (id: string): Promise<ListingByIdResult> => {
-    const { listing, error } = await fetchListing(id);
-    if (error) return { listing: null, error };
-    if (listing) return { listing, error: null };
-
-    return fetchListingAsOwner(id);
-  },
-);
 
 type SitemapListing = { id: string; created_at: string };
 
@@ -309,7 +276,7 @@ export async function fetchActiveListingsForSitemap(): Promise<
       .range(from, to);
 
     if (error) {
-      console.error("[listings-queries] Failed to load listings for sitemap", {
+      console.error("[queries/listings] Failed to load listings for sitemap", {
         message: error.message,
         details: error.details,
         hint: error.hint,
@@ -350,7 +317,7 @@ export async function fetchPriceBounds(): Promise<PriceBounds> {
 
   const error = minResult.error ?? maxResult.error;
   if (error) {
-    console.error("[listings-queries] Failed to load price bounds", {
+    console.error("[queries/listings] Failed to load price bounds", {
       message: error.message,
       details: error.details,
       hint: error.hint,

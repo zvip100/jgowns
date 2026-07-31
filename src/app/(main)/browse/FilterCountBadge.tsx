@@ -1,4 +1,5 @@
 import { Badge } from "@/components/ui/badge";
+import { FILTER_COUNT_BADGE_CLASS } from "@/lib/styles";
 
 type FilterCountBadgeProps = { count: number };
 
@@ -7,7 +8,7 @@ export default function FilterCountBadge({ count }: FilterCountBadgeProps) {
   return (
     <Badge
       variant="outline"
-      className="rounded-full border-0 gold-gradient px-2 py-0 text-[0.6rem] font-semibold leading-5 text-white shadow-[0_4px_12px_rgba(166,120,65,0.35)]"
+      className={`${FILTER_COUNT_BADGE_CLASS} px-2 py-0 text-[0.66rem] leading-5`}
     >
       {count}
     </Badge>

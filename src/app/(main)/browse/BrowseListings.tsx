@@ -6,7 +6,7 @@ import {
   parseBrowsePage,
 } from "@/lib/browse-pagination";
 import { browseHref } from "@/lib/browse-url";
-import { fetchListingsPage } from "@/lib/listings-queries";
+import { fetchListingsPage } from "@/lib/queries/listings";
 import type { PageSearchParams } from "@/lib/types";
 
 import BrowsePagination from "./BrowsePagination";

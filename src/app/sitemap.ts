@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 
-import { fetchActiveListingsForSitemap } from "@/lib/listings-queries";
+import { fetchActiveListingsForSitemap } from "@/lib/queries/listings";
 import { SITE_URL } from "@/lib/site";
 
 // Last real content edit for each static legal/support page (see MEMORY.md
