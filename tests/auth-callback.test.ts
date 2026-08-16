@@ -28,7 +28,10 @@ beforeEach(() => {
 
 describe("GET auth callback", () => {
   it("redirects successful exchanges to the configured site URL", async () => {
-    mockExchangeCodeForSession.mockResolvedValue({ error: null });
+    mockExchangeCodeForSession.mockResolvedValue({
+      data: { user: { id: "u1", app_metadata: { role: "seller" } } },
+      error: null,
+    });
 
     const response = await GET(
       callbackRequest("?code=auth-code&next=%2Fdashboard"),
@@ -37,6 +40,62 @@ describe("GET auth callback", () => {
     expect(mockExchangeCodeForSession).toHaveBeenCalledWith("auth-code");
     expect(response.headers.get("location")).toBe(
       "https://jgowns.test/dashboard",
+    );
+  });
+
+  it("sends an admin to /admin when no explicit next was requested", async () => {
+    mockExchangeCodeForSession.mockResolvedValue({
+      data: { user: { id: "u2", app_metadata: { role: "admin" } } },
+      error: null,
+    });
+
+    const response = await GET(callbackRequest("?code=auth-code"));
+
+    expect(response.headers.get("location")).toBe("https://jgowns.test/admin");
+  });
+
+  it("honors an admin's explicitly requested next=/dashboard", async () => {
+    mockExchangeCodeForSession.mockResolvedValue({
+      data: { user: { id: "u2", app_metadata: { role: "admin" } } },
+      error: null,
+    });
+
+    const response = await GET(
+      callbackRequest("?code=auth-code&next=%2Fdashboard"),
+    );
+
+    expect(response.headers.get("location")).toBe(
+      "https://jgowns.test/dashboard",
+    );
+  });
+
+  it("drops an admin destination for a non-admin", async () => {
+    mockExchangeCodeForSession.mockResolvedValue({
+      data: { user: { id: "u1", app_metadata: { role: "seller" } } },
+      error: null,
+    });
+
+    const response = await GET(
+      callbackRequest("?code=auth-code&next=%2Fadmin%2Flistings"),
+    );
+
+    expect(response.headers.get("location")).toBe(
+      "https://jgowns.test/dashboard",
+    );
+  });
+
+  it("keeps a recovery link's next ahead of the admin home", async () => {
+    mockExchangeCodeForSession.mockResolvedValue({
+      data: { user: { id: "u2", app_metadata: { role: "admin" } } },
+      error: null,
+    });
+
+    const response = await GET(
+      callbackRequest("?code=auth-code&next=%2Freset-password"),
+    );
+
+    expect(response.headers.get("location")).toBe(
+      "https://jgowns.test/reset-password",
     );
   });
 

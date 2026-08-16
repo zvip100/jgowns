@@ -23,7 +23,11 @@ describe("getCurrentUser", () => {
       error: null,
     });
 
-    expect(await getCurrentUser()).toEqual({ id: "u1", email: "a@b.com" });
+    expect(await getCurrentUser()).toEqual({
+      id: "u1",
+      email: "a@b.com",
+      isAdmin: false,
+    });
   });
 
   it("returns null email when the claim has no email", async () => {
@@ -32,7 +36,38 @@ describe("getCurrentUser", () => {
       error: null,
     });
 
-    expect(await getCurrentUser()).toEqual({ id: "u1", email: null });
+    expect(await getCurrentUser()).toEqual({
+      id: "u1",
+      email: null,
+      isAdmin: false,
+    });
+  });
+
+  it("flags an admin from the app_metadata role claim", async () => {
+    mockGetClaims.mockResolvedValue({
+      data: {
+        claims: { sub: "u1", email: "a@b.com", app_metadata: { role: "admin" } },
+      },
+      error: null,
+    });
+
+    expect((await getCurrentUser())?.isAdmin).toBe(true);
+  });
+
+  it("never trusts user_metadata for the admin flag", async () => {
+    mockGetClaims.mockResolvedValue({
+      data: {
+        claims: {
+          sub: "u1",
+          email: "a@b.com",
+          app_metadata: { role: "seller" },
+          user_metadata: { role: "admin" },
+        },
+      },
+      error: null,
+    });
+
+    expect((await getCurrentUser())?.isAdmin).toBe(false);
   });
 
   it("returns null when there is no session", async () => {

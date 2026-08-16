@@ -28,6 +28,11 @@ export default async function NavAuthLinks({ variant }: NavAuthLinksProps) {
   if (user) {
     return (
       <>
+        {user.isAdmin && (
+          <Link href="/admin" className={styles.link}>
+            Admin
+          </Link>
+        )}
         <Link href="/dashboard" className={styles.link}>
           My Listings
         </Link>

@@ -7,6 +7,7 @@ import { SlidersHorizontal } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { countActiveBrowseFilters } from "@/lib/browse-params";
+import { HIDDEN_SCROLLBAR_CLASS } from "@/lib/styles";
 import { cn } from "@/lib/utils";
 
 import FilterBar from "./FilterBar";
@@ -133,7 +134,12 @@ export default function ListingsLayout({
                 <FilterCountBadge count={activeFilterCount} />
               </Button>
             )}
-            <div className='min-h-0 min-w-0 flex-1 overflow-x-auto [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden'>
+            <div
+              className={cn(
+                'min-h-0 min-w-0 flex-1 overflow-x-auto',
+                HIDDEN_SCROLLBAR_CLASS,
+              )}
+            >
               {categoryNavDesktop}
             </div>
           </div>

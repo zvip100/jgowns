@@ -1,13 +1,21 @@
 import Link from 'next/link';
 
-import type { LucideIcon } from 'lucide-react';
+import {
+  NOTICE_PANEL_PRIMARY_ACTION_CLASS,
+  NOTICE_PANEL_SECONDARY_ACTION_CLASS,
+} from '@/lib/styles';
 
+import type { LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
+
+/** Give the primary slot either `href` + `linkLabel`, or a `primaryAction` node. */
 type NoticePanelProps = {
   icon: LucideIcon;
   title: string;
   description: string;
-  href: string;
-  linkLabel: string;
+  href?: string;
+  linkLabel?: string;
+  primaryAction?: ReactNode;
   secondaryHref?: string;
   secondaryLinkLabel?: string;
 };
@@ -18,6 +26,7 @@ export default function NoticePanel({
   description,
   href,
   linkLabel,
+  primaryAction,
   secondaryHref,
   secondaryLinkLabel,
 }: NoticePanelProps) {
@@ -27,16 +36,16 @@ export default function NoticePanel({
         <Icon className='mx-auto mb-4 size-12 text-[#8a7462]' aria-hidden />
         <h2 className='text-[1.6rem] text-[#2f241b]'>{title}</h2>
         <p className='mt-2 text-sm text-[#7d6652]'>{description}</p>
-        <Link
-          href={href}
-          className='mt-6 inline-flex w-full items-center justify-center rounded-full border border-[#b58d5f]/70 gold-gradient py-3 text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)] hover:-translate-y-0.5 hover:brightness-105'
-        >
-          {linkLabel}
-        </Link>
+        {primaryAction}
+        {href && linkLabel && (
+          <Link href={href} className={NOTICE_PANEL_PRIMARY_ACTION_CLASS}>
+            {linkLabel}
+          </Link>
+        )}
         {secondaryHref && secondaryLinkLabel && (
           <Link
             href={secondaryHref}
-            className='mt-4 inline-flex w-full items-center justify-center text-xs font-semibold uppercase tracking-[0.12em] text-(--accent-deep) transition hover:text-[#2f241b]'
+            className={NOTICE_PANEL_SECONDARY_ACTION_CLASS}
           >
             {secondaryLinkLabel}
           </Link>

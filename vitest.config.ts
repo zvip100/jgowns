@@ -5,6 +5,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],
+    // Date formatting assertions are calendar-day sensitive; pin the runner.
+    env: { TZ: "UTC" },
   },
   resolve: {
     alias: {

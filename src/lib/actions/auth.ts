@@ -5,7 +5,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { DEFAULT_POST_AUTH_PATH, safePostAuthPath } from "@/lib/auth-redirect";
+import { postAuthPath, safeNextPath } from "@/lib/auth-redirect";
 import { createClient } from "@/lib/supabase/server";
 import { optionalPhoneSchema } from "@/lib/utils";
 
@@ -67,9 +67,20 @@ async function getRequestOrigin(): Promise<string> {
   return `${proto}://${host}`;
 }
 
+/** Supabase redirect target. `next` is omitted entirely when none was requested. */
+function authCallbackUrl(origin: string, next: string | null): string {
+  const callback = `${origin}/api/auth/callback`;
+  return next ? `${callback}?next=${encodeURIComponent(next)}` : callback;
+}
+
 export async function getAuthClient(): Promise<
   | { ok: false; error: string }
-  | { ok: true; supabase: SupabaseServer; user: { id: string } }
+  | {
+      ok: true;
+      supabase: SupabaseServer;
+      // app_metadata carries the JWT-signed role, read only via `isAdmin`.
+      user: { id: string; app_metadata?: Record<string, unknown> };
+    }
 > {
   const supabase = await createClient();
   const {
@@ -99,11 +110,11 @@ export async function signIn(
   }
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword(parsed.data);
+  const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
   if (error) return { error: error.message };
 
   revalidatePath("/", "layout");
-  redirect(safePostAuthPath(input.next));
+  redirect(postAuthPath(data.user, input.next));
 }
 
 export async function signUp(input: SignUpInput): Promise<SignUpResult> {
@@ -115,13 +126,13 @@ export async function signUp(input: SignUpInput): Promise<SignUpResult> {
   const { email, password, phone } = parsed.data;
   const supabase = await createClient();
   const origin = await getRequestOrigin();
-  const next = safePostAuthPath(input.next);
+  const next = safeNextPath(input.next);
 
   const { error } = await supabase.auth.signUp({
     email,
     password,
     options: {
-      emailRedirectTo: `${origin}/api/auth/callback?next=${encodeURIComponent(next)}`,
+      emailRedirectTo: authCallbackUrl(origin, next),
       data: phone ? { phone } : undefined,
     },
   });
@@ -143,14 +154,13 @@ export async function requestPasswordReset(
   const supabase = await createClient();
   const origin = await getRequestOrigin();
 
-  const safeNext = safePostAuthPath(input.next);
-  const resetPath =
-    safeNext === DEFAULT_POST_AUTH_PATH
-      ? RESET_PASSWORD_PATH
-      : `${RESET_PASSWORD_PATH}?next=${encodeURIComponent(safeNext)}`;
+  const safeNext = safeNextPath(input.next);
+  const resetPath = safeNext
+    ? `${RESET_PASSWORD_PATH}?next=${encodeURIComponent(safeNext)}`
+    : RESET_PASSWORD_PATH;
 
   const { error } = await supabase.auth.resetPasswordForEmail(parsed.data, {
-    redirectTo: `${origin}/api/auth/callback?next=${encodeURIComponent(resetPath)}`,
+    redirectTo: authCallbackUrl(origin, resetPath),
   });
 
   if (error) {
@@ -183,7 +193,7 @@ export async function updatePassword(
   }
 
   revalidatePath("/", "layout");
-  redirect(safePostAuthPath(input.next));
+  redirect(postAuthPath(auth.user, input.next));
 }
 
 export async function signInWithGoogle(
@@ -193,14 +203,12 @@ export async function signInWithGoogle(
   const supabase = await createClient();
   const origin = await getRequestOrigin();
   const nextValue = formData.get("next");
-  const next = safePostAuthPath(
-    typeof nextValue === "string" ? nextValue : null,
-  );
+  const next = safeNextPath(typeof nextValue === "string" ? nextValue : null);
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
     options: {
-      redirectTo: `${origin}/api/auth/callback?next=${encodeURIComponent(next)}`,
+      redirectTo: authCallbackUrl(origin, next),
     },
   });
 

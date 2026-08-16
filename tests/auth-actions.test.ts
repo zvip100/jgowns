@@ -109,9 +109,15 @@ describe("getAuthClient", () => {
   });
 });
 
+const SELLER = { id: "u1", app_metadata: { role: "seller" } };
+const ADMIN = { id: "u2", app_metadata: { role: "admin" } };
+
 describe("signIn", () => {
   it("redirects to /dashboard on success", async () => {
-    mockSignInWithPassword.mockResolvedValue({ error: null });
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: SELLER },
+      error: null,
+    });
 
     await expect(
       signIn({ email: "a@b.com", password: "secret6" }),
@@ -125,8 +131,71 @@ describe("signIn", () => {
     expect(mockRedirect).toHaveBeenCalledWith("/dashboard");
   });
 
+  it("redirects an admin to /admin instead of the seller dashboard", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: ADMIN },
+      error: null,
+    });
+
+    await expect(
+      signIn({ email: "admin@b.com", password: "secret6" }),
+    ).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(mockRedirect).toHaveBeenCalledWith("/admin");
+  });
+
+  it("lets an explicit next win over the admin home", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: ADMIN },
+      error: null,
+    });
+
+    await expect(
+      signIn({
+        email: "admin@b.com",
+        password: "secret6",
+        next: "/dashboard/new",
+      }),
+    ).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(mockRedirect).toHaveBeenCalledWith("/dashboard/new");
+  });
+
+  it("honors an admin's explicit request for the seller dashboard", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: ADMIN },
+      error: null,
+    });
+
+    await expect(
+      signIn({ email: "admin@b.com", password: "secret6", next: "/dashboard" }),
+    ).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(mockRedirect).toHaveBeenCalledWith("/dashboard");
+  });
+
+  it("drops an admin destination a seller has no claim for", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: SELLER },
+      error: null,
+    });
+
+    await expect(
+      signIn({
+        email: "a@b.com",
+        password: "secret6",
+        next: "/admin/listings",
+      }),
+    ).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(mockRedirect).toHaveBeenCalledWith("/dashboard");
+  });
+
   it("redirects to a safe next path on success", async () => {
-    mockSignInWithPassword.mockResolvedValue({ error: null });
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: SELLER },
+      error: null,
+    });
 
     await expect(
       signIn({ email: "a@b.com", password: "secret6", next: "/dashboard/new" }),
@@ -136,7 +205,10 @@ describe("signIn", () => {
   });
 
   it("ignores an unsafe next and falls back to /dashboard", async () => {
-    mockSignInWithPassword.mockResolvedValue({ error: null });
+    mockSignInWithPassword.mockResolvedValue({
+      data: { user: SELLER },
+      error: null,
+    });
 
     await expect(
       signIn({ email: "a@b.com", password: "secret6", next: "https://evil.com" }),
@@ -181,9 +253,7 @@ describe("signUp", () => {
     const arg = mockSignUp.mock.calls[0][0];
     expect(arg.email).toBe("a@b.com");
     expect(arg.options.data).toBeUndefined();
-    expect(arg.options.emailRedirectTo).toBe(
-      `${ORIGIN}/api/auth/callback?next=%2Fdashboard`,
-    );
+    expect(arg.options.emailRedirectTo).toBe(`${ORIGIN}/api/auth/callback`);
   });
 
   it("threads a safe next into the email confirmation redirect", async () => {
@@ -300,7 +370,7 @@ describe("signInWithGoogle", () => {
 
     expect(mockSignInWithOAuth).toHaveBeenCalledWith({
       provider: "google",
-      options: { redirectTo: `${ORIGIN}/api/auth/callback?next=%2Fdashboard` },
+      options: { redirectTo: `${ORIGIN}/api/auth/callback` },
     });
     expect(mockRedirect).toHaveBeenCalledWith(url);
   });

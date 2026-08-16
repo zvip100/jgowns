@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 import { TriangleAlert } from 'lucide-react';
 
-import { safePostAuthPath } from '@/lib/auth-redirect';
+import { safeNextPath } from '@/lib/auth-redirect';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 import GoogleAuthButton from './GoogleAuthButton';
@@ -26,7 +26,9 @@ async function AuthScreenBody({
   hasGoogleAuth,
 }: AuthScreenBodyProps) {
   const { next, error } = await searchParams;
-  const redirectTo = safePostAuthPath(next);
+  // Empty means "no destination requested", which is what lets an admin land on
+  // /admin by default while still honoring an explicit next=/dashboard.
+  const redirectTo = safeNextPath(next) ?? '';
   const errorMessage = error ? AUTH_ERROR_MESSAGES[error] : undefined;
 
   return (
