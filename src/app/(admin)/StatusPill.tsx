@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 import { ADMIN_STATUS_LABELS, ADMIN_STATUS_TONES } from "./admin-status";
 
-import type { AdminListingStatus } from "./admin-types";
+import type { AdminListingStatus } from "@/lib/admin/types";
 
 type StatusPillProps = {
   status: AdminListingStatus;

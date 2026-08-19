@@ -21,7 +21,7 @@ import { toast } from "@/lib/toast";
 import { adminActionPending } from "../../../../admin-pending";
 
 import type { SubmitEvent } from "react";
-import type { AdminListing } from "../../../../admin-types";
+import type { AdminListing } from "@/lib/admin/types";
 
 /** Only the scalar fields this form edits, so the row is not shipped whole. */
 export type AdminListingEditFields = Pick<

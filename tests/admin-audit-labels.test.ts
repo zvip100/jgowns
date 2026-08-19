@@ -3,12 +3,18 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
 import {
+  ADMIN_PRICE_BAND_LABELS,
+  ADMIN_SELL_MODE_LABELS,
   AUDIT_ACTION_LABELS,
   AUDIT_ACTION_TONES,
+  adminCategoryShareLabel,
+  adminLocationShareLabel,
+  adminPriceBandLabel,
   auditFieldLabel,
   describeAuditChanges,
   formatAuditValue,
 } from "@/app/(admin)/admin-audit-labels";
+import { SELL_MODES } from "@/lib/types";
 import { LogChanges } from "@/app/(admin)/admin/logs/LogChanges";
 import { AuditActionPill } from "@/app/(admin)/AuditActionPill";
 import {
@@ -18,7 +24,7 @@ import {
 import { StatusPill } from "@/app/(admin)/StatusPill";
 import { PILL_TONE_CLASS } from "@/lib/styles";
 
-import type { AdminAuditAction } from "@/app/(admin)/admin-types";
+import type { AdminAuditAction } from "@/lib/admin/types";
 
 const ALL_ACTIONS: AdminAuditAction[] = [
   "listing.suspend",
@@ -326,5 +332,53 @@ describe("LogChanges", () => {
     );
 
     expect(html).toContain("2 more");
+  });
+});
+
+describe("adminCategoryShareLabel", () => {
+  it("labels a stored category id", () => {
+    expect(adminCategoryShareLabel("bridal")).toBe("Bridal");
+  });
+
+  it("names the null-category placeholder rather than showing a dash", () => {
+    expect(adminCategoryShareLabel("uncategorized")).toBe("Uncategorized");
+  });
+});
+
+describe("adminLocationShareLabel", () => {
+  it("passes a stored location through unchanged", () => {
+    expect(adminLocationShareLabel("Lakewood")).toBe("Lakewood");
+  });
+
+  it("names the null-location placeholder", () => {
+    expect(adminLocationShareLabel("unspecified")).toBe("Unspecified");
+  });
+});
+
+describe("adminPriceBandLabel", () => {
+  it("labels every band the RPC can return", () => {
+    expect(adminPriceBandLabel("under_100")).toBe("Under $100");
+    expect(adminPriceBandLabel("100_249")).toBe("$100–249");
+    expect(adminPriceBandLabel("250_499")).toBe("$250–499");
+    expect(adminPriceBandLabel("500_999")).toBe("$500–999");
+    expect(adminPriceBandLabel("1000_plus")).toBe("$1,000+");
+  });
+
+  it("falls back to the raw key if the bands are ever re-cut in SQL", () => {
+    expect(adminPriceBandLabel("2000_plus")).toBe("2000_plus");
+  });
+
+  it("uses en dashes for the ranges, never em dashes", () => {
+    for (const label of Object.values(ADMIN_PRICE_BAND_LABELS)) {
+      expect(label).not.toContain("—");
+    }
+  });
+});
+
+describe("ADMIN_SELL_MODE_LABELS", () => {
+  it("labels every sell mode", () => {
+    for (const mode of SELL_MODES) {
+      expect(ADMIN_SELL_MODE_LABELS[mode]).toBeTruthy();
+    }
   });
 });

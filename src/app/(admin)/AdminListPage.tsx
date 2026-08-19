@@ -10,7 +10,7 @@ import { AdminTable } from "./AdminTable";
 import { adminListHref } from "./admin-url";
 
 import type { AdminFilterOption } from "./AdminFilterBar";
-import type { AdminListResult } from "./admin-list";
+import type { AdminListResult } from "@/lib/admin/list";
 
 import type { ReactNode } from "react";
 

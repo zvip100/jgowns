@@ -60,7 +60,9 @@ type PaymentsResult = {
 
 function makeSupabase(
   sizesResult: UpdateResult = { data: [{ id: SIZE_ID }], error: null },
-  rpcResult: { error: null | { message: string } } = { error: null },
+  rpcResult: { error: null | { message: string; code?: string } } = {
+    error: null,
+  },
   listingsResult: UpdateResult = { data: [{ id: LISTING_ID }], error: null },
   listingStatusResult: {
     data: { status: string } | null;
@@ -198,16 +200,13 @@ describe("removeListing", () => {
 
     expect(result).toEqual({});
     expect(supabase.from).toHaveBeenCalledWith("listing_payments");
-    expect(supabase.from).toHaveBeenCalledWith("listings");
     expect(mockExpireSession).not.toHaveBeenCalled();
-    expect(supabase._listingsChain.update).toHaveBeenCalledWith({
-      status: "removed",
+    // The status write goes through the RPC, never a direct update: the
+    // listings_guard_status trigger refuses direct status writes (migration 025).
+    expect(supabase._rpc).toHaveBeenCalledWith("remove_listing", {
+      p_listing_id: LISTING_ID,
     });
-    expect(supabase._listingsChain.eq).toHaveBeenCalledWith("id", LISTING_ID);
-    expect(supabase._listingsChain.eq).toHaveBeenCalledWith(
-      "user_id",
-      "user-1",
-    );
+    expect(supabase._listingsChain.update).not.toHaveBeenCalled();
     expect(mockUpdateTag).toHaveBeenCalledWith(`listing:${LISTING_ID}`);
     expect(mockUpdateTag).toHaveBeenCalledWith("listings");
   });
@@ -240,8 +239,8 @@ describe("removeListing", () => {
     expect(serviceChain.update).toHaveBeenCalledWith({ status: "expired" });
     expect(serviceChain.eq).toHaveBeenCalledWith("stripe_session_id", SESSION_ID);
     expect(serviceChain.eq).toHaveBeenCalledWith("status", "pending");
-    expect(supabase._listingsChain.update).toHaveBeenCalledWith({
-      status: "removed",
+    expect(supabase._rpc).toHaveBeenCalledWith("remove_listing", {
+      p_listing_id: LISTING_ID,
     });
     expect(mockUpdateTag).toHaveBeenCalledWith(`listing:${LISTING_ID}`);
   });
@@ -269,8 +268,8 @@ describe("removeListing", () => {
 
     expect(result).toEqual({});
     expect(mockExpireSession).not.toHaveBeenCalled();
-    expect(supabase._listingsChain.update).toHaveBeenCalledWith({
-      status: "removed",
+    expect(supabase._rpc).toHaveBeenCalledWith("remove_listing", {
+      p_listing_id: LISTING_ID,
     });
   });
 
@@ -346,10 +345,11 @@ describe("removeListing", () => {
     expect(mockUpdateTag).not.toHaveBeenCalled();
   });
 
-  it("returns 'Listing not found' when no owner row matches", async () => {
-    const supabase = makeSupabase(undefined, undefined, {
-      data: [],
-      error: null,
+  it("returns 'Listing not found' when the RPC raises P0002", async () => {
+    // remove_listing raises P0002 when no row matches the owner + not-already-
+    // removed predicates; the action maps that code to the user-facing message.
+    const supabase = makeSupabase(undefined, {
+      error: { code: "P0002", message: "Listing not found" },
     });
     mockGetAuthClient.mockResolvedValue({
       ok: true,
@@ -359,6 +359,26 @@ describe("removeListing", () => {
 
     const result = await removeListing(LISTING_ID);
     expect(result).toEqual({ error: "Listing not found" });
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("surfaces a non-P0002 RPC error verbatim", async () => {
+    const supabase = makeSupabase(undefined, {
+      error: {
+        code: "42501",
+        message: "Listing status cannot be changed directly; use the listing actions",
+      },
+    });
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+
+    const result = await removeListing(LISTING_ID);
+    expect(result).toEqual({
+      error: "Listing status cannot be changed directly; use the listing actions",
+    });
     expect(mockUpdateTag).not.toHaveBeenCalled();
   });
 });

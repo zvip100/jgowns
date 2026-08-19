@@ -2,17 +2,16 @@ import Link from "next/link";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { ADMIN_EMPTY_VALUE } from "@/lib/admin/constants";
 
+import { parseAdminListParams } from "@/lib/admin/list";
+import { getAdminUsers } from "@/lib/queries/admin/users";
+
 import { AdminListPage } from "../../AdminListPage";
-import { FIXTURE_USERS } from "../../admin-fixtures";
-import {
-  buildAdminListResult,
-  filterByDateRange,
-  parseAdminListParams,
-} from "../../admin-list";
+import { isAdminDemoMode } from "../../admin-demo";
+import { demoUsers } from "../../admin-fixtures";
 import { formatAdminDate } from "../../admin-url";
 
-import type { AdminListResult } from "../../admin-list";
-import type { AdminUser } from "../../admin-types";
+import type { AdminListResult } from "@/lib/admin/list";
+import type { AdminUser } from "@/lib/admin/types";
 
 import type { Metadata } from "next";
 import type { PageSearchParams } from "@/lib/types";
@@ -39,20 +38,9 @@ async function loadUsers(
 ): Promise<AdminListResult<AdminUser>> {
   const params = parseAdminListParams(await searchParams);
 
-  let filtered = FIXTURE_USERS;
-  if (params.status === "banned") filtered = filtered.filter((u) => u.is_banned);
-  else if (params.status === "admin")
-    filtered = filtered.filter((u) => u.is_admin);
-  else if (params.status === "active")
-    filtered = filtered.filter((u) => !u.is_banned);
-  if (params.query) {
-    filtered = filtered.filter((u) =>
-      u.email.toLowerCase().includes(params.query),
-    );
-  }
-  filtered = filterByDateRange(filtered, params, (u) => u.created_at);
+  if (await isAdminDemoMode()) return demoUsers(params);
 
-  return buildAdminListResult(filtered, params);
+  return getAdminUsers(params);
 }
 
 export default function AdminUsersPage({ searchParams }: AdminUsersPageProps) {

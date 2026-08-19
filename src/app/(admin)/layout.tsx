@@ -1,10 +1,12 @@
 import { Suspense } from "react";
 import { notFound } from "next/navigation";
+import { FlaskConical } from "lucide-react";
 
 import { isAdmin } from "@/lib/admin/is-admin";
 import { getCurrentUser } from "@/lib/queries/auth";
 import { createClient } from "@/lib/supabase/server";
 
+import { isAdminDemoMode } from "./admin-demo";
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminTopBar } from "./AdminTopBar";
 import AdminLoading from "./loading";
@@ -60,6 +62,15 @@ async function AdminShell({ children }: AdminShellProps) {
         id="main-content"
         className="mx-auto w-full min-w-0 max-w-7xl flex-1 px-4 py-6 sm:px-6 sm:py-8"
       >
+        {/* TEMPORARY, pre-production. Demo mode is set on /admin but applies to
+            every page, so it has to announce itself away from that toggle.
+            See ADMIN_DEMO_COOKIE for the removal checklist. */}
+        {(await isAdminDemoMode()) && (
+          <p className="mb-5 flex items-center gap-2 rounded-full border border-[#cbab84] bg-[rgba(179,133,76,0.14)] px-4 py-2 text-xs font-semibold text-[#875f2f]">
+            <FlaskConical className="size-3.5 shrink-0" aria-hidden />
+            Showing demo data. Turn it off on the Overview page.
+          </p>
+        )}
         <Suspense fallback={<AdminLoading />}>
           <AdminAuthBoundary>{children}</AdminAuthBoundary>
         </Suspense>

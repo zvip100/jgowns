@@ -2,27 +2,26 @@ import Link from "next/link";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { listingPriceSummary } from "@/lib/listing-variants";
 
-import { AdminListPage } from "../../AdminListPage";
-import { AdminThumbnail } from "../../AdminThumbnail";
-import { adminCategoryLabel } from "../../admin-audit-labels";
-import { FIXTURE_AS_OF, FIXTURE_LISTINGS } from "../../admin-fixtures";
 import {
   ADMIN_NEW_WEEK_SEGMENT,
   ADMIN_OFF_MARKET_STATUS,
   ADMIN_STALE_ACTIVE_SEGMENT,
   ADMIN_STUCK_PAYMENT_SEGMENT,
-  buildAdminListResult,
-  filterByDateRange,
-  matchesListingSegment,
   parseAdminListParams,
-  sortByCreatedDesc,
-} from "../../admin-list";
-import { toListingWithSizes } from "../../admin-types";
+} from "@/lib/admin/list";
+import { getAdminListings } from "@/lib/queries/admin/listings";
+
+import { AdminListPage } from "../../AdminListPage";
+import { AdminThumbnail } from "../../AdminThumbnail";
+import { adminCategoryLabel } from "../../admin-audit-labels";
+import { isAdminDemoMode } from "../../admin-demo";
+import { demoListings } from "../../admin-fixtures";
+import { toListingWithSizes } from "@/lib/admin/types";
 import { formatAdminDate } from "../../admin-url";
 import { StatusPill } from "../../StatusPill";
 
-import type { AdminListResult } from "../../admin-list";
-import type { AdminListing } from "../../admin-types";
+import type { AdminListResult } from "@/lib/admin/list";
+import type { AdminListing } from "@/lib/admin/types";
 
 import type { Metadata } from "next";
 import type { PageSearchParams } from "@/lib/types";
@@ -58,19 +57,9 @@ async function loadListings(
 ): Promise<AdminListResult<AdminListing>> {
   const params = parseAdminListParams(await searchParams);
 
-  let filtered = FIXTURE_LISTINGS.filter((l) =>
-    matchesListingSegment(params.status, l, FIXTURE_AS_OF),
-  );
-  if (params.query) {
-    filtered = filtered.filter((l) =>
-      l.title.toLowerCase().includes(params.query),
-    );
-  }
-  filtered = filterByDateRange(filtered, params, (l) => l.created_at);
+  if (await isAdminDemoMode()) return demoListings(params);
 
-  const sorted = sortByCreatedDesc(filtered);
-
-  return buildAdminListResult(sorted, params);
+  return getAdminListings(params, new Date().toISOString());
 }
 
 export default function AdminListingsPage({

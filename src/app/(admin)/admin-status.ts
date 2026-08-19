@@ -1,4 +1,4 @@
-import type { AdminListingStatus } from "./admin-types";
+import type { AdminListingStatus } from "@/lib/admin/types";
 import type { PillTone } from "@/lib/styles";
 
 export const ADMIN_STATUS_TONES: Record<AdminListingStatus, PillTone> = {

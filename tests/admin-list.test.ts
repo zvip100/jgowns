@@ -1,19 +1,30 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   ADMIN_NEW_WEEK_SEGMENT,
   ADMIN_OFF_MARKET_STATUS,
   ADMIN_STALE_ACTIVE_SEGMENT,
   ADMIN_STUCK_PAYMENT_SEGMENT,
-  buildAdminListResult,
+  AGE_SEGMENTS,
+  adminListQuery,
+  adminListResult,
+  clampPage,
+  endOfDayMs,
+  fetchAdminListPage,
+  pageRange,
+  paginateAdminList,
+  parseAdminListParams,
+  queueCutoffDate,
+  segmentCutoffIso,
+  totalPagesFor,
+} from "@/lib/admin/list";
+import {
   filterByDateRange,
   matchesListingSegment,
   matchesListingStatus,
-  parseAdminListParams,
-  queueCutoffDate,
 } from "@/app/(admin)/admin-list";
 
-import type { AdminListParams } from "@/app/(admin)/admin-list";
+import type { AdminListParams } from "@/lib/admin/list";
 
 const dated = (created_at: string) => ({ created_at });
 
@@ -149,11 +160,11 @@ describe("queueCutoffDate", () => {
   });
 });
 
-describe("buildAdminListResult", () => {
+describe("paginateAdminList", () => {
   const rows = Array.from({ length: 65 }, (_, i) => ({ id: i }));
 
   it("paginates at the admin page size and reports the full count", () => {
-    const result = buildAdminListResult(rows, params());
+    const result = paginateAdminList(rows, params());
     expect(result.rows).toHaveLength(30);
     expect(result.totalCount).toBe(65);
     expect(result.totalPages).toBe(3);
@@ -161,18 +172,18 @@ describe("buildAdminListResult", () => {
   });
 
   it("clamps a page past the end and reflects the clamp in the querystring", () => {
-    const result = buildAdminListResult(rows, params({ page: 99 }));
+    const result = paginateAdminList(rows, params({ page: 99 }));
     expect(result.page).toBe(3);
     expect(result.current.get("page")).toBe("3");
   });
 
   it("omits page 1 and an all segment from the querystring", () => {
-    const result = buildAdminListResult(rows, params());
+    const result = paginateAdminList(rows, params());
     expect(result.current.toString()).toBe("");
   });
 
   it("carries the active filters into the querystring", () => {
-    const result = buildAdminListResult(
+    const result = paginateAdminList(
       rows,
       params({
         status: "sold",
@@ -190,11 +201,11 @@ describe("buildAdminListResult", () => {
 
   it("returns the parsed params for the filter bar to render from", () => {
     const parsed = params({ status: "banned", searchQuery: "a@b.com" });
-    expect(buildAdminListResult(rows, parsed).params).toBe(parsed);
+    expect(paginateAdminList(rows, parsed).params).toBe(parsed);
   });
 
   it("reports one page for an empty result", () => {
-    const result = buildAdminListResult([], params());
+    const result = paginateAdminList([], params());
     expect(result.rows).toEqual([]);
     expect(result.totalCount).toBe(0);
     expect(result.totalPages).toBe(1);
@@ -241,7 +252,7 @@ describe("matchesListingStatus", () => {
   it("survives a round trip through the URL params", () => {
     const parsed = parseAdminListParams({ status: ADMIN_OFF_MARKET_STATUS });
     expect(parsed.status).toBe(ADMIN_OFF_MARKET_STATUS);
-    expect(buildAdminListResult([], parsed).current.get("status")).toBe(
+    expect(paginateAdminList([], parsed).current.get("status")).toBe(
       ADMIN_OFF_MARKET_STATUS,
     );
   });
@@ -369,5 +380,140 @@ describe("matchesListingSegment", () => {
         "2026-09-01T18:00:00.000Z",
       ),
     ).toBe(true);
+  });
+});
+
+describe("endOfDayMs", () => {
+  it("covers the whole end day, not midnight on it", () => {
+    expect(endOfDayMs("2026-03-31")).toBe(
+      new Date("2026-04-01T00:00:00.000Z").getTime() - 1,
+    );
+  });
+});
+
+describe("totalPagesFor / clampPage", () => {
+  it("reports one page for an empty result rather than zero", () => {
+    expect(totalPagesFor(0)).toBe(1);
+  });
+
+  it("rounds a partial page up", () => {
+    expect(totalPagesFor(31)).toBe(2);
+    expect(totalPagesFor(60)).toBe(2);
+  });
+
+  it("clamps to both ends of the range", () => {
+    expect(clampPage(0, 3)).toBe(1);
+    expect(clampPage(99, 3)).toBe(3);
+    expect(clampPage(2, 3)).toBe(2);
+  });
+});
+
+describe("pageRange", () => {
+  it("returns an inclusive zero-based range at the admin page size", () => {
+    expect(pageRange(1)).toEqual({ from: 0, to: 29 });
+    expect(pageRange(3)).toEqual({ from: 60, to: 89 });
+  });
+
+  it("treats a page below one as the first page", () => {
+    expect(pageRange(0)).toEqual({ from: 0, to: 29 });
+  });
+});
+
+describe("adminListQuery", () => {
+  it("omits page 1 and an all segment", () => {
+    expect(adminListQuery(params(), 1).toString()).toBe("");
+  });
+
+  it("carries every active filter", () => {
+    const current = adminListQuery(
+      params({ status: "sold", searchQuery: "Lace", from: "2026-01-01", to: "2026-02-01" }),
+      2,
+    );
+    expect(current.get("status")).toBe("sold");
+    expect(current.get("q")).toBe("Lace");
+    expect(current.get("from")).toBe("2026-01-01");
+    expect(current.get("to")).toBe("2026-02-01");
+    expect(current.get("page")).toBe("2");
+  });
+});
+
+describe("segmentCutoffIso", () => {
+  const asOf = "2026-07-31T18:00:00.000Z";
+
+  it("looks back to the end of the cutoff day for an older segment", () => {
+    // Same boundary filterByDateRange applies to a `to` bound, so the SQL
+    // predicate and the in-memory matcher select the same rows.
+    expect(segmentCutoffIso({ days: 30, side: "older" }, asOf)).toBe(
+      new Date(endOfDayMs("2026-07-01")).toISOString(),
+    );
+  });
+
+  it("looks forward from the start of the cutoff day for a newer segment", () => {
+    expect(segmentCutoffIso({ days: 7, side: "newer" }, asOf)).toBe(
+      "2026-07-24T00:00:00.000Z",
+    );
+  });
+
+  it("agrees with the in-memory matcher on a row sitting on the boundary", () => {
+    const rule = AGE_SEGMENTS[ADMIN_STALE_ACTIVE_SEGMENT];
+    const boundary = segmentCutoffIso(rule, asOf);
+    expect(
+      matchesListingSegment(
+        ADMIN_STALE_ACTIVE_SEGMENT,
+        { status: "active", created_at: boundary },
+        asOf,
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("adminListResult", () => {
+  const rows = Array.from({ length: 30 }, (_, i) => ({ id: i }));
+
+  it("derives pages from the server count, not the rows on hand", () => {
+    const result = adminListResult(rows, 65, params());
+    expect(result.rows).toHaveLength(30);
+    expect(result.totalCount).toBe(65);
+    expect(result.totalPages).toBe(3);
+  });
+
+  it("clamps a page past the end and reflects it in the querystring", () => {
+    const result = adminListResult(rows, 65, params({ page: 99 }));
+    expect(result.page).toBe(3);
+    expect(result.current.get("page")).toBe("3");
+  });
+});
+
+describe("fetchAdminListPage", () => {
+  it("requests the range for the page asked for", async () => {
+    const run = vi.fn().mockResolvedValue({ rows: [1], count: 65 });
+    const result = await fetchAdminListPage(params({ page: 2 }), run);
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledWith({ from: 30, to: 59 });
+    expect(result.page).toBe(2);
+  });
+
+  it("refetches the last real page when the requested one is past the end", async () => {
+    const run = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [], count: 65 })
+      .mockResolvedValueOnce({ rows: [9], count: 65 });
+
+    const result = await fetchAdminListPage(params({ page: 99 }), run);
+
+    expect(run).toHaveBeenNthCalledWith(1, { from: 2940, to: 2969 });
+    expect(run).toHaveBeenNthCalledWith(2, { from: 60, to: 89 });
+    expect(result.rows).toEqual([9]);
+    expect(result.page).toBe(3);
+  });
+
+  it("does not refetch when the result is legitimately empty", async () => {
+    const run = vi.fn().mockResolvedValue({ rows: [], count: 0 });
+    const result = await fetchAdminListPage(params({ page: 4 }), run);
+
+    expect(run).toHaveBeenCalledTimes(1);
+    expect(result.totalPages).toBe(1);
+    expect(result.page).toBe(1);
   });
 });

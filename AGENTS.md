@@ -27,7 +27,7 @@ Read this file before every change.
 - **Icons:** `lucide-react`
 - **Payments:** Stripe — **live**, scoped to the listing publishing fee: hosted Checkout redirect (never embedded payment UI), signature-verified webhook + a Checkout-success route handler that both confirm, `listing_payments` table, service-role-only `record_listing_payment` RPC, and a 30-day cleanup sweep of unpaid listings. Fee amount and a kill switch live in env (`LISTING_FEE_CENTS`, `PAYMENTS_SUSPENDED`). Truth always comes from re-fetching the Checkout Session from Stripe's API, never from a webhook payload or URL param alone. Spec: `docs/stripe-listing-fee-spec.md`; go-live steps: `docs/stripe-production-go-live.md`. Do not widen Stripe's scope (buyer payments, payouts, Connect, refunds) until asked.
 
-**Developer:** Junior full-stack developer. Briefly explain reasoning when introducing a non-obvious approach or pattern.
+**Developer:** Full-stack developer. Briefly explain reasoning when introducing a non-obvious approach or pattern.
 
 ---
 
@@ -267,7 +267,14 @@ Before writing any Next.js-related code:
 - Every migration added to `src/supabase/migrations/` must also be folded into `src/supabase/schema.sql` — that file is the maintained fresh-install snapshot of the current schema, not a historical artifact. A migration without the matching schema.sql edit is incomplete.
 - All auth and contact form inputs must carry the correct `autocomplete` attribute: `email`, `new-password`, `current-password`, `tel`, etc.
 - Supabase auth email templates (confirm signup, reset password, etc.) are versioned in `docs/email-templates/*.html` — one file per template, sharing the same branded shell (inline-styled table layout, cream/gold palette, `{{ .ConfirmationURL }}` as both button and plain fallback link). Edit the file first, then paste into the dashboard; the dashboard copy is a deployment, not the source.
-- **Verify layout/visual changes with a real render before reporting done.** Strongly prefer the `playwright` MCP server (drives Edge) — it is far more capable than a static screenshot (real interaction, device emulation, a logged-in profile for auth-gated pages, console access). Run the dev server on `localhost:3000`, then navigate, interact to reach the state under test (click, scroll), screenshot, and check console errors. Check at least one desktop and one narrow width for responsive work. Reaching the state and screenshotting it is not the same as confirming it is correct: judge the rendered result against what the user asked for, not against your own intended diff. If the screenshot shows something off (dead space, misalignment, overlap, an element that reads as broken), that is a failure even when the computed numbers match your plan, so fix it before reporting done. Exercise the awkward states where spacing/layout bugs surface, a list scrolled with many items, the empty state, and the signed-out variant, not just the happy path. Reuse an already-running dev server rather than starting a fresh one, and leave it running when you finish — don't kill or restart it between checks (the developer iterates repeatedly). A Playwright browser context that drops between turns is not the server dying; just re-navigate to reopen it. When the change is a color/style override that competes with an existing rule (a shadcn primitive default, a theme token, cascade/specificity), a screenshot glance is not proof it worked — confirm the override actually took effect by reading the element's computed styles (`browser_evaluate` + `getComputedStyle`), not just that the page rendered. If the playwright tools appear missing or disconnected, that is usually just a dropped connection, not a permanent absence — ask the developer to reconnect it (`/mcp` → reconnect) and retry; the agent cannot reconnect it itself. `Browser is already in use for …\ms-playwright-mcp\…` is different: a profile lock from an orphaned Edge that reconnecting won't clear — find the holder with `Get-CimInstance Win32_Process` filtered on `ms-playwright-mcp` and ask before killing it (never blanket-kill `msedge.exe`). Save screenshots to `.playwright-mcp/<name>.png`; a bare filename lands in the repo root. The headless fallback needs an absolute `--screenshot=` path plus its own `--user-data-dir`, and cannot click. Only after a reconnect genuinely fails, fall back to a static headless screenshot (no interaction): `"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe" --headless --disable-gpu --window-size=1440,900 --screenshot=<out.png> <url>`.
+- **Verify layout/visual changes with a real render before reporting done.** Use the **Playwright CLI** (installed globally, `playwright --version`; bundled Chromium, **always headless** — never pass `--headed`, never launch a visible browser). The MCP server is retired; do not use `mcp__playwright__*` tools. Two modes:
+  1. **One-shot screenshot** (no interaction needed) — run from the repo root:
+     `playwright screenshot --viewport-size=1440,900 --wait-for-timeout=1500 http://localhost:3000/<path> .playwright/<name>.png`
+     Narrow width: `--viewport-size=390,844` (or `--device="iPhone 13"`). Auth-gated pages: `--load-storage=.playwright/auth.json`, produced once with `--save-storage` from a signed-in run.
+  2. **Scripted run** (interaction, console errors, computed styles) — write a throwaway script in the scratchpad and run it:
+     `NODE_PATH="$(npm root -g)" node <scratchpad>/check.cjs`
+     It **must be `.cjs` using `require("playwright")`** — `NODE_PATH` only resolves CommonJS, so an ESM `import` of the global package fails with `ERR_MODULE_NOT_FOUND`. Launch `chromium.launch()` (headless by default), set the viewport on `newPage`, subscribe to `page.on("console", ...)` before `goto`, and write screenshots to an absolute path under `.playwright/`.
+  Run the dev server on `localhost:3000`, then navigate, interact to reach the state under test (click, scroll), screenshot, and check console errors. Check at least one desktop and one narrow width for responsive work. Reaching the state and screenshotting it is not the same as confirming it is correct: judge the rendered result against what the user asked for, not against your own intended diff. If the screenshot shows something off (dead space, misalignment, overlap, an element that reads as broken), that is a failure even when the computed numbers match your plan, so fix it before reporting done. Exercise the awkward states where spacing/layout bugs surface, a list scrolled with many items, the empty state, and the signed-out variant, not just the happy path. Reuse an already-running dev server rather than starting a fresh one, and leave it running when you finish — don't kill or restart it between checks (the developer iterates repeatedly). Each CLI invocation is a fresh browser process, so there is no session to "drop" and no profile lock to clear; always close the browser at the end of a script so no orphaned Chromium is left behind. When the change is a color/style override that competes with an existing rule (a shadcn primitive default, a theme token, cascade/specificity), a screenshot glance is not proof it worked — confirm the override actually took effect by reading the element's computed styles via `page.evaluate(() => getComputedStyle(...))` in a scripted run, not just that the page rendered. Save screenshots to `.playwright/<name>.png` (gitignored); a bare filename lands in the repo root.
 - **Make requested visual changes clearly perceptible in one step.** When the user asks to increase spacing, size, or emphasis, a marginal bump (roughly ≤16px, or a single Tailwind step) often reads as "nothing changed" and wastes a round trip. If the target amount is unspecified, err on the larger side and invite them to dial it back.
 - **Check contrast before proposing a new color-on-color element.** Small text on a fill needs 4.5:1 (WCAG AA); it often decides between candidates that look equally good.
 
@@ -284,13 +291,7 @@ A shared memory file at the project root. **Read it before every task.**
 
 ### Writing
 
-Append an entry after:
-
-- Completing a feature
-- Making an architectural or implementation decision
-- Discovering a pattern, approach, or dependency to avoid
-
-Also append when explicitly instructed to remember something.
+Record after completing a feature, making an architectural decision, or discovering something to avoid (and when explicitly told to remember something). Check **Uncommitted = draft** below before appending.
 
 Each entry is a single line:
 
@@ -312,18 +313,17 @@ Within a section, entries stay in the order they were added (oldest first), so a
 
 ### Rules
 
-- **Append-only.** Never modify or delete existing entries — except to correct your own same-session entries (see **Same-session upkeep** below).
-- **Only the user can delete entries** — and only when explicitly asked. Remove exactly what's pointed to, nothing else.
-- **Same-session upkeep.** Before wrapping up, re-check the entries you appended _this session_. If later same-session work changed a path, name, or behavior one of them describes, correct that entry in place **without asking** — it's your own just-written note. This applies to same-session entries only; entries from earlier sessions still require explicit user authorization to modify or delete. "Session" means the continuous working conversation, not a calendar day — a date rollover mid-session does not turn this session's entries into earlier-session entries.
-- Never add conflicting entries. If a previous decision is being superseded, flag it to the user and ask them to explicitly delete the old one first.
-- One entry = one line (no internal line breaks or blank lines between parts of an entry). Keep routine entries concise. For a significant architectural decision, a longer, information-dense single line is expected and encouraged — capture the chosen approach, the key rationale, and why the main alternatives were rejected, so the decision is defensible later without re-deriving it.
+- **Committed = frozen.** Never edit or delete committed entries. Only the user can delete, and only when explicitly asked; remove exactly what's pointed to.
+- **Uncommitted = draft.** The unit of work is the uncommitted hunk, not the chat session. `git diff MEMORY.md` before writing. Same category + same matter → rewrite that line to the final state (include a short why-this-not-the-first-version only if the choice is still load-bearing). No second line that says it changed or fixed the earlier one.
+- Never add conflicting entries. If a **committed** decision is superseded, flag it and wait for the user to delete the old one first.
+- One entry = one line (no internal line breaks or blank lines between parts of an entry). Keep routine entries concise. For a significant architectural decision, a longer, information-dense single line is expected: chosen approach, key rationale, why the main alternatives were rejected.
 
 ---
 
 ## Checklist
 
 - [ ] Read `MEMORY.md` before starting?
-- [ ] New `MEMORY.md` entry appended to its **matching category section** (`decision` → `## Decisions`), not to the end of the file?
+- [ ] `MEMORY.md` updated in its **matching category section** (`decision` → `## Decisions`), folding into any uncommitted entry for the same matter instead of appending a sibling?
 - [ ] Checked `node_modules/next/dist/docs/` and available skills before writing Next.js code?
 - [ ] Server Component unless a hook / event handler / browser API forced otherwise?
 - [ ] `"use client"` on the smallest possible leaf?

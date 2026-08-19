@@ -15,6 +15,7 @@ const {
   mockServiceUpdate,
   mockServiceSessionEq,
   mockServiceStatusEq,
+  mockServiceListingsUpdate,
 } = vi.hoisted(() => {
   const mockUpdateTag = vi.fn();
   const mockRevalidateTag = vi.fn();
@@ -32,8 +33,13 @@ const {
   const mockServiceUpdate = vi.fn();
   const mockServiceSessionEq = vi.fn();
   const mockServiceStatusEq = vi.fn();
+  // Free publication moved to the service client in migration 025: the
+  // listings_guard_status trigger refuses a seller-driven pending_payment ->
+  // active, which is the fee bypass.
+  const mockServiceListingsUpdate = vi.fn();
 
   return {
+    mockServiceListingsUpdate,
     mockUpdateTag,
     mockRevalidateTag,
     mockRedirect,
@@ -76,7 +82,11 @@ vi.mock("@/lib/stripe/client", () => ({
 vi.mock("@/lib/supabase/service", () => ({
   createServiceClient: () => ({
     rpc: mockRpc,
-    from: vi.fn().mockReturnValue({ update: mockServiceUpdate }),
+    from: vi.fn((table: string) =>
+      table === "listings"
+        ? { update: mockServiceListingsUpdate }
+        : { update: mockServiceUpdate },
+    ),
   }),
 }));
 
@@ -144,6 +154,10 @@ function makeCheckoutSupabase(opts: CheckoutSupabaseOpts = {}) {
   const paymentInsert = vi
     .fn()
     .mockResolvedValue(opts.paymentInsertResult ?? { error: null });
+
+  // The free-publish status write is made by the SERVICE client now, so that
+  // chain is what the assertions inspect; the seller client only reads here.
+  mockServiceListingsUpdate.mockReturnValue(updateChain);
 
   const from = vi.fn().mockImplementation((table: string) => {
     if (table === "listing_payments") {
@@ -228,6 +242,12 @@ describe("createListingCheckout", () => {
       await expect(createListingCheckout(LISTING_ID)).rejects.toThrow("NEXT_REDIRECT");
 
       expect(supabase._updateChain.eq).toHaveBeenCalledWith("status", "pending_payment");
+      // The write must come from the service client: the guard trigger refuses
+      // a seller-driven pending_payment -> active (that is the fee bypass), and
+      // the ownership predicates below stand in for the RLS this skips.
+      expect(mockServiceListingsUpdate).toHaveBeenCalledWith({ status: "active" });
+      expect(supabase._updateChain.eq).toHaveBeenCalledWith("user_id", USER_ID);
+      expect(supabase._updateChain.eq).toHaveBeenCalledWith("id", LISTING_ID);
       expect(mockUpdateTag).toHaveBeenCalledWith("listings");
       expect(mockUpdateTag).toHaveBeenCalledWith(`listing:${LISTING_ID}`);
       expect(mockRedirect).toHaveBeenCalledWith("/dashboard");

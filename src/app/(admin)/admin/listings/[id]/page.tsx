@@ -1,3 +1,4 @@
+import { cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Ban, Pencil } from "lucide-react";
@@ -17,13 +18,18 @@ import { AdminSectionHeading } from "../../../AdminSectionHeading";
 import { AdminPendingActionButton } from "../../../AdminPendingActionButton";
 import { AdminTable } from "../../../AdminTable";
 import { AdminThumbnail } from "../../../AdminThumbnail";
+import { getAdminListing } from "@/lib/queries/admin/listings";
+import { getAuditLogForEntity } from "@/lib/queries/admin/logs";
+import { getAdminPaymentsFor } from "@/lib/queries/admin/payments";
+
 import { adminCategoryLabel } from "../../../admin-audit-labels";
+import { isAdminDemoMode } from "../../../admin-demo";
 import {
   FIXTURE_AUDIT_LOG,
   FIXTURE_PAYMENTS,
   getFixtureListing,
 } from "../../../admin-fixtures";
-import { toListingWithSizes } from "../../../admin-types";
+import { toListingWithSizes } from "@/lib/admin/types";
 import {
   formatAdminDate,
   formatAdminDateTime,
@@ -38,11 +44,17 @@ type AdminListingDetailPageProps = {
   params: Promise<{ id: string }>;
 };
 
+/** Deduped so generateMetadata and the page body share one read. */
+const loadListing = cache(async (id: string) => {
+  if (await isAdminDemoMode()) return getFixtureListing(id) ?? null;
+  return getAdminListing(id);
+});
+
 export async function generateMetadata({
   params,
 }: AdminListingDetailPageProps): Promise<Metadata> {
   const { id } = await params;
-  const listing = getFixtureListing(id);
+  const listing = await loadListing(id);
   return {
     title: listing?.title ?? "Listing",
     robots: { index: false, follow: false },
@@ -53,14 +65,23 @@ export default async function AdminListingDetailPage({
   params,
 }: AdminListingDetailPageProps) {
   const { id } = await params;
-  const listing = getFixtureListing(id);
+  const isDemo = await isAdminDemoMode();
+  const listing = await loadListing(id);
   if (!listing) notFound();
 
+  const [payments, timeline] = isDemo
+    ? [
+        FIXTURE_PAYMENTS.filter((p) => p.listing_id === listing.id),
+        FIXTURE_AUDIT_LOG.filter(
+          (e) => e.entity_type === "listing" && e.entity_id === listing.id,
+        ),
+      ]
+    : await Promise.all([
+        getAdminPaymentsFor({ listingId: listing.id }),
+        getAuditLogForEntity("listing", listing.id),
+      ]);
+
   const category = adminCategoryLabel(listing.category);
-  const payments = FIXTURE_PAYMENTS.filter((p) => p.listing_id === listing.id);
-  const timeline = FIXTURE_AUDIT_LOG.filter(
-    (e) => e.entity_type === "listing" && e.entity_id === listing.id,
-  );
   const sizes = sortListingSizes(listing.sizes);
 
   return (

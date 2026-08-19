@@ -2,22 +2,23 @@ import Link from "next/link";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { ADMIN_EMPTY_VALUE } from "@/lib/admin/constants";
 
+import { parseAdminListParams } from "@/lib/admin/list";
+import { getAdminAuditLog } from "@/lib/queries/admin/logs";
+
 import { AdminListPage } from "../../AdminListPage";
-import { AUDIT_ACTION_LABELS, describeAuditChanges } from "../../admin-audit-labels";
-import { FIXTURE_AUDIT_LOG } from "../../admin-fixtures";
 import {
-  buildAdminListResult,
-  filterByDateRange,
-  parseAdminListParams,
-  sortByCreatedDesc,
-} from "../../admin-list";
+  AUDIT_ACTION_LABELS,
+  describeAuditChanges,
+} from "../../admin-audit-labels";
+import { isAdminDemoMode } from "../../admin-demo";
+import { demoAuditLog } from "../../admin-fixtures";
 import { formatAdminDateTime } from "../../admin-url";
 import { AuditActionPill } from "../../AuditActionPill";
 
 import { LogChanges } from "./LogChanges";
 
-import type { AdminListResult } from "../../admin-list";
-import type { AdminAuditLogEntry } from "../../admin-types";
+import type { AdminListResult } from "@/lib/admin/list";
+import type { AdminAuditLogEntry } from "@/lib/admin/types";
 
 import type { Metadata } from "next";
 import type { PageSearchParams } from "@/lib/types";
@@ -54,26 +55,20 @@ async function loadLogs(
 ): Promise<AdminListResult<AdminAuditLogEntry>> {
   const params = parseAdminListParams(await searchParams);
 
-  let filtered = FIXTURE_AUDIT_LOG;
-  if (params.status !== "all") {
-    filtered = filtered.filter((e) => e.entity_type === params.status);
-  }
-  if (params.query) {
-    // The label as well as the stored value: the table now reads "Listing
-    // suspended", so searching that phrase has to find the row it came from.
-    filtered = filtered.filter(
-      (e) =>
-        e.actor_email.toLowerCase().includes(params.query) ||
-        e.action.toLowerCase().includes(params.query) ||
-        AUDIT_ACTION_LABELS[e.action].toLowerCase().includes(params.query) ||
-        e.entity_label.toLowerCase().includes(params.query),
-    );
-  }
-  filtered = filterByDateRange(filtered, params, (e) => e.created_at);
+  if (await isAdminDemoMode()) return demoAuditLog(params);
 
-  const sorted = sortByCreatedDesc(filtered);
+  // The table reads "Listing suspended" but stores `listing.suspend`, so
+  // searching the phrase on screen has to find the row it came from. The
+  // labels live here, so the slugs they match are resolved here too.
+  const labelMatchedActions = params.query
+    ? Object.entries(AUDIT_ACTION_LABELS)
+        .filter(([, label]: [string, string]): boolean =>
+          label.toLowerCase().includes(params.query),
+        )
+        .map(([action]: [string, string]): string => action)
+    : [];
 
-  return buildAdminListResult(sorted, params);
+  return getAdminAuditLog(params, labelMatchedActions);
 }
 
 export default function AdminLogsPage({ searchParams }: AdminLogsPageProps) {

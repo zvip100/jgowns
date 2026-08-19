@@ -4,8 +4,9 @@ import { GOWN_CATEGORY_LABELS } from "@/lib/gown-sizes";
 import { ADMIN_STATUS_LABELS } from "./admin-status";
 import { formatCents } from "./admin-url";
 
-import type { AdminAuditAction } from "./admin-types";
+import type { AdminAuditAction } from "@/lib/admin/types";
 import type { PillTone } from "@/lib/styles";
+import type { SellMode } from "@/lib/types";
 
 export const AUDIT_ACTION_LABELS: Record<AdminAuditAction, string> = {
   "listing.suspend": "Listing suspended",
@@ -58,6 +59,38 @@ const CATEGORY_LABEL_BY_ID: Record<string, string> = GOWN_CATEGORY_LABELS;
 export function adminCategoryLabel(id: string | null): string {
   return (id && CATEGORY_LABEL_BY_ID[id]) || ADMIN_EMPTY_VALUE;
 }
+
+/**
+ * Metrics distributions arrive as stored values, so the wording lives here.
+ * `uncategorized` and `unspecified` are the placeholders the RPC substitutes
+ * for a null column, not stored values.
+ */
+export function adminCategoryShareLabel(id: string): string {
+  return id === "uncategorized" ? "Uncategorized" : adminCategoryLabel(id);
+}
+
+export function adminLocationShareLabel(location: string): string {
+  return location === "unspecified" ? "Unspecified" : location;
+}
+
+/** Band keys from `admin_metrics_summary`, in the order the RPC returns them. */
+export const ADMIN_PRICE_BAND_LABELS: Record<string, string> = {
+  under_100: "Under $100",
+  "100_249": "$100–249",
+  "250_499": "$250–499",
+  "500_999": "$500–999",
+  "1000_plus": "$1,000+",
+};
+
+export function adminPriceBandLabel(band: string): string {
+  return ADMIN_PRICE_BAND_LABELS[band] ?? band;
+}
+
+export const ADMIN_SELL_MODE_LABELS = {
+  individual: "Individual",
+  set_only: "Set only",
+  either: "Either",
+} satisfies Record<SellMode, string>;
 
 function formatFallbackValue(value: unknown): string {
   if (value === null || value === undefined) return ADMIN_EMPTY_VALUE;

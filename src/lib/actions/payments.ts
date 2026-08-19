@@ -67,7 +67,14 @@ export async function createListingCheckout(
     // The status=pending_payment predicate keeps this safe as an
     // independently-callable endpoint — it can only ever promote a pending
     // listing, never a sold/removed one.
-    const { data: updated, error } = await supabase
+    //
+    // Service role, not the seller's client: guard_listing_status_write()
+    // refuses a seller-driven pending_payment -> active, which is exactly the
+    // fee bypass. Whether the fee is off lives in env and cannot be expressed
+    // in the database, so the authority has to be this action. The user_id and
+    // status predicates below carry the ownership check that RLS would have,
+    // and ownership was already verified against `listing` above.
+    const { data: updated, error } = await createServiceClient()
       .from("listings")
       .update({ status: "active" })
       .eq("id", listingId)

@@ -50,7 +50,7 @@ export async function removeListing(
 
   const auth = await getAuthClient();
   if (!auth.ok) return { error: auth.error };
-  const { supabase, user } = auth;
+  const { supabase } = auth;
 
   const { data: pendingPayments, error: pendingError } = await supabase
     .from("listing_payments")
@@ -99,15 +99,14 @@ export async function removeListing(
     }
   }
 
-  const { data: updated, error } = await supabase
-    .from("listings")
-    .update({ status: "removed" })
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .select("id");
+  const { error } = await supabase.rpc("remove_listing", {
+    p_listing_id: id,
+  });
 
-  if (error) return { error: error.message };
-  if (!updated?.length) return { error: "Listing not found" };
+  if (error) {
+    if (error.code === "P0002") return { error: "Listing not found" };
+    return { error: error.message };
+  }
 
   updateTag(`listing:${id}`);
   updateTag("listings");

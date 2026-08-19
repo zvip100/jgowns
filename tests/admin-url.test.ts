@@ -2,13 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
   adminListHref,
-  firstSearchParam,
   formatAdminDate,
   formatAdminDateTime,
   formatCents,
-  parsePageParam,
   stripeSessionUrl,
 } from "@/app/(admin)/admin-url";
+import { firstSearchParam, parsePageParam } from "@/lib/admin/list";
 
 describe("adminListHref", () => {
   it("returns the bare pathname when nothing is set", () => {

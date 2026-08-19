@@ -40,10 +40,14 @@ next-env.d.ts
 
 .claude
 
+.codex
+
 # DB migrations
 /src/supabase/migrations
 
 docs
 
+.playwright
 .playwright-mcp
 .mcp.json
+.impeccable

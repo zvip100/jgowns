@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     "How JGowns collects, uses, and protects your information.",
 };
 
-const LAST_UPDATED = "July 14, 2026";
+const LAST_UPDATED = "August 19, 2026";
 
 export default function PrivacyPage() {
   return (
@@ -134,7 +134,10 @@ export default function PrivacyPage() {
           We keep your information for as long as your account is active. If you
           delete your account, your listings are deleted along with it, and the
           associated photos are removed from storage. Contact-form messages are
-          kept so we can respond and maintain a record of inquiries.
+          kept so we can respond and maintain a record of inquiries. We also keep
+          limited internal records of account and listing activity for security,
+          fraud prevention, and recordkeeping, and these may be retained after an
+          account is closed.
         </p>
       </LegalSection>
 
@@ -142,7 +145,8 @@ export default function PrivacyPage() {
         <p>
           You may request access to, correction of, or deletion of your personal
           information, and you may ask us not to sell it (we never do). We honor
-          these requests for all users. To make a request, use our{" "}
+          these requests for all users, apart from the limited records described
+          in section 7. To make a request, use our{" "}
           <Link href="/contact" className={LEGAL_LINK_CLASS}>
             Contact page
           </Link>{" "}

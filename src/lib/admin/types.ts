@@ -90,6 +90,7 @@ export type AdminOverviewStats = {
   sold_this_week: number;
   new_users_this_week: number;
   fees_collected_this_week_cents: number;
+  contact_messages_total: number;
   oldest_contact_message_age_hours: number | null;
 };
 
@@ -101,9 +102,70 @@ export type AdminMetricsPoint = {
   fees_collected_cents: number;
 };
 
+/** `category` is the stored id, or "uncategorized". Labelling happens in the UI. */
 export type AdminCategoryShare = {
   category: string;
   count: number;
+};
+
+/** `location` is the stored value, or "unspecified". */
+export type AdminLocationShare = {
+  location: string;
+  count: number;
+};
+
+/** Band keys, not labels: the UI owns the wording. Empty bands are included. */
+export type AdminPriceBand = {
+  band: string;
+  count: number;
+};
+
+/**
+ * Short vocabularies arrive keyed rather than ordered, because both have a
+ * deliberate non-alphabetical order the UI already encodes (condition is a
+ * quality tier, MEMORY 07-27). A value with no listings is simply absent.
+ */
+export type AdminMixCounts = Record<string, number>;
+
+export type AdminMetricsSummary = {
+  category_share: AdminCategoryShare[];
+  location_share: AdminLocationShare[];
+  price_bands: AdminPriceBand[];
+  condition_mix: AdminMixCounts;
+  sell_mode_mix: AdminMixCounts;
+  /** Null until at least one listing has sold since sold_at started recording. */
+  median_time_to_sold_days: number | null;
+  most_wishlisted: { id: string; title: string; saves: number } | null;
+  actives_with_no_available_size: number;
+  payments: {
+    attempts: number;
+    succeeded: number;
+    pending: number;
+    expired: number;
+  };
+};
+
+export type AdminQueue = {
+  /** The queue's true size, which the preview is capped below. */
+  count: number;
+  rows: AdminListing[];
+};
+
+export type AdminOverview = {
+  stats: AdminOverviewStats;
+  /** The single "now" every queue window and stat tile on the page agrees on. */
+  asOf: string;
+  newThisWeek: AdminQueue;
+  staleActives: AdminQueue;
+  offMarket: AdminQueue;
+  stuckPending: AdminQueue;
+  recentActivity: AdminAuditLogEntry[];
+};
+
+export type AdminMetrics = {
+  stats: AdminOverviewStats;
+  series: AdminMetricsPoint[];
+  summary: AdminMetricsSummary;
 };
 
 /**

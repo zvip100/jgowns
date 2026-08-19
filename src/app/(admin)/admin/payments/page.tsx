@@ -2,22 +2,21 @@ import Link from "next/link";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { ADMIN_EMPTY_VALUE } from "@/lib/admin/constants";
 
+import { parseAdminListParams } from "@/lib/admin/list";
+import { getAdminPayments } from "@/lib/queries/admin/payments";
+
 import { AdminListPage } from "../../AdminListPage";
 import { AdminPendingActionButton } from "../../AdminPendingActionButton";
-import { FIXTURE_PAYMENTS } from "../../admin-fixtures";
-import {
-  buildAdminListResult,
-  filterByDateRange,
-  parseAdminListParams,
-} from "../../admin-list";
+import { isAdminDemoMode } from "../../admin-demo";
+import { demoPayments } from "../../admin-fixtures";
 import {
   formatAdminDate,
   formatCents,
   stripeSessionUrl,
 } from "../../admin-url";
 
-import type { AdminListResult } from "../../admin-list";
-import type { AdminPaymentRow } from "../../admin-types";
+import type { AdminListResult } from "@/lib/admin/list";
+import type { AdminPaymentRow } from "@/lib/admin/types";
 
 import type { Metadata } from "next";
 import type { PageSearchParams } from "@/lib/types";
@@ -44,20 +43,9 @@ async function loadPayments(
 ): Promise<AdminListResult<AdminPaymentRow>> {
   const params = parseAdminListParams(await searchParams);
 
-  let filtered = FIXTURE_PAYMENTS;
-  if (params.status !== "all") {
-    filtered = filtered.filter((p) => p.status === params.status);
-  }
-  if (params.query) {
-    filtered = filtered.filter(
-      (p) =>
-        p.seller_email.toLowerCase().includes(params.query) ||
-        p.listing_title.toLowerCase().includes(params.query),
-    );
-  }
-  filtered = filterByDateRange(filtered, params, (p) => p.created_at);
+  if (await isAdminDemoMode()) return demoPayments(params);
 
-  return buildAdminListResult(filtered, params);
+  return getAdminPayments(params);
 }
 
 export default function AdminPaymentsPage({
@@ -69,7 +57,7 @@ export default function AdminPaymentsPage({
       title="Payments"
       countNoun="payment row"
       segments={SEGMENTS}
-      searchPlaceholder="Search by seller or title"
+      searchPlaceholder="Search by listing title"
       headers={[
         "Seller",
         "Listing",
@@ -81,7 +69,7 @@ export default function AdminPaymentsPage({
       ]}
       alignRight={[2, 4, 5]}
       emptyTitle="No payments match"
-      emptyDescription="Try clearing filters or searching a different seller."
+      emptyDescription="Try clearing filters or searching a different title."
       resultPromise={loadPayments(searchParams)}
       renderRow={(payment) => (
         <TableRow key={payment.id}>

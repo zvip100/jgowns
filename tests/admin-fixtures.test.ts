@@ -8,9 +8,8 @@ import {
   FIXTURE_USERS,
   getFixtureListing,
   getFixtureUser,
-  paginateFixtures,
 } from "@/app/(admin)/admin-fixtures";
-import { toListingWithSizes } from "@/app/(admin)/admin-types";
+import { toListingWithSizes } from "@/lib/admin/types";
 import { adminActionPending, ADMIN_BACKEND_PENDING_ERROR } from "@/app/(admin)/admin-pending";
 import { ADMIN_ACTION_ICONS } from "@/app/(admin)/AdminPendingActionButton";
 
@@ -33,37 +32,6 @@ describe("getFixtureUser", () => {
 
   it("returns undefined for an unknown id", () => {
     expect(getFixtureUser("nope")).toBeUndefined();
-  });
-});
-
-describe("paginateFixtures", () => {
-  const items = [1, 2, 3, 4, 5];
-
-  it("slices the requested page", () => {
-    expect(paginateFixtures(items, 2, 2)).toEqual({
-      rows: [3, 4],
-      totalCount: 5,
-      totalPages: 3,
-      page: 2,
-    });
-  });
-
-  it("clamps a page above the last one", () => {
-    expect(paginateFixtures(items, 99, 2).page).toBe(3);
-    expect(paginateFixtures(items, 99, 2).rows).toEqual([5]);
-  });
-
-  it("clamps a page below one", () => {
-    expect(paginateFixtures(items, 0, 2).page).toBe(1);
-  });
-
-  it("reports one page for an empty list", () => {
-    expect(paginateFixtures([], 1, 30)).toEqual({
-      rows: [],
-      totalCount: 0,
-      totalPages: 1,
-      page: 1,
-    });
   });
 });
 

@@ -1,13 +1,35 @@
+import { ADMIN_QUEUE_PREVIEW_SIZE } from "@/lib/admin/constants";
+import {
+  ADMIN_NEW_WEEK_SEGMENT,
+  ADMIN_OFF_MARKET_STATUS,
+  ADMIN_STALE_ACTIVE_SEGMENT,
+  ADMIN_STUCK_PAYMENT_SEGMENT,
+  paginateAdminList,
+} from "@/lib/admin/list";
+
+import {
+  filterByDateRange,
+  matchesListingSegment,
+  sortByCreatedDesc,
+} from "./admin-list";
+
+import type { AdminListParams, AdminListResult } from "@/lib/admin/list";
 import type {
   AdminAuditLogEntry,
   AdminCategoryShare,
   AdminContactMessage,
   AdminListing,
+  AdminLocationShare,
+  AdminMetrics,
   AdminMetricsPoint,
+  AdminMixCounts,
+  AdminOverview,
+  AdminPriceBand,
   AdminOverviewStats,
   AdminPaymentRow,
+  AdminQueue,
   AdminUser,
-} from "./admin-types";
+} from "@/lib/admin/types";
 
 /**
  * Phase 1 typed fixtures. Swap imports to `src/lib/queries/admin/*` in Phase 2;
@@ -441,11 +463,16 @@ export const FIXTURE_OVERVIEW_STATS: AdminOverviewStats = {
   // 0: the only succeeded payments in FIXTURE_PAYMENTS are Jul 20 and Apr 1,
   // both outside 7 days of FIXTURE_AS_OF.
   fees_collected_this_week_cents: 0,
+  contact_messages_total: 3,
   // Oldest message is Jul 25 11:05, 150 completed hours before FIXTURE_AS_OF.
   oldest_contact_message_age_hours: 150,
 };
 
 export const FIXTURE_METRICS_SERIES: AdminMetricsPoint[] = [
+  { week: "May 5", listings_created: 2, listings_sold: 1, new_users: 1, fees_collected_cents: 1000 },
+  { week: "May 12", listings_created: 5, listings_sold: 2, new_users: 2, fees_collected_cents: 2000 },
+  { week: "May 19", listings_created: 3, listings_sold: 1, new_users: 1, fees_collected_cents: 1500 },
+  { week: "May 26", listings_created: 4, listings_sold: 2, new_users: 3, fees_collected_cents: 2000 },
   { week: "Jun 2", listings_created: 4, listings_sold: 1, new_users: 2, fees_collected_cents: 1500 },
   { week: "Jun 9", listings_created: 6, listings_sold: 2, new_users: 1, fees_collected_cents: 2000 },
   { week: "Jun 16", listings_created: 3, listings_sold: 1, new_users: 3, fees_collected_cents: 1000 },
@@ -456,13 +483,43 @@ export const FIXTURE_METRICS_SERIES: AdminMetricsPoint[] = [
   { week: "Jul 21", listings_created: 5, listings_sold: 2, new_users: 1, fees_collected_cents: 2000 },
 ];
 
+// Stored category ids, not labels: the metrics page runs both data sources
+// through the same id-to-label mapping.
 export const FIXTURE_CATEGORY_SHARE: AdminCategoryShare[] = [
-  { category: "Bridal", count: 12 },
-  { category: "Mother of the bride", count: 7 },
-  { category: "Girls", count: 5 },
-  { category: "Women", count: 4 },
-  { category: "Maternity", count: 2 },
+  { category: "bridal", count: 12 },
+  { category: "mother-of-the-bride", count: 7 },
+  { category: "girls", count: 5 },
+  { category: "women", count: 4 },
+  { category: "maternity", count: 2 },
 ];
+
+// Stored location values, not labels, matching the real query.
+export const FIXTURE_LOCATION_SHARE: AdminLocationShare[] = [
+  { location: "Lakewood", count: 9 },
+  { location: "Borough Park", count: 7 },
+  { location: "Monsey", count: 6 },
+  { location: "Williamsburg", count: 4 },
+  { location: "Monroe", count: 3 },
+  { location: "Catskills", count: 1 },
+];
+
+// Band keys in their natural order, empty bands included, as the RPC returns them.
+export const FIXTURE_PRICE_BANDS: AdminPriceBand[] = [
+  { band: "under_100", count: 3 },
+  { band: "100_249", count: 8 },
+  { band: "250_499", count: 11 },
+  { band: "500_999", count: 6 },
+  { band: "1000_plus", count: 2 },
+];
+
+function countBy<T>(items: T[], key: (item: T) => string): AdminMixCounts {
+  const counts: AdminMixCounts = {};
+  for (const item of items) {
+    const value = key(item);
+    counts[value] = (counts[value] ?? 0) + 1;
+  }
+  return counts;
+}
 
 export function getFixtureListing(id: string): AdminListing | undefined {
   return FIXTURE_LISTINGS.find((l) => l.id === id);
@@ -472,19 +529,157 @@ export function getFixtureUser(id: string): AdminUser | undefined {
   return FIXTURE_USERS.find((u) => u.id === id);
 }
 
-export function paginateFixtures<T>(
-  items: T[],
-  page: number,
-  pageSize: number,
-): { rows: T[]; totalCount: number; totalPages: number; page: number } {
-  const totalCount = items.length;
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
-  const safePage = Math.min(Math.max(1, page), totalPages);
-  const start = (safePage - 1) * pageSize;
+// ---------------------------------------------------------------------------
+// Demo data path
+// ---------------------------------------------------------------------------
+// In-memory counterparts to every `src/lib/queries/admin/*` reader, selected by
+// the demo cookie. They mirror the real queries' filtering, ordering, and
+// pagination so the two modes are comparable rather than merely both populated.
+// See ADMIN_DEMO_COOKIE in lib/admin/constants for the removal checklist.
+
+export function demoListings(
+  params: AdminListParams,
+): AdminListResult<AdminListing> {
+  let rows = FIXTURE_LISTINGS.filter((l) =>
+    matchesListingSegment(params.status, l, FIXTURE_AS_OF),
+  );
+  if (params.query) {
+    rows = rows.filter((l) => l.title.toLowerCase().includes(params.query));
+  }
+  rows = filterByDateRange(rows, params, (l) => l.created_at);
+
+  return paginateAdminList(sortByCreatedDesc(rows), params);
+}
+
+export function demoUsers(params: AdminListParams): AdminListResult<AdminUser> {
+  let rows = FIXTURE_USERS;
+  if (params.status === "banned") rows = rows.filter((u) => u.is_banned);
+  else if (params.status === "admin") rows = rows.filter((u) => u.is_admin);
+  else if (params.status === "active") rows = rows.filter((u) => !u.is_banned);
+
+  if (params.query) {
+    rows = rows.filter((u) => u.email.toLowerCase().includes(params.query));
+  }
+  rows = filterByDateRange(rows, params, (u) => u.created_at);
+
+  return paginateAdminList(sortByCreatedDesc(rows), params);
+}
+
+export function demoMessages(
+  params: AdminListParams,
+): AdminListResult<AdminContactMessage> {
+  let rows = FIXTURE_MESSAGES;
+  if (params.query) {
+    rows = rows.filter((m) => m.email.toLowerCase().includes(params.query));
+  }
+  rows = filterByDateRange(rows, params, (m) => m.created_at);
+
+  return paginateAdminList(sortByCreatedDesc(rows), params);
+}
+
+export function demoPayments(
+  params: AdminListParams,
+): AdminListResult<AdminPaymentRow> {
+  let rows = FIXTURE_PAYMENTS;
+  if (params.status !== "all") {
+    rows = rows.filter((p) => p.status === params.status);
+  }
+  if (params.query) {
+    rows = rows.filter((p) =>
+      p.listing_title.toLowerCase().includes(params.query),
+    );
+  }
+  rows = filterByDateRange(rows, params, (p) => p.created_at);
+
+  return paginateAdminList(sortByCreatedDesc(rows), params);
+}
+
+export function demoAuditLog(
+  params: AdminListParams,
+): AdminListResult<AdminAuditLogEntry> {
+  let rows = FIXTURE_AUDIT_LOG;
+  if (params.status !== "all") {
+    rows = rows.filter((e) => e.entity_type === params.status);
+  }
+  if (params.query) {
+    rows = rows.filter(
+      (e) =>
+        e.actor_email.toLowerCase().includes(params.query) ||
+        e.action.toLowerCase().includes(params.query) ||
+        e.entity_label.toLowerCase().includes(params.query),
+    );
+  }
+  rows = filterByDateRange(rows, params, (e) => e.created_at);
+
+  return paginateAdminList(sortByCreatedDesc(rows), params);
+}
+
+function demoQueue(segment: string): AdminQueue {
+  const rows = sortByCreatedDesc(
+    FIXTURE_LISTINGS.filter((l) =>
+      matchesListingSegment(segment, l, FIXTURE_AS_OF),
+    ),
+  );
   return {
-    rows: items.slice(start, start + pageSize),
-    totalCount,
-    totalPages,
-    page: safePage,
+    count: rows.length,
+    rows: rows.slice(0, ADMIN_QUEUE_PREVIEW_SIZE),
+  };
+}
+
+export function demoOverview(): AdminOverview {
+  return {
+    stats: FIXTURE_OVERVIEW_STATS,
+    asOf: FIXTURE_AS_OF,
+    newThisWeek: demoQueue(ADMIN_NEW_WEEK_SEGMENT),
+    staleActives: demoQueue(ADMIN_STALE_ACTIVE_SEGMENT),
+    offMarket: demoQueue(ADMIN_OFF_MARKET_STATUS),
+    stuckPending: demoQueue(ADMIN_STUCK_PAYMENT_SEGMENT),
+    recentActivity: sortByCreatedDesc(FIXTURE_AUDIT_LOG).slice(
+      0,
+      ADMIN_QUEUE_PREVIEW_SIZE,
+    ),
+  };
+}
+
+export function demoMetrics(): AdminMetrics {
+  const mostWishlisted = [...FIXTURE_LISTINGS].sort(
+    (a, b) => b.saved_count - a.saved_count,
+  )[0];
+
+  const soldWithDates = FIXTURE_LISTINGS.filter((l) => l.status === "sold");
+
+  return {
+    stats: FIXTURE_OVERVIEW_STATS,
+    series: FIXTURE_METRICS_SERIES,
+    summary: {
+      category_share: FIXTURE_CATEGORY_SHARE,
+      location_share: FIXTURE_LOCATION_SHARE,
+      price_bands: FIXTURE_PRICE_BANDS,
+      // Derived from the listing fixtures so the mixes agree with the rows the
+      // other admin pages show in demo mode.
+      condition_mix: countBy(FIXTURE_LISTINGS, (l) => l.condition),
+      sell_mode_mix: countBy(FIXTURE_LISTINGS, (l) => l.sell_mode),
+      // Fixtures carry no sold_at, so this stands in for a plausible median
+      // rather than being derived from the rows above.
+      median_time_to_sold_days: soldWithDates.length ? 18.5 : null,
+      most_wishlisted: mostWishlisted
+        ? {
+            id: mostWishlisted.id,
+            title: mostWishlisted.title,
+            saves: mostWishlisted.saved_count,
+          }
+        : null,
+      actives_with_no_available_size: FIXTURE_LISTINGS.filter(
+        (l) =>
+          l.status === "active" && l.sizes.every((s) => s.status === "sold"),
+      ).length,
+      payments: {
+        attempts: FIXTURE_PAYMENTS.length,
+        succeeded: FIXTURE_PAYMENTS.filter((p) => p.status === "succeeded")
+          .length,
+        pending: FIXTURE_PAYMENTS.filter((p) => p.status === "pending").length,
+        expired: FIXTURE_PAYMENTS.filter((p) => p.status === "expired").length,
+      },
+    },
   };
 }

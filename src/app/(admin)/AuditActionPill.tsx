@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 import { AUDIT_ACTION_LABELS, AUDIT_ACTION_TONES } from "./admin-audit-labels";
 
-import type { AdminAuditAction } from "./admin-types";
+import type { AdminAuditAction } from "@/lib/admin/types";
 
 type AuditActionPillProps = {
   action: AdminAuditAction;

@@ -17,7 +17,7 @@ import { AdminSectionHeading } from "../../AdminSectionHeading";
 import { formatCents } from "../../admin-url";
 
 import type { ComponentProps } from "react";
-import type { AdminCategoryShare, AdminMetricsPoint } from "../../admin-types";
+import type { AdminMetricsPoint } from "@/lib/admin/types";
 
 const trendConfig = {
   listings_created: {
@@ -43,7 +43,10 @@ const feeConfig = {
   },
 } satisfies ChartConfig;
 
-const categoryConfig = {
+// All three distributions share one series colour: they answer the same
+// question ("how many listings") about different axes, so varying the hue would
+// imply a relationship between them that does not exist.
+const distributionConfig = {
   count: {
     label: "Listings",
     color: "#a67841",
@@ -81,12 +84,44 @@ function ChartPanel({
   );
 }
 
+type DistributionBar = { label: string; count: number };
+
 type MetricsChartsProps = {
   series: AdminMetricsPoint[];
-  categories: AdminCategoryShare[];
+  /** Pre-labelled by the page: these arrive from SQL as stored values. */
+  categories: DistributionBar[];
+  priceBands: DistributionBar[];
+  locations: DistributionBar[];
 };
 
-export function MetricsCharts({ series, categories }: MetricsChartsProps) {
+/**
+ * Horizontal bars for the two distributions with long, variable-length names.
+ * A vertical axis gives the label a full row instead of a rotated tick.
+ */
+function DistributionBars({ data }: { data: DistributionBar[] }) {
+  return (
+    <BarChart data={data} accessibilityLayer layout="vertical">
+      <CartesianGrid horizontal={false} stroke="rgba(120,93,63,0.15)" />
+      <YAxis
+        dataKey="label"
+        type="category"
+        tickLine={false}
+        axisLine={false}
+        width={120}
+      />
+      <XAxis type="number" tickLine={false} axisLine={false} allowDecimals={false} />
+      <ChartTooltip content={<ChartTooltipContent />} />
+      <Bar dataKey="count" fill="var(--color-count)" radius={[0, 6, 6, 0]} />
+    </BarChart>
+  );
+}
+
+export function MetricsCharts({
+  series,
+  categories,
+  priceBands,
+  locations,
+}: MetricsChartsProps) {
   return (
     <div className="grid gap-6 lg:grid-cols-2">
       <ChartPanel
@@ -173,27 +208,41 @@ export function MetricsCharts({ series, categories }: MetricsChartsProps) {
       <ChartPanel
         title="By category"
         subtitle="Listing distribution"
-        config={categoryConfig}
-        aspectClass="aspect-[21/9]"
+        config={distributionConfig}
+        aspectClass="aspect-[4/3]"
+      >
+        <DistributionBars data={categories} />
+      </ChartPanel>
+
+      {/* Vertical, unlike its two neighbours: price bands are an ordered scale,
+          and reading them left to right is what makes the shape legible. */}
+      <ChartPanel
+        title="By price"
+        subtitle="Lowest price per listing"
+        config={distributionConfig}
+        aspectClass="aspect-[4/3]"
+      >
+        <BarChart data={priceBands} accessibilityLayer>
+          <CartesianGrid vertical={false} stroke="rgba(120,93,63,0.15)" />
+          <XAxis dataKey="label" tickLine={false} axisLine={false} tickMargin={8} />
+          <YAxis tickLine={false} axisLine={false} width={28} allowDecimals={false} />
+          <ChartTooltip content={<ChartTooltipContent />} />
+          <Bar dataKey="count" fill="var(--color-count)" radius={[6, 6, 0, 0]} />
+        </BarChart>
+      </ChartPanel>
+
+      {/* Full width, and last: locations are the longest list, so this is the
+          one distribution whose height keeps changing. The aspect has to go
+          tall on a phone: a 21/9 box at 390px leaves each bar so little height
+          that Recharts starts dropping every other axis label. */}
+      <ChartPanel
+        title="By location"
+        subtitle="Listing distribution"
+        config={distributionConfig}
+        aspectClass="aspect-[3/4] sm:aspect-[16/9] lg:aspect-[21/9]"
         className="lg:col-span-2"
       >
-          <BarChart data={categories} accessibilityLayer layout="vertical">
-            <CartesianGrid horizontal={false} stroke="rgba(120,93,63,0.15)" />
-            <YAxis
-              dataKey="category"
-              type="category"
-              tickLine={false}
-              axisLine={false}
-              width={120}
-            />
-            <XAxis type="number" tickLine={false} axisLine={false} />
-            <ChartTooltip content={<ChartTooltipContent />} />
-            <Bar
-              dataKey="count"
-              fill="var(--color-count)"
-              radius={[0, 6, 6, 0]}
-            />
-          </BarChart>
+        <DistributionBars data={locations} />
       </ChartPanel>
     </div>
   );

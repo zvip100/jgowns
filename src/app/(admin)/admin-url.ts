@@ -1,5 +1,3 @@
-import { firstParam } from "@/lib/utils";
-
 /** URL keys every admin list page filters on. */
 export const ADMIN_SEGMENT_PARAM = "status";
 export const ADMIN_SEARCH_PARAM = "q";
@@ -17,18 +15,6 @@ export function adminListHref(
   }
   const qs = next.toString();
   return qs ? `${pathname}?${qs}` : pathname;
-}
-
-export function firstSearchParam(
-  value: string | string[] | undefined,
-): string {
-  return firstParam(value) ?? "";
-}
-
-export function parsePageParam(value: string | string[] | undefined): number {
-  const raw = firstSearchParam(value);
-  const n = Number.parseInt(raw, 10);
-  return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
 const ADMIN_DATE_FORMAT = new Intl.DateTimeFormat("en-US", {

@@ -1,23 +1,34 @@
+import { cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
+import { getAdminListing } from "@/lib/queries/admin/listings";
+
+import { isAdminDemoMode } from "../../../../admin-demo";
 import { getFixtureListing } from "../../../../admin-fixtures";
 import { StatusPill } from "../../../../StatusPill";
 
 import { AdminListingEditForm } from "./AdminListingEditForm";
 
 import type { Metadata } from "next";
+import type { AdminListing } from "@/lib/admin/types";
 
 type AdminListingEditPageProps = {
   params: Promise<{ id: string }>;
 };
 
+/** Deduped so generateMetadata and the page body share one read. */
+const loadListing = cache(async (id: string): Promise<AdminListing | null> => {
+  if (await isAdminDemoMode()) return getFixtureListing(id) ?? null;
+  return getAdminListing(id);
+});
+
 export async function generateMetadata({
   params,
 }: AdminListingEditPageProps): Promise<Metadata> {
   const { id } = await params;
-  const listing = getFixtureListing(id);
+  const listing = await loadListing(id);
   return {
     title: listing ? `Edit · ${listing.title}` : "Edit listing",
     robots: { index: false, follow: false },
@@ -28,7 +39,7 @@ export default async function AdminListingEditPage({
   params,
 }: AdminListingEditPageProps) {
   const { id } = await params;
-  const listing = getFixtureListing(id);
+  const listing = await loadListing(id);
   if (!listing) notFound();
 
   return (

@@ -1,18 +1,17 @@
 import { TableCell, TableRow } from "@/components/ui/table";
 
+import { parseAdminListParams } from "@/lib/admin/list";
+import { getAdminMessages } from "@/lib/queries/admin/messages";
+
 import { AdminListPage } from "../../AdminListPage";
-import { FIXTURE_MESSAGES } from "../../admin-fixtures";
-import {
-  buildAdminListResult,
-  filterByDateRange,
-  parseAdminListParams,
-} from "../../admin-list";
+import { isAdminDemoMode } from "../../admin-demo";
+import { demoMessages } from "../../admin-fixtures";
 import { formatAdminDateTime } from "../../admin-url";
 
 import { ExpandableMessage } from "./ExpandableMessage";
 
-import type { AdminListResult } from "../../admin-list";
-import type { AdminContactMessage } from "../../admin-types";
+import type { AdminListResult } from "@/lib/admin/list";
+import type { AdminContactMessage } from "@/lib/admin/types";
 
 import type { Metadata } from "next";
 import type { PageSearchParams } from "@/lib/types";
@@ -32,15 +31,9 @@ async function loadMessages(
 ): Promise<AdminListResult<AdminContactMessage>> {
   const params = parseAdminListParams(await searchParams);
 
-  let filtered = FIXTURE_MESSAGES;
-  if (params.query) {
-    filtered = filtered.filter((m) =>
-      m.email.toLowerCase().includes(params.query),
-    );
-  }
-  filtered = filterByDateRange(filtered, params, (m) => m.created_at);
+  if (await isAdminDemoMode()) return demoMessages(params);
 
-  return buildAdminListResult(filtered, params);
+  return getAdminMessages(params);
 }
 
 export default function AdminMessagesPage({

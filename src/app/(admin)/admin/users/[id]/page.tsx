@@ -1,7 +1,11 @@
+import { cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { ADMIN_EMPTY_VALUE } from "@/lib/admin/constants";
+import { getAdminListingsForUser } from "@/lib/queries/admin/listings";
+import { getAdminPaymentsFor } from "@/lib/queries/admin/payments";
+import { getAdminUser } from "@/lib/queries/admin/users";
 
 import { AdminFact } from "../../../AdminFact";
 import { AdminListPanel } from "../../../AdminListPanel";
@@ -9,6 +13,7 @@ import { AdminPageHeader } from "../../../AdminPageHeader";
 import { AdminSectionHeading } from "../../../AdminSectionHeading";
 import { AdminPendingActionButton } from "../../../AdminPendingActionButton";
 import { StatusPill } from "../../../StatusPill";
+import { isAdminDemoMode } from "../../../admin-demo";
 import {
   FIXTURE_LISTINGS,
   FIXTURE_PAYMENTS,
@@ -17,16 +22,27 @@ import {
 import { formatAdminDate, formatCents } from "../../../admin-url";
 
 import type { Metadata } from "next";
+import type {
+  AdminListing,
+  AdminPaymentRow,
+  AdminUser,
+} from "@/lib/admin/types";
 
 type AdminUserDetailPageProps = {
   params: Promise<{ id: string }>;
 };
 
+/** Deduped so generateMetadata and the page body share one read. */
+const loadUser = cache(async (id: string): Promise<AdminUser | null> => {
+  if (await isAdminDemoMode()) return getFixtureUser(id) ?? null;
+  return getAdminUser(id);
+});
+
 export async function generateMetadata({
   params,
 }: AdminUserDetailPageProps): Promise<Metadata> {
   const { id } = await params;
-  const user = getFixtureUser(id);
+  const user = await loadUser(id);
   return {
     title: user?.email ?? "User",
     robots: { index: false, follow: false },
@@ -37,11 +53,23 @@ export default async function AdminUserDetailPage({
   params,
 }: AdminUserDetailPageProps) {
   const { id } = await params;
-  const user = getFixtureUser(id);
+  const isDemo = await isAdminDemoMode();
+  const user = await loadUser(id);
   if (!user) notFound();
 
-  const listings = FIXTURE_LISTINGS.filter((l) => l.user_id === user.id);
-  const payments = FIXTURE_PAYMENTS.filter((p) => p.user_id === user.id);
+  const [listings, payments] = isDemo
+    ? [
+        FIXTURE_LISTINGS.filter(
+          (listing: AdminListing): boolean => listing.user_id === user.id,
+        ),
+        FIXTURE_PAYMENTS.filter(
+          (payment: AdminPaymentRow): boolean => payment.user_id === user.id,
+        ),
+      ]
+    : await Promise.all([
+        getAdminListingsForUser(user.id),
+        getAdminPaymentsFor({ userId: user.id }),
+      ]);
 
   return (
     <div className="flex flex-col gap-8">

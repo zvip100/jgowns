@@ -19,24 +19,20 @@ import {
 import { listingPriceSummary } from "@/lib/listing-variants";
 
 import {
-  FIXTURE_AS_OF,
-  FIXTURE_AUDIT_LOG,
-  FIXTURE_LISTINGS,
-  FIXTURE_MESSAGES,
-  FIXTURE_OVERVIEW_STATS,
-} from "../admin-fixtures";
-import {
   ADMIN_NEW_WEEK_SEGMENT,
   ADMIN_OFF_MARKET_STATUS,
   ADMIN_STALE_ACTIVE_SEGMENT,
   ADMIN_STUCK_PAYMENT_SEGMENT,
-  matchesListingSegment,
-  sortByCreatedDesc,
-} from "../admin-list";
+} from "@/lib/admin/list";
+import { getAdminOverview } from "@/lib/queries/admin/overview";
+
+import { AdminDemoToggle } from "../AdminDemoToggle";
+import { isAdminDemoMode } from "../admin-demo";
+import { demoOverview } from "../admin-fixtures";
 import { AdminPageHeader } from "../AdminPageHeader";
 import { AdminSectionHeading } from "../AdminSectionHeading";
 import { AuditActionPill } from "../AuditActionPill";
-import { toListingWithSizes } from "../admin-types";
+import { toListingWithSizes } from "@/lib/admin/types";
 import { formatAdminDateTime, formatCents } from "../admin-url";
 import { StatCluster } from "../StatCluster";
 import { ADMIN_STATUS_LABELS } from "../admin-status";
@@ -52,33 +48,23 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-function daysSince(iso: string, asOf: string = FIXTURE_AS_OF): number {
+function daysSince(iso: string, asOf: string): number {
   const ms = new Date(asOf).getTime() - new Date(iso).getTime();
   return Math.floor(ms / (1000 * 60 * 60 * 24));
 }
 
-export default function AdminOverviewPage() {
-  const stats = FIXTURE_OVERVIEW_STATS;
-
-  // Each card selects with the same matcher the listings page runs for the
-  // segment its footer link points at, so the two cannot disagree.
-  const inSegment = (segment: string) =>
-    FIXTURE_LISTINGS.filter((l) => matchesListingSegment(segment, l, FIXTURE_AS_OF));
-
-  const newThisWeek = sortByCreatedDesc(inSegment(ADMIN_NEW_WEEK_SEGMENT));
-
-  const staleActives = inSegment(ADMIN_STALE_ACTIVE_SEGMENT);
-
-  const recentModeration = inSegment(ADMIN_OFF_MARKET_STATUS);
-
-  // Newest first, matching the logs page: capped at a preview size, "recent"
-  // has to mean the latest events, not the first ones ever written.
-  const recentActivity = sortByCreatedDesc(FIXTURE_AUDIT_LOG).slice(
-    0,
-    ADMIN_QUEUE_PREVIEW_SIZE,
-  );
-
-  const stuckPending = inSegment(ADMIN_STUCK_PAYMENT_SEGMENT);
+export default async function AdminOverviewPage() {
+  const isDemo = await isAdminDemoMode();
+  // Both sources return the same shape, so nothing below this line branches.
+  const {
+    stats,
+    asOf,
+    newThisWeek,
+    staleActives,
+    offMarket,
+    stuckPending,
+    recentActivity,
+  } = isDemo ? demoOverview() : await getAdminOverview();
 
   const contactAge =
     stats.oldest_contact_message_age_hours == null
@@ -93,6 +79,7 @@ export default function AdminOverviewPage() {
         eyebrow="Admin"
         title="Overview"
         description="Listings, fees, and queues that need a look."
+        action={<AdminDemoToggle isDemo={isDemo} />}
       />
 
       {/* Every cluster spans an exact fraction of the row at each breakpoint,
@@ -152,7 +139,7 @@ export default function AdminOverviewPage() {
           tone="attention"
           className="col-span-2 md:col-span-6 lg:col-span-4"
           items={[
-            { label: "Total", value: FIXTURE_MESSAGES.length },
+            { label: "Total", value: stats.contact_messages_total },
             { label: "Oldest", value: contactAge },
           ]}
         />
@@ -167,12 +154,12 @@ export default function AdminOverviewPage() {
             icon={Package}
             title="New this week"
             empty="No new listings this week."
-            count={newThisWeek.length}
+            count={newThisWeek.count}
             href={`/admin/listings?status=${ADMIN_NEW_WEEK_SEGMENT}`}
             viewAllLabel="All new this week"
             className="md:col-span-6"
           >
-            {newThisWeek.slice(0, ADMIN_QUEUE_PREVIEW_SIZE).map((l) => (
+            {newThisWeek.rows.slice(0, ADMIN_QUEUE_PREVIEW_SIZE).map((l) => (
               <QueueRow
                 key={l.id}
                 href={`/admin/listings/${l.id}`}
@@ -196,6 +183,11 @@ export default function AdminOverviewPage() {
               Recent activity
             </h2>
             <div className="surface-panel hairline mt-3 flex flex-col rounded-2xl">
+              {recentActivity.length === 0 && (
+                <p className="px-4 pt-4 text-sm text-(--muted-ink)">
+                  No admin actions recorded yet.
+                </p>
+              )}
               <ul className="divide-y divide-(--line)">
                 {recentActivity.map((entry) => (
                   <li
@@ -233,17 +225,17 @@ export default function AdminOverviewPage() {
             icon={Clock}
             title={`Stale actives (>${STALE_ACTIVE_DAYS}d)`}
             empty="Nothing stale."
-            count={staleActives.length}
+            count={staleActives.count}
             href={`/admin/listings?status=${ADMIN_STALE_ACTIVE_SEGMENT}`}
             viewAllLabel="All stale actives"
             className="md:col-span-2"
           >
-            {staleActives.slice(0, ADMIN_QUEUE_PREVIEW_SIZE).map((l) => (
+            {staleActives.rows.slice(0, ADMIN_QUEUE_PREVIEW_SIZE).map((l) => (
               <QueueRow
                 key={l.id}
                 href={`/admin/listings/${l.id}`}
                 title={l.title}
-                meta={`${daysSince(l.created_at)} days active`}
+                meta={`${daysSince(l.created_at, asOf)} days active`}
               />
             ))}
           </QueueCard>
@@ -252,7 +244,7 @@ export default function AdminOverviewPage() {
             icon={AlertTriangle}
             title="Off market"
             empty="No moderation events."
-            count={recentModeration.length}
+            count={offMarket.count}
             href={`/admin/listings?status=${ADMIN_OFF_MARKET_STATUS}`}
             viewAllLabel="All off market"
             className="md:col-span-2"
@@ -260,7 +252,7 @@ export default function AdminOverviewPage() {
             {/* Status rides the meta line rather than a trailing pill: this card
                 is only ~250px wide at md, and the pill ate enough of the row to
                 truncate the gown title down to a few characters. */}
-            {recentModeration.slice(0, ADMIN_QUEUE_PREVIEW_SIZE).map((l) => (
+            {offMarket.rows.slice(0, ADMIN_QUEUE_PREVIEW_SIZE).map((l) => (
               <QueueRow
                 key={l.id}
                 href={`/admin/listings/${l.id}`}
@@ -274,17 +266,17 @@ export default function AdminOverviewPage() {
             icon={CreditCard}
             title={`Stuck payments (≥${STUCK_PENDING_PAYMENT_DAYS}d)`}
             empty="No stuck payments."
-            count={stuckPending.length}
+            count={stuckPending.count}
             href={`/admin/listings?status=${ADMIN_STUCK_PAYMENT_SEGMENT}`}
             viewAllLabel="All stuck payments"
             className="md:col-span-2"
           >
-            {stuckPending.slice(0, ADMIN_QUEUE_PREVIEW_SIZE).map((l) => (
+            {stuckPending.rows.slice(0, ADMIN_QUEUE_PREVIEW_SIZE).map((l) => (
               <QueueRow
                 key={l.id}
                 href={`/admin/listings/${l.id}`}
                 title={l.title}
-                meta={`${daysSince(l.created_at)} days waiting`}
+                meta={`${daysSince(l.created_at, asOf)} days waiting`}
               />
             ))}
           </QueueCard>
