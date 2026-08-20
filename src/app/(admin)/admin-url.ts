@@ -1,6 +1,8 @@
 /** URL keys every admin list page filters on. */
 export const ADMIN_SEGMENT_PARAM = "status";
 export const ADMIN_SEARCH_PARAM = "q";
+/** Audit-log only: the actor role axis, which is not a peer of the segments. */
+export const ADMIN_ACTOR_PARAM = "actor";
 
 /** Build a relative admin list href from the current search params + overrides. */
 export function adminListHref(
@@ -56,4 +58,13 @@ const ADMIN_CURRENCY_FORMAT = new Intl.NumberFormat("en-US", {
 
 export function formatCents(cents: number): string {
   return ADMIN_CURRENCY_FORMAT.format(cents / 100);
+}
+
+/**
+ * For amounts already stored in dollars. `listings.bundle_price` is
+ * numeric(10,2), so running it through formatCents would render a $500 bundle
+ * as $5.00; formatCents stays for Stripe amounts, which are cents.
+ */
+export function formatDollars(dollars: number): string {
+  return ADMIN_CURRENCY_FORMAT.format(dollars);
 }

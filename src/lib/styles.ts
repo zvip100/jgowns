@@ -1,3 +1,5 @@
+import type { AdminActorRole } from "@/lib/admin/types";
+
 /** Shared gold-gradient primary call-to-action button styling */
 export const PRIMARY_CTA_CLASS =
   "w-full rounded-full border border-[#b58d5f]/70 gold-gradient text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)] hover:-translate-y-0.5 hover:brightness-105";
@@ -73,6 +75,37 @@ export const PILL_TONE_CLASS: Record<PillTone, string> = {
   sold: "bg-(--sold) text-white",
   neutral: "bg-[#f5efe4] text-[#6a5544]",
 };
+
+/**
+ * Tinted disc behind the actor glyph on every activity surface. Naming the
+ * actor beats implying it through a row tint or rail: it survives a greyscale
+ * or colour-blind read on its own, for a fixed 1.4rem column.
+ */
+export const AUDIT_ROLE_GLYPH_CLASS: Record<AdminActorRole, string> = {
+  admin: "bg-(--accent)/20 text-(--accent-deep)",
+  seller: "bg-[#f5efe4] text-[#6a5544]",
+  system: "bg-(--muted-ink)/12 text-(--muted-ink)",
+};
+
+/**
+ * Marketplace nav link, one per breakpoint. Shared by the Navbar's own links,
+ * the auth links, and the admin link so the three can never drift apart. Both
+ * are flex containers so a link carrying a trailing icon needs only a gap.
+ */
+export const NAV_LINK_CLASS =
+  "inline-flex items-center text-[0.9rem] font-semibold tracking-[0.06em] uppercase text-[#6d5a49] hover:text-[#a0733f]";
+export const NAV_LINK_MOBILE_CLASS =
+  "flex min-h-11 items-center text-[0.9rem] font-semibold uppercase tracking-[0.06em] text-[#6d5a49]";
+
+/**
+ * Admin badge in the navbar's account cluster. A chip rather than a nav link:
+ * it leaves the storefront for a different app, so it should not read as a peer
+ * of Browse. The tint is capped at 8% by MEASUREMENT, not taste — --accent-deep
+ * on an 8% --accent wash over the header cream is 4.55:1, and the 12% wash it
+ * wants to be drops to 4.47:1, under AA for text this size.
+ */
+export const NAV_ADMIN_CHIP_CLASS =
+  "inline-flex items-center gap-1.5 rounded-full border border-(--line) bg-(--accent)/8 px-2.5 py-1 text-[0.72rem] font-semibold tracking-[0.11em] uppercase text-(--accent-deep) transition-colors hover:bg-(--accent)/16 hover:text-(--ink)";
 
 /** Circular heart-icon button shared by the wishlist heart toggle and navbar trigger. */
 export const WISHLIST_HEART_BUTTON_CLASS =

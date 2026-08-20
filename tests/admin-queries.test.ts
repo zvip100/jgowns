@@ -115,7 +115,9 @@ import {
 } from "@/lib/queries/admin/listings";
 import {
   getAdminAuditLog,
+  getAuditLogForActor,
   getAuditLogForEntity,
+  getAuditLogForListing,
   getRecentAuditLog,
 } from "@/lib/queries/admin/logs";
 import { getAdminMetrics } from "@/lib/queries/admin/metrics";
@@ -145,6 +147,7 @@ function params(overrides: Partial<AdminListParams> = {}): AdminListParams {
     status: "all",
     searchQuery: "",
     query: "",
+    actor: "all",
     from: "",
     to: "",
     page: 1,
@@ -811,6 +814,47 @@ describe("getAdminAuditLog", () => {
     expect(argsOf("admin_audit_log", "eq")).toEqual([["entity_type", "user"]]);
   });
 
+  it("filters by actor role", async () => {
+    setTableResult("admin_audit_log", { data: [], error: null, count: 0 });
+    await getAdminAuditLog(params({ actor: "system" }));
+    expect(argsOf("admin_audit_log", "eq")).toEqual([["actor_role", "system"]]);
+  });
+
+  it("filters on both axes at once, since entity and actor are independent", async () => {
+    setTableResult("admin_audit_log", { data: [], error: null, count: 0 });
+    await getAdminAuditLog(params({ status: "listing", actor: "seller" }));
+
+    expect(argsOf("admin_audit_log", "eq")).toEqual([
+      ["entity_type", "listing"],
+      ["actor_role", "seller"],
+    ]);
+  });
+
+  it("leaves the actor unconstrained when it is all", async () => {
+    setTableResult("admin_audit_log", { data: [], error: null, count: 0 });
+    await getAdminAuditLog(params());
+    expect(argsOf("admin_audit_log", "eq")).toEqual([]);
+  });
+
+  it("orders newest first with the sequence tie-break", async () => {
+    setTableResult("admin_audit_log", { data: [], error: null, count: 0 });
+    await getAdminAuditLog(params());
+
+    expect(argsOf("admin_audit_log", "order")).toEqual([
+      ["created_at", { ascending: false }],
+      ["sequence", { ascending: false }],
+    ]);
+  });
+
+  it("selects the actor role and sequence the UI needs", async () => {
+    setTableResult("admin_audit_log", { data: [], error: null, count: 0 });
+    await getAdminAuditLog(params());
+
+    const select = String(argsOf("admin_audit_log", "select")[0][0]);
+    expect(select).toContain("actor_role");
+    expect(select).toContain("sequence");
+  });
+
   it("searches actor, action, and entity label", async () => {
     setTableResult("admin_audit_log", { data: [], error: null, count: 0 });
     await getAdminAuditLog(params({ query: "ivory" }));
@@ -858,6 +902,7 @@ describe("getRecentAuditLog", () => {
     expect(argsOf("admin_audit_log", "limit")).toEqual([[10]]);
     expect(argsOf("admin_audit_log", "order")).toEqual([
       ["created_at", { ascending: false }],
+      ["sequence", { ascending: false }],
     ]);
   });
 
@@ -887,6 +932,66 @@ describe("getAuditLogForEntity", () => {
   it("throws on a query error", async () => {
     setTableResult("admin_audit_log", { data: null, error: { message: "boom" } });
     await expect(getAuditLogForEntity("user", SELLER_ID)).rejects.toThrow(
+      "Failed to load audit log",
+    );
+  });
+});
+
+describe("getAuditLogForListing", () => {
+  // Payment rows carry entity_type 'payment' so the logs page can route them to
+  // /admin/payments, which is exactly what would hide them from this timeline.
+  it("takes the listing's own events and its payment events", async () => {
+    setTableResult("admin_audit_log", { data: [], error: null });
+    await getAuditLogForListing(LISTING_ID);
+
+    expect(argsOf("admin_audit_log", "in")).toEqual([
+      ["entity_type", ["listing", "payment"]],
+    ]);
+    expect(argsOf("admin_audit_log", "eq")).toEqual([
+      ["entity_id", LISTING_ID],
+    ]);
+  });
+
+  it("orders newest first with the sequence tie-break", async () => {
+    setTableResult("admin_audit_log", { data: [], error: null });
+    await getAuditLogForListing(LISTING_ID);
+
+    expect(argsOf("admin_audit_log", "order")).toEqual([
+      ["created_at", { ascending: false }],
+      ["sequence", { ascending: false }],
+    ]);
+  });
+
+  it("throws on a query error", async () => {
+    setTableResult("admin_audit_log", { data: null, error: { message: "boom" } });
+    await expect(getAuditLogForListing(LISTING_ID)).rejects.toThrow(
+      "Failed to load audit log",
+    );
+  });
+});
+
+describe("getAuditLogForActor", () => {
+  it("scopes to one actor and caps at the page size", async () => {
+    setTableResult("admin_audit_log", { data: [], error: null });
+    await getAuditLogForActor(SELLER_ID);
+
+    expect(argsOf("admin_audit_log", "eq")).toEqual([["actor_id", SELLER_ID]]);
+    expect(argsOf("admin_audit_log", "limit")).toEqual([[30]]);
+    expect(argsOf("admin_audit_log", "order")).toEqual([
+      ["created_at", { ascending: false }],
+      ["sequence", { ascending: false }],
+    ]);
+  });
+
+  it("honours an explicit limit", async () => {
+    setTableResult("admin_audit_log", { data: [], error: null });
+    await getAuditLogForActor(SELLER_ID, 5);
+    expect(argsOf("admin_audit_log", "limit")).toEqual([[5]]);
+  });
+
+  it("throws on a query error", async () => {
+    setTableResult("admin_audit_log", { data: null, error: { message: "boom" } });
+    await expect(getAuditLogForActor(SELLER_ID)).rejects.toThrow(
       "Failed to load audit log",
     );
   });

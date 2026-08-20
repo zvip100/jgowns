@@ -1,4 +1,4 @@
-import { ADMIN_QUEUE_PREVIEW_SIZE } from "@/lib/admin/constants";
+import { ADMIN_PAGE_SIZE, ADMIN_QUEUE_PREVIEW_SIZE } from "@/lib/admin/constants";
 import { endOfDayMs, fetchAdminListPage } from "@/lib/admin/list";
 import { createClient } from "@/lib/supabase/server";
 
@@ -6,13 +6,16 @@ import type { AdminListParams, AdminListResult } from "@/lib/admin/list";
 import type { AdminAuditLogEntry } from "@/lib/admin/types";
 
 /**
- * Audit log reads. The table is created in Phase 2 so this page and the
- * overview activity feed read a real table from the start; the RPCs that write
- * to it land in Phase 3, so an empty result here is the expected state until
- * then, not a failure.
+ * Activity log reads. Database triggers are the writer, so rows arrive from
+ * sellers and service-role jobs as well as admins; `actor_role` is what tells
+ * them apart at a glance.
  */
 const AUDIT_LOG_SELECT: string =
-  "id, actor_id, actor_email, action, entity_type, entity_id, entity_label, reason, before, after, created_at";
+  "id, actor_id, actor_email, actor_role, action, entity_type, entity_id, entity_label, reason, before, after, created_at, sequence";
+
+// created_at is the transaction timestamp, so rows written by one RPC tie
+// exactly. Every read below sorts `created_at desc, sequence desc`, or a
+// cascade ("Size 8 sold" then "Listing marked sold") displays in planner order.
 
 function logAndThrow(error: { message: string; code?: string }): never {
   console.error("[queries/admin/logs] Failed to load audit log", {
@@ -41,6 +44,9 @@ export async function getAdminAuditLog(
     if (params.status !== "all") {
       query = query.eq("entity_type", params.status);
     }
+    if (params.actor !== "all") {
+      query = query.eq("actor_role", params.actor);
+    }
     if (params.query) {
       const escapedQuery = `%${params.query}%`
         .replace(/\\/g, "\\\\")
@@ -66,6 +72,7 @@ export async function getAdminAuditLog(
 
     const { data, error, count } = await query
       .order("created_at", { ascending: false })
+      .order("sequence", { ascending: false })
       .range(range.from, range.to);
 
     if (error) logAndThrow(error);
@@ -77,7 +84,7 @@ export async function getAdminAuditLog(
   });
 }
 
-/** Newest audit events, for the overview activity feed. */
+/** Newest events from every actor, for the overview activity feed. */
 export async function getRecentAuditLog(
   limit: number = ADMIN_QUEUE_PREVIEW_SIZE,
 ): Promise<AdminAuditLogEntry[]> {
@@ -87,6 +94,7 @@ export async function getRecentAuditLog(
     .from("admin_audit_log")
     .select(AUDIT_LOG_SELECT)
     .order("created_at", { ascending: false })
+    .order("sequence", { ascending: false })
     .limit(limit);
 
   if (error) logAndThrow(error);
@@ -106,7 +114,57 @@ export async function getAuditLogForEntity(
     .select(AUDIT_LOG_SELECT)
     .eq("entity_type", entityType)
     .eq("entity_id", entityId)
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })
+    .order("sequence", { ascending: false });
+
+  if (error) logAndThrow(error);
+
+  return (data ?? []) as unknown as AdminAuditLogEntry[];
+}
+
+/**
+ * A listing's own events plus its payment events, for the detail timeline.
+ * Payment rows carry `entity_type = 'payment'` so /admin/logs can route them to
+ * /admin/payments, which means the shared entity read would hide checkout
+ * started, fee paid, and checkout expired from the one timeline they matter
+ * most to.
+ */
+export async function getAuditLogForListing(
+  listingId: string,
+): Promise<AdminAuditLogEntry[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("admin_audit_log")
+    .select(AUDIT_LOG_SELECT)
+    .in("entity_type", ["listing", "payment"])
+    .eq("entity_id", listingId)
+    .order("created_at", { ascending: false })
+    .order("sequence", { ascending: false });
+
+  if (error) logAndThrow(error);
+
+  return (data ?? []) as unknown as AdminAuditLogEntry[];
+}
+
+/**
+ * Everything one person did, for the user-detail activity panel. A seller's
+ * events are stored against their listings, not against their user id, so the
+ * entity read cannot serve this.
+ */
+export async function getAuditLogForActor(
+  actorId: string,
+  limit: number = ADMIN_PAGE_SIZE,
+): Promise<AdminAuditLogEntry[]> {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("admin_audit_log")
+    .select(AUDIT_LOG_SELECT)
+    .eq("actor_id", actorId)
+    .order("created_at", { ascending: false })
+    .order("sequence", { ascending: false })
+    .limit(limit);
 
   if (error) logAndThrow(error);
 

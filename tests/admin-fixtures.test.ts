@@ -101,13 +101,34 @@ describe("fixture integrity", () => {
     }
 
     for (const entry of FIXTURE_AUDIT_LOG) {
-      if (entry.entity_type === "listing") {
+      // A purge row deliberately outlives its listing: entity_id carries no FK
+      // precisely so the record of a hard-deleted gown survives.
+      if (entry.entity_type !== "user" && entry.action !== "listing.purge") {
         expect(listingIds.has(entry.entity_id)).toBe(true);
       }
       if (entry.entity_type === "user") {
         expect(userIds.has(entry.entity_id)).toBe(true);
       }
     }
+  });
+
+  it("attributes every non-system audit row to a real account", () => {
+    const userIds = new Set(FIXTURE_USERS.map((u) => u.id));
+
+    for (const entry of FIXTURE_AUDIT_LOG) {
+      if (entry.actor_role === "system") {
+        expect(entry.actor_id).toBeNull();
+        expect(entry.actor_email).toBeNull();
+        continue;
+      }
+      expect(entry.actor_email).toBeTruthy();
+      expect(userIds.has(entry.actor_id ?? "")).toBe(true);
+    }
+  });
+
+  it("gives every audit row a unique sequence, so ties resolve", () => {
+    const sequences = FIXTURE_AUDIT_LOG.map((e) => e.sequence);
+    expect(new Set(sequences).size).toBe(sequences.length);
   });
 
   it("gives every listing a seller that exists", () => {

@@ -22,6 +22,8 @@ type AdminListPageProps<T> = {
   /** Sits ahead of the count, e.g. "Read-only inbox · ". */
   descriptionPrefix?: ReactNode;
   segments?: AdminFilterOption[];
+  /** Audit log only. Every other list page passes nothing and is unchanged. */
+  actorFilter?: boolean;
   searchPlaceholder: string;
   headers: ReactNode[];
   alignRight?: number[];
@@ -69,6 +71,7 @@ export function AdminListPage<T>(props: AdminListPageProps<T>) {
 async function AdminListBody<T>({
   basePath,
   segments,
+  actorFilter,
   searchPlaceholder,
   headers,
   alignRight,
@@ -91,6 +94,8 @@ async function AdminListBody<T>({
         searchValue={params.searchQuery}
         dateFrom={params.from}
         dateTo={params.to}
+        actorFilter={actorFilter}
+        activeActor={params.actor}
         buildHref={buildHref}
       />
 

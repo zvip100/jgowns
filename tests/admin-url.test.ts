@@ -5,6 +5,7 @@ import {
   formatAdminDate,
   formatAdminDateTime,
   formatCents,
+  formatDollars,
   stripeSessionUrl,
 } from "@/app/(admin)/admin-url";
 import { firstSearchParam, parsePageParam } from "@/lib/admin/list";
@@ -110,5 +111,19 @@ describe("formatCents", () => {
     expect(formatCents(500)).toBe("$5.00");
     expect(formatCents(0)).toBe("$0.00");
     expect(formatCents(123456)).toBe("$1,234.56");
+  });
+});
+
+describe("formatDollars", () => {
+  it("renders an amount already stored in dollars", () => {
+    expect(formatDollars(500)).toBe("$500.00");
+    expect(formatDollars(0)).toBe("$0.00");
+    expect(formatDollars(1234.5)).toBe("$1,234.50");
+  });
+
+  // listings.bundle_price is dollars while Stripe amounts are cents, so the two
+  // formatters must not be interchangeable.
+  it("does not agree with formatCents on the same number", () => {
+    expect(formatDollars(500)).not.toBe(formatCents(500));
   });
 });

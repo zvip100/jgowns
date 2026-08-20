@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LogOut, Store, UserRound } from "lucide-react";
+import { ExternalLink, LogOut, Store, UserRound } from "lucide-react";
 
 import Logo from "@/components/Logo";
 import SignOutButton from "@/components/SignOutButton";
@@ -35,10 +35,13 @@ export function AdminNavPanel({ adminEmail }: AdminNavPanelProps) {
       <div className="mt-auto flex flex-col gap-2.5 border-t border-(--line) px-5 py-4">
         <Link
           href="/browse"
+          target="_blank"
+          rel="noopener noreferrer"
           className="inline-flex w-fit shrink-0 items-center gap-2 text-xs font-semibold text-(--accent-deep) transition hover:text-(--ink)"
         >
           <Store className="size-3.5" aria-hidden />
           Go to marketplace
+          <ExternalLink className="size-3.5" aria-hidden />
         </Link>
         <div className="flex min-w-0 items-center gap-2">
           <UserRound

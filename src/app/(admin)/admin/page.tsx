@@ -32,6 +32,8 @@ import { demoOverview } from "../admin-fixtures";
 import { AdminPageHeader } from "../AdminPageHeader";
 import { AdminSectionHeading } from "../AdminSectionHeading";
 import { AuditActionPill } from "../AuditActionPill";
+import { AuditActorGlyph } from "../AuditActorGlyph";
+import { auditActorName } from "../admin-audit-labels";
 import { toListingWithSizes } from "@/lib/admin/types";
 import { formatAdminDateTime, formatCents } from "../admin-url";
 import { StatCluster } from "../StatCluster";
@@ -185,7 +187,7 @@ export default async function AdminOverviewPage() {
             <div className="surface-panel hairline mt-3 flex flex-col rounded-2xl">
               {recentActivity.length === 0 && (
                 <p className="px-4 pt-4 text-sm text-(--muted-ink)">
-                  No admin actions recorded yet.
+                  No activity recorded yet.
                 </p>
               )}
               <ul className="divide-y divide-(--line)">
@@ -194,13 +196,19 @@ export default async function AdminOverviewPage() {
                     key={entry.id}
                     className="flex flex-col gap-1 px-4 py-3 lg:flex-row lg:items-center lg:justify-between"
                   >
-                    <div className="min-w-0">
-                      <AuditActionPill action={entry.action} />
-                      <p className="mt-1.5 truncate text-xs text-(--muted-ink)">
-                        {entry.entity_label}
-                        {" · "}
-                        {entry.actor_email}
-                      </p>
+                    {/* The feed mixes actors, and three action slugs are
+                        produced by both admins and sellers, so the glyph is
+                        what separates them without reading the row. */}
+                    <div className="flex min-w-0 gap-2">
+                      <AuditActorGlyph role={entry.actor_role} className="mt-0.5" />
+                      <div className="min-w-0">
+                        <AuditActionPill action={entry.action} />
+                        <p className="mt-1.5 truncate text-xs text-(--muted-ink)">
+                          {entry.entity_label}
+                          {" · "}
+                          {auditActorName(entry.actor_email, entry.actor_role)}
+                        </p>
+                      </div>
                     </div>
                     <time
                       className="shrink-0 text-xs text-(--muted-ink) lg:text-right"

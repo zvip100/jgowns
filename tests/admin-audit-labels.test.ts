@@ -7,22 +7,26 @@ import {
   ADMIN_SELL_MODE_LABELS,
   AUDIT_ACTION_LABELS,
   AUDIT_ACTION_TONES,
+  AUDIT_SYSTEM_ACTOR_LABEL,
   adminCategoryShareLabel,
   adminLocationShareLabel,
   adminPriceBandLabel,
+  auditActorName,
   auditFieldLabel,
   describeAuditChanges,
   formatAuditValue,
 } from "@/app/(admin)/admin-audit-labels";
+import { ADMIN_ACTOR_ROLES } from "@/lib/admin/types";
 import { SELL_MODES } from "@/lib/types";
 import { LogChanges } from "@/app/(admin)/admin/logs/LogChanges";
 import { AuditActionPill } from "@/app/(admin)/AuditActionPill";
+import { AuditActorGlyph } from "@/app/(admin)/AuditActorGlyph";
 import {
   ADMIN_STATUS_LABELS,
   ADMIN_STATUS_TONES,
 } from "@/app/(admin)/admin-status";
 import { StatusPill } from "@/app/(admin)/StatusPill";
-import { PILL_TONE_CLASS } from "@/lib/styles";
+import { AUDIT_ROLE_GLYPH_CLASS, PILL_TONE_CLASS } from "@/lib/styles";
 
 import type { AdminAuditAction } from "@/lib/admin/types";
 
@@ -33,10 +37,25 @@ const ALL_ACTIONS: AdminAuditAction[] = [
   "listing.reactivate",
   "listing.edit",
   "listing.image_remove",
+  "listing.create",
+  "listing.publish_free",
+  "listing.remove",
+  "listing.delete",
+  "listing.purge",
+  "listing.size_sold",
+  "listing.size_reactivate",
+  "listing.status_change",
+  "payment.checkout_start",
+  "payment.succeeded",
+  "payment.expired",
+  "payment.status_change",
   "user.ban",
   "user.unban",
   "user.sign_out",
   "user.delete",
+  "user.signup",
+  "user.password_change",
+  "user.email_change",
   "payment.rescue",
 ];
 
@@ -74,6 +93,59 @@ describe("AUDIT_ACTION_TONES", () => {
     expect(AUDIT_ACTION_TONES["listing.edit"]).toBe("neutral");
     expect(AUDIT_ACTION_TONES["listing.mark_sold"]).toBe("sold");
   });
+
+  it("keeps the two fallback slugs quiet, since neither should ever appear", () => {
+    expect(AUDIT_ACTION_TONES["listing.status_change"]).toBe("neutral");
+    expect(AUDIT_ACTION_TONES["payment.status_change"]).toBe("neutral");
+  });
+
+  it("separates a seller delete from an unpaid sweep", () => {
+    expect(AUDIT_ACTION_LABELS["listing.delete"]).toBe("Listing deleted");
+    expect(AUDIT_ACTION_LABELS["listing.purge"]).toBe("Unpaid listing swept");
+  });
+});
+
+describe("auditActorName", () => {
+  it("uses the actor email when there is one", () => {
+    expect(auditActorName("leah@example.com", "seller")).toBe(
+      "leah@example.com",
+    );
+    expect(auditActorName("admin@jgowns.com", "admin")).toBe(
+      "admin@jgowns.com",
+    );
+  });
+
+  it("names a service-role row System rather than rendering a blank", () => {
+    expect(auditActorName(null, "system")).toBe(AUDIT_SYSTEM_ACTOR_LABEL);
+    expect(auditActorName(null, "system")).toBe("System");
+  });
+
+  // auth.users.email is nullable, so a real person can have no email. Keying
+  // the fallback on the email rather than the role would credit their action to
+  // the platform.
+  it("does not call an email-less person System", () => {
+    expect(auditActorName(null, "seller")).not.toBe("System");
+    expect(auditActorName(null, "seller")).toBe("–");
+    expect(auditActorName(null, "admin")).toBe("–");
+  });
+});
+
+describe("AUDIT_ROLE_GLYPH_CLASS", () => {
+  it("styles a disc for every actor role", () => {
+    for (const role of ADMIN_ACTOR_ROLES) {
+      expect(AUDIT_ROLE_GLYPH_CLASS[role]).toBeTruthy();
+    }
+    expect(Object.keys(AUDIT_ROLE_GLYPH_CLASS)).toHaveLength(
+      ADMIN_ACTOR_ROLES.length,
+    );
+  });
+
+  it("renders a distinct glyph per role", () => {
+    const markup = ADMIN_ACTOR_ROLES.map((role) =>
+      renderToStaticMarkup(React.createElement(AuditActorGlyph, { role })),
+    );
+    expect(new Set(markup).size).toBe(ADMIN_ACTOR_ROLES.length);
+  });
 });
 
 describe("auditFieldLabel", () => {
@@ -86,6 +158,17 @@ describe("auditFieldLabel", () => {
   it("humanizes an unmapped field key", () => {
     expect(auditFieldLabel("image_count")).toBe("Image count");
     expect(auditFieldLabel("notes")).toBe("Notes");
+  });
+
+  it("names the fields the activity triggers write", () => {
+    expect(auditFieldLabel("variant_status")).toBe("Size status");
+    expect(auditFieldLabel("payment_status")).toBe("Payment");
+    expect(auditFieldLabel("variants")).toBe("Sizes");
+    expect(auditFieldLabel("sell_mode")).toBe("Sell mode");
+    expect(auditFieldLabel("contact_methods")).toBe("Contact methods");
+    expect(auditFieldLabel("bundle_price")).toBe("Set price");
+    expect(auditFieldLabel("amount_cents")).toBe("Amount");
+    expect(auditFieldLabel("size")).toBe("Size");
   });
 });
 
@@ -121,6 +204,49 @@ describe("formatAuditValue", () => {
   it("renders a cents field as currency", () => {
     expect(formatAuditValue("price_cents", 45000)).toBe("$450.00");
     expect(formatAuditValue("price_cents", "45000")).toBe("45000");
+    expect(formatAuditValue("amount_cents", 500)).toBe("$5.00");
+  });
+
+  // bundle_price is numeric(10,2) in dollars, so running it through the cents
+  // formatter would show a $500 set as $5.00.
+  it("renders bundle_price as dollars, not cents", () => {
+    expect(formatAuditValue("bundle_price", 500)).toBe("$500.00");
+    expect(formatAuditValue("bundle_price", null)).toBe("–");
+  });
+
+  it("labels a variant and a payment status", () => {
+    expect(formatAuditValue("variant_status", "available")).toBe("Available");
+    expect(formatAuditValue("variant_status", "sold")).toBe("Sold");
+    expect(formatAuditValue("payment_status", "succeeded")).toBe("Succeeded");
+    expect(formatAuditValue("payment_status", "expired")).toBe("Expired");
+    expect(formatAuditValue("payment_status", "refunded")).toBe("refunded");
+  });
+
+  it("renders sell mode and contact methods in the site's own wording", () => {
+    expect(formatAuditValue("sell_mode", "set_only")).toBe("Set only");
+    expect(formatAuditValue("sell_mode", "auction")).toBe("auction");
+    expect(formatAuditValue("contact_methods", ["call", "text"])).toBe(
+      "call, text",
+    );
+    expect(formatAuditValue("contact_methods", [])).toBe("–");
+  });
+
+  it("reads a variant set as sizes and prices", () => {
+    expect(
+      formatAuditValue("variants", [
+        { size: "12", price: 240 },
+        { size: "14", price: "260" },
+      ]),
+    ).toBe("Size 12 $240.00 · Size 14 $260.00");
+    expect(
+      formatAuditValue("variants", [
+        { size: "12", price: "not a price" },
+        { size: "14", price: "" },
+        { size: "16" },
+      ]),
+    ).toBe("Size 12 – · Size 14 – · Size 16 –");
+    expect(formatAuditValue("variants", [])).toBe("–");
+    expect(formatAuditValue("variants", null)).toBe("–");
   });
 
   it("renders an absent or empty value as the empty marker", () => {
@@ -191,6 +317,39 @@ describe("describeAuditChanges", () => {
       "title",
       "status",
       "price_cents",
+    ]);
+  });
+
+  // The digest exists so reordering photos still logs an edit; the count beside
+  // it is the part a reader can act on.
+  it("hides the image digest while keeping the change it caused visible", () => {
+    const changes = describeAuditChanges(
+      { image_count: 3, image_digest: "aaa" },
+      { image_count: 3, image_digest: "bbb" },
+    );
+
+    expect(changes).toEqual([]);
+
+    const withCount = describeAuditChanges(
+      { image_count: 2, image_digest: "aaa" },
+      { image_count: 3, image_digest: "bbb" },
+    );
+    expect(withCount.map((change) => change.key)).toEqual(["image_count"]);
+  });
+
+  it("describes a variant-only edit through the variants diff", () => {
+    const changes = describeAuditChanges(
+      { variants: [{ size: "12", price: 260 }] },
+      { variants: [{ size: "12", price: 240 }] },
+    );
+
+    expect(changes).toEqual([
+      {
+        key: "variants",
+        label: "Sizes",
+        from: "Size 12 $260.00",
+        to: "Size 12 $240.00",
+      },
     ]);
   });
 });

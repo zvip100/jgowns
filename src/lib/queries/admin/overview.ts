@@ -27,6 +27,7 @@ function queueParams(segment: string): AdminListParams {
     status: segment,
     searchQuery: "",
     query: "",
+    actor: "all",
     from: "",
     to: "",
     page: 1,

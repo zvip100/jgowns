@@ -33,6 +33,7 @@ function params(overrides: Partial<AdminListParams> = {}): AdminListParams {
     status: "all",
     searchQuery: "",
     query: "",
+    actor: "all",
     from: "",
     to: "",
     page: 1,
@@ -46,17 +47,19 @@ describe("parseAdminListParams", () => {
       status: "all",
       searchQuery: "",
       query: "",
+      actor: "all",
       from: "",
       to: "",
       page: 1,
     });
   });
 
-  it("reads all five params off the URL", () => {
+  it("reads every param off the URL", () => {
     expect(
       parseAdminListParams({
         status: "sold",
         q: "Lace",
+        actor: "seller",
         from: "2026-01-01",
         to: "2026-02-01",
         page: "3",
@@ -65,10 +68,20 @@ describe("parseAdminListParams", () => {
       status: "sold",
       searchQuery: "Lace",
       query: "lace",
+      actor: "seller",
       from: "2026-01-01",
       to: "2026-02-01",
       page: 3,
     });
+  });
+
+  it.each(["admin", "seller", "system"])("accepts the %s actor role", (role) => {
+    expect(parseAdminListParams({ actor: role }).actor).toBe(role);
+  });
+
+  it("falls back to all rather than emptying the table on an unknown actor", () => {
+    expect(parseAdminListParams({ actor: "robot" }).actor).toBe("all");
+    expect(parseAdminListParams({ actor: "" }).actor).toBe("all");
   });
 
   it("keeps the raw search value and normalizes only the match key", () => {
@@ -426,14 +439,30 @@ describe("adminListQuery", () => {
 
   it("carries every active filter", () => {
     const current = adminListQuery(
-      params({ status: "sold", searchQuery: "Lace", from: "2026-01-01", to: "2026-02-01" }),
+      params({
+        status: "sold",
+        searchQuery: "Lace",
+        actor: "system",
+        from: "2026-01-01",
+        to: "2026-02-01",
+      }),
       2,
     );
     expect(current.get("status")).toBe("sold");
     expect(current.get("q")).toBe("Lace");
+    expect(current.get("actor")).toBe("system");
     expect(current.get("from")).toBe("2026-01-01");
     expect(current.get("to")).toBe("2026-02-01");
     expect(current.get("page")).toBe("2");
+  });
+
+  it("omits an all actor and round-trips a real one", () => {
+    expect(adminListQuery(params(), 1).has("actor")).toBe(false);
+
+    const roundTripped = parseAdminListParams(
+      Object.fromEntries(adminListQuery(params({ actor: "admin" }), 1)),
+    );
+    expect(roundTripped.actor).toBe("admin");
   });
 });
 

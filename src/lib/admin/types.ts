@@ -52,6 +52,15 @@ export type AdminPaymentRow = ListingPayment & {
   listing_title: string;
 };
 
+/**
+ * `seller` is any non-admin account holder, which is every human on the site
+ * who is not the operator: registration is the seller path, and a buyer needs
+ * no account to browse or contact a seller.
+ */
+export type AdminActorRole = "admin" | "seller" | "system";
+
+export const ADMIN_ACTOR_ROLES: AdminActorRole[] = ["admin", "seller", "system"];
+
 export type AdminAuditAction =
   | "listing.suspend"
   | "listing.restore"
@@ -59,16 +68,34 @@ export type AdminAuditAction =
   | "listing.reactivate"
   | "listing.edit"
   | "listing.image_remove"
+  | "listing.create"
+  | "listing.publish_free"
+  | "listing.remove"
+  | "listing.delete"
+  | "listing.purge"
+  | "listing.size_sold"
+  | "listing.size_reactivate"
+  | "listing.status_change"
+  | "payment.checkout_start"
+  | "payment.succeeded"
+  | "payment.expired"
+  | "payment.status_change"
   | "user.ban"
   | "user.unban"
   | "user.sign_out"
   | "user.delete"
+  | "user.signup"
+  | "user.password_change"
+  | "user.email_change"
   | "payment.rescue";
 
 export type AdminAuditLogEntry = {
   id: string;
-  actor_id: string;
-  actor_email: string;
+  /** Null on a system row, and on any row whose account was later deleted. */
+  actor_id: string | null;
+  /** Null on a system row: a service-role write carries no JWT and no email. */
+  actor_email: string | null;
+  actor_role: AdminActorRole;
   action: AdminAuditAction;
   entity_type: "listing" | "user" | "payment";
   entity_id: string;
@@ -77,6 +104,8 @@ export type AdminAuditLogEntry = {
   before: Record<string, unknown> | null;
   after: Record<string, unknown> | null;
   created_at: string;
+  /** Tie-breaker for rows sharing a transaction timestamp. */
+  sequence: number;
 };
 
 export type AdminOverviewStats = {

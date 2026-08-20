@@ -19,14 +19,16 @@ import { AdminPendingActionButton } from "../../../AdminPendingActionButton";
 import { AdminTable } from "../../../AdminTable";
 import { AdminThumbnail } from "../../../AdminThumbnail";
 import { getAdminListing } from "@/lib/queries/admin/listings";
-import { getAuditLogForEntity } from "@/lib/queries/admin/logs";
+import { getAuditLogForListing } from "@/lib/queries/admin/logs";
 import { getAdminPaymentsFor } from "@/lib/queries/admin/payments";
 
-import { adminCategoryLabel } from "../../../admin-audit-labels";
+import { adminCategoryLabel, auditActorName } from "../../../admin-audit-labels";
+import { AuditActionPill } from "../../../AuditActionPill";
+import { AuditActorGlyph } from "../../../AuditActorGlyph";
 import { isAdminDemoMode } from "../../../admin-demo";
 import {
-  FIXTURE_AUDIT_LOG,
   FIXTURE_PAYMENTS,
+  demoAuditLogForListing,
   getFixtureListing,
 } from "../../../admin-fixtures";
 import { toListingWithSizes } from "@/lib/admin/types";
@@ -72,13 +74,11 @@ export default async function AdminListingDetailPage({
   const [payments, timeline] = isDemo
     ? [
         FIXTURE_PAYMENTS.filter((p) => p.listing_id === listing.id),
-        FIXTURE_AUDIT_LOG.filter(
-          (e) => e.entity_type === "listing" && e.entity_id === listing.id,
-        ),
+        demoAuditLogForListing(listing.id),
       ]
     : await Promise.all([
         getAdminPaymentsFor({ listingId: listing.id }),
-        getAuditLogForEntity("listing", listing.id),
+        getAuditLogForListing(listing.id),
       ]);
 
   const category = adminCategoryLabel(listing.category);
@@ -323,24 +323,25 @@ export default async function AdminListingDetailPage({
           emptyLabel="No audit events for this listing yet."
         >
           {timeline.map((entry) => (
-            <li key={entry.id} className="px-4 py-3 text-sm">
-              <p className="font-medium text-(--ink)">
-                {entry.action}{" "}
-                <span className="font-normal text-(--muted-ink)">
-                  by {entry.actor_email}
-                </span>
-              </p>
-              {entry.reason && (
-                <p className="mt-0.5 text-xs text-(--muted-ink)">
-                  {entry.reason}
+            <li key={entry.id} className="flex gap-2 px-4 py-3 text-sm">
+              <AuditActorGlyph role={entry.actor_role} className="mt-0.5" />
+              <div className="min-w-0">
+                <AuditActionPill action={entry.action} />
+                <p className="mt-1 text-xs text-(--muted-ink)">
+                  by {auditActorName(entry.actor_email, entry.actor_role)}
                 </p>
-              )}
-              <time
-                className="mt-1 block text-xs text-(--muted-ink)"
-                dateTime={entry.created_at}
-              >
-                {formatAdminDateTime(entry.created_at)}
-              </time>
+                {entry.reason && (
+                  <p className="mt-0.5 text-xs text-(--muted-ink)">
+                    {entry.reason}
+                  </p>
+                )}
+                <time
+                  className="mt-1 block text-xs text-(--muted-ink)"
+                  dateTime={entry.created_at}
+                >
+                  {formatAdminDateTime(entry.created_at)}
+                </time>
+              </div>
             </li>
           ))}
         </AdminListPanel>

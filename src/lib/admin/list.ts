@@ -1,4 +1,5 @@
 import { ADMIN_PAGE_SIZE, NEW_LISTING_WINDOW_DAYS, STALE_ACTIVE_DAYS, STUCK_PENDING_PAYMENT_DAYS } from "./constants";
+import { ADMIN_ACTOR_ROLES } from "./types";
 
 import { firstParam } from "@/lib/utils";
 
@@ -18,6 +19,12 @@ export type AdminListParams = {
   searchQuery: string;
   /** Normalized search value, for matching only. */
   query: string;
+  /**
+   * Actor role, audit log only. "all" when nothing is selected; a hand-typed
+   * value that names no real role falls back to "all" rather than returning an
+   * empty table.
+   */
+  actor: string;
   from: string;
   to: string;
   page: number;
@@ -42,14 +49,16 @@ export function parsePageParam(value: string | string[] | undefined): number {
   return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
-/** Every admin list page reads the same five params off the URL. */
+/** Every admin list page reads the same params off the URL. */
 export function parseAdminListParams(params: PageSearchParams): AdminListParams {
   const searchQuery = firstSearchParam(params.q);
+  const actor = firstSearchParam(params.actor);
 
   return {
     status: firstSearchParam(params.status) || "all",
     searchQuery,
     query: searchQuery.trim().toLowerCase(),
+    actor: (ADMIN_ACTOR_ROLES as string[]).includes(actor) ? actor : "all",
     from: firstSearchParam(params.from),
     to: firstSearchParam(params.to),
     page: parsePageParam(params.page),
@@ -138,6 +147,7 @@ export function adminListQuery(
   const current = new URLSearchParams();
   if (params.status !== "all") current.set("status", params.status);
   if (params.searchQuery) current.set("q", params.searchQuery);
+  if (params.actor !== "all") current.set("actor", params.actor);
   if (params.from) current.set("from", params.from);
   if (params.to) current.set("to", params.to);
   if (page > 1) current.set("page", String(page));

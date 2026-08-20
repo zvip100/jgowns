@@ -121,6 +121,7 @@ export const FIXTURE_LISTINGS: AdminListing[] = [
     sizes: [
       size("s3", "22222222-2222-4222-8222-222222222222", "12", 320, "sold", 0),
       size("s4", "22222222-2222-4222-8222-222222222222", "14", 320, "sold", 1),
+      size("s11", "22222222-2222-4222-8222-222222222222", "16", 320, "sold", 2),
     ],
   },
   {
@@ -391,11 +392,161 @@ export const FIXTURE_PAYMENTS: AdminPaymentRow[] = [
   },
 ];
 
+/**
+ * Ordered oldest-first for readability; every reader sorts. Covers all three
+ * actor glyphs, every action pill, and the two rows the UI actually breaks on:
+ * a System row with a null actor_email (which is what makes an unguarded
+ * `actor_email.toLowerCase()` throw) and a same-transaction pair that differs
+ * only by `sequence`.
+ */
 export const FIXTURE_AUDIT_LOG: AdminAuditLogEntry[] = [
+  {
+    id: "a4",
+    actor_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    actor_email: "sara@example.com",
+    actor_role: "seller",
+    action: "user.signup",
+    entity_type: "user",
+    entity_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    entity_label: "sara@example.com",
+    reason: null,
+    before: null,
+    after: { provider: "email" },
+    created_at: "2026-03-01T12:00:00.000Z",
+    sequence: 1,
+  },
+  {
+    id: "a5",
+    actor_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    actor_email: "leah@example.com",
+    actor_role: "seller",
+    action: "listing.create",
+    entity_type: "listing",
+    entity_id: "22222222-2222-4222-8222-222222222222",
+    entity_label: "Blush mother-of-the-bride set",
+    reason: null,
+    before: null,
+    after: {
+      status: "pending_payment",
+      title: "Blush mother-of-the-bride set",
+      sell_mode: "set_only",
+      bundle_price: 320,
+      image_count: 2,
+    },
+    created_at: "2026-05-02T09:00:00.000Z",
+    sequence: 2,
+  },
+  {
+    id: "a6",
+    actor_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    actor_email: "leah@example.com",
+    actor_role: "seller",
+    action: "payment.checkout_start",
+    entity_type: "payment",
+    entity_id: "22222222-2222-4222-8222-222222222222",
+    entity_label: "Blush mother-of-the-bride set",
+    reason: null,
+    before: null,
+    after: { payment_status: "pending", amount_cents: 500 },
+    created_at: "2026-05-02T09:01:00.000Z",
+    sequence: 3,
+  },
+  {
+    // Service-role write: no JWT, so no actor at all.
+    id: "a7",
+    actor_id: null,
+    actor_email: null,
+    actor_role: "system",
+    action: "payment.succeeded",
+    entity_type: "payment",
+    entity_id: "22222222-2222-4222-8222-222222222222",
+    entity_label: "Blush mother-of-the-bride set",
+    reason: null,
+    before: { payment_status: "pending" },
+    after: { payment_status: "succeeded", amount_cents: 500 },
+    created_at: "2026-05-02T09:03:00.000Z",
+    sequence: 4,
+  },
+  {
+    id: "a8",
+    actor_id: null,
+    actor_email: null,
+    actor_role: "system",
+    action: "listing.publish_free",
+    entity_type: "listing",
+    entity_id: "66666666-6666-4666-8666-666666666666",
+    entity_label: "Gold sequin bridal reception dress",
+    reason: null,
+    before: { status: "pending_payment" },
+    after: { status: "active" },
+    created_at: "2026-05-10T11:00:00.000Z",
+    sequence: 5,
+  },
+  {
+    id: "a9",
+    actor_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    actor_email: "leah@example.com",
+    actor_role: "seller",
+    action: "listing.edit",
+    entity_type: "listing",
+    entity_id: "22222222-2222-4222-8222-222222222222",
+    entity_label: "Blush mother-of-the-bride set",
+    reason: null,
+    // A variant-only edit: the listing columns are identical and the whole
+    // change lives in the variants diff the edit RPC hands to the trigger.
+    before: {
+      variants: [
+        { size: "12", price: 320 },
+        { size: "14", price: 320 },
+      ],
+    },
+    after: {
+      variants: [
+        { size: "12", price: 320 },
+        { size: "14", price: 320 },
+        { size: "16", price: 320 },
+      ],
+    },
+    created_at: "2026-06-14T16:30:00.000Z",
+    sequence: 6,
+  },
+  {
+    // Selling the last available variant emits both rows in one transaction, so
+    // they share created_at exactly and only `sequence` orders them.
+    id: "a10",
+    actor_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    actor_email: "leah@example.com",
+    actor_role: "seller",
+    action: "listing.size_sold",
+    entity_type: "listing",
+    entity_id: "22222222-2222-4222-8222-222222222222",
+    entity_label: "Blush mother-of-the-bride set",
+    reason: null,
+    before: { size: "16", variant_status: "available" },
+    after: { size: "16", variant_status: "sold" },
+    created_at: "2026-07-05T14:20:00.000Z",
+    sequence: 7,
+  },
+  {
+    id: "a11",
+    actor_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    actor_email: "leah@example.com",
+    actor_role: "seller",
+    action: "listing.mark_sold",
+    entity_type: "listing",
+    entity_id: "22222222-2222-4222-8222-222222222222",
+    entity_label: "Blush mother-of-the-bride set",
+    reason: null,
+    before: { status: "active" },
+    after: { status: "sold" },
+    created_at: "2026-07-05T14:20:00.000Z",
+    sequence: 8,
+  },
   {
     id: "a1",
     actor_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
     actor_email: "admin@jgowns.com",
+    actor_role: "admin",
     action: "listing.suspend",
     entity_type: "listing",
     entity_id: "44444444-4444-4444-8444-444444444444",
@@ -404,11 +555,13 @@ export const FIXTURE_AUDIT_LOG: AdminAuditLogEntry[] = [
     before: { status: "active" },
     after: { status: "suspended", previous_status: "active" },
     created_at: "2026-07-15T13:00:00.000Z",
+    sequence: 9,
   },
   {
     id: "a2",
     actor_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
     actor_email: "admin@jgowns.com",
+    actor_role: "admin",
     action: "user.ban",
     entity_type: "user",
     entity_id: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
@@ -417,11 +570,13 @@ export const FIXTURE_AUDIT_LOG: AdminAuditLogEntry[] = [
     before: { is_banned: false },
     after: { is_banned: true },
     created_at: "2026-07-15T13:05:00.000Z",
+    sequence: 10,
   },
   {
     id: "a3",
     actor_id: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
     actor_email: "admin@jgowns.com",
+    actor_role: "admin",
     action: "listing.edit",
     entity_type: "listing",
     entity_id: "11111111-1111-4111-8111-111111111111",
@@ -444,6 +599,54 @@ export const FIXTURE_AUDIT_LOG: AdminAuditLogEntry[] = [
       color: "Ivory",
     },
     created_at: "2026-07-22T10:00:00.000Z",
+    sequence: 11,
+  },
+  {
+    id: "a12",
+    actor_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    actor_email: "leah@example.com",
+    actor_role: "seller",
+    action: "listing.reactivate",
+    entity_type: "listing",
+    entity_id: "55555555-5555-4555-8555-555555555555",
+    entity_label: "White maternity gown",
+    reason: null,
+    before: { status: "sold" },
+    after: { status: "active" },
+    created_at: "2026-07-24T08:00:00.000Z",
+    sequence: 12,
+  },
+  {
+    id: "a13",
+    actor_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+    actor_email: "leah@example.com",
+    actor_role: "seller",
+    action: "listing.remove",
+    entity_type: "listing",
+    entity_id: "55555555-5555-4555-8555-555555555555",
+    entity_label: "White maternity gown",
+    reason: null,
+    before: { status: "active" },
+    after: { status: "removed" },
+    created_at: "2026-07-26T09:15:00.000Z",
+    sequence: 13,
+  },
+  {
+    // The listing is physically gone; entity_id carries no FK, so the row is
+    // all that is left of it.
+    id: "a14",
+    actor_id: null,
+    actor_email: null,
+    actor_role: "system",
+    action: "listing.purge",
+    entity_type: "listing",
+    entity_id: "77777777-7777-4777-8777-777777777777",
+    entity_label: "Peach flower girl dress",
+    reason: null,
+    before: { status: "pending_payment", title: "Peach flower girl dress" },
+    after: null,
+    created_at: "2026-07-28T03:00:00.000Z",
+    sequence: 14,
   },
 ];
 
@@ -452,7 +655,7 @@ export const FIXTURE_OVERVIEW_STATS: AdminOverviewStats = {
   sold_listings: 1,
   suspended_or_removed: 2,
   pending_payment: 1,
-  total_gowns: 10,
+  total_gowns: 11,
   users_total: 5,
   // 1, not 2: the overview's "New this week" card derives its rows from
   // FIXTURE_LISTINGS, and only Navy girls party dress (Jul 28) falls inside
@@ -594,24 +797,61 @@ export function demoPayments(
   return paginateAdminList(sortByCreatedDesc(rows), params);
 }
 
+/**
+ * Mirrors the real read's `created_at desc, sequence desc`. Sorting on the
+ * timestamp alone leaves a same-transaction pair in whichever order the array
+ * happened to hold.
+ */
+function sortAuditNewestFirst(rows: AdminAuditLogEntry[]): AdminAuditLogEntry[] {
+  return [...rows].sort((a, b) => {
+    const delta = new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    return delta !== 0 ? delta : b.sequence - a.sequence;
+  });
+}
+
 export function demoAuditLog(
   params: AdminListParams,
+  /** Slugs whose human label matched the search, resolved by the page. */
+  labelMatchedActions: string[] = [],
 ): AdminListResult<AdminAuditLogEntry> {
   let rows = FIXTURE_AUDIT_LOG;
   if (params.status !== "all") {
     rows = rows.filter((e) => e.entity_type === params.status);
   }
+  if (params.actor !== "all") {
+    rows = rows.filter((e) => e.actor_role === params.actor);
+  }
   if (params.query) {
+    // A system row carries no actor email, so the predicate has to tolerate it.
     rows = rows.filter(
       (e) =>
-        e.actor_email.toLowerCase().includes(params.query) ||
+        (e.actor_email ?? "").toLowerCase().includes(params.query) ||
         e.action.toLowerCase().includes(params.query) ||
-        e.entity_label.toLowerCase().includes(params.query),
+        e.entity_label.toLowerCase().includes(params.query) ||
+        labelMatchedActions.includes(e.action),
     );
   }
   rows = filterByDateRange(rows, params, (e) => e.created_at);
 
-  return paginateAdminList(sortByCreatedDesc(rows), params);
+  return paginateAdminList(sortAuditNewestFirst(rows), params);
+}
+
+/** Everything one fixture user did, for the user-detail activity panel. */
+export function demoAuditLogForActor(actorId: string): AdminAuditLogEntry[] {
+  return sortAuditNewestFirst(
+    FIXTURE_AUDIT_LOG.filter((e) => e.actor_id === actorId),
+  );
+}
+
+/** A fixture listing's own events plus its payment events, for the timeline. */
+export function demoAuditLogForListing(
+  listingId: string,
+): AdminAuditLogEntry[] {
+  return sortAuditNewestFirst(
+    FIXTURE_AUDIT_LOG.filter(
+      (e) => e.entity_type !== "user" && e.entity_id === listingId,
+    ),
+  );
 }
 
 function demoQueue(segment: string): AdminQueue {
@@ -634,7 +874,7 @@ export function demoOverview(): AdminOverview {
     staleActives: demoQueue(ADMIN_STALE_ACTIVE_SEGMENT),
     offMarket: demoQueue(ADMIN_OFF_MARKET_STATUS),
     stuckPending: demoQueue(ADMIN_STUCK_PAYMENT_SEGMENT),
-    recentActivity: sortByCreatedDesc(FIXTURE_AUDIT_LOG).slice(
+    recentActivity: sortAuditNewestFirst(FIXTURE_AUDIT_LOG).slice(
       0,
       ADMIN_QUEUE_PREVIEW_SIZE,
     ),

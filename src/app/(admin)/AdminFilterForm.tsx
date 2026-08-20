@@ -10,6 +10,7 @@ import { FILTER_COUNT_BADGE_CLASS } from "@/lib/styles";
 import { cn } from "@/lib/utils";
 
 import {
+  ADMIN_ACTOR_PARAM,
   ADMIN_SEARCH_PARAM,
   ADMIN_SEGMENT_PARAM,
   adminListHref,
@@ -29,6 +30,7 @@ type AdminFilterFormProps = {
   dateFrom: string;
   dateTo: string;
   activeSegment: string;
+  activeActor: string;
   /** Number of filters currently on. Zero hides the clear link. */
   activeCount: number;
   clearHref: string;
@@ -46,6 +48,7 @@ export function AdminFilterForm({
   dateFrom,
   dateTo,
   activeSegment,
+  activeActor,
   activeCount,
   clearHref,
 }: AdminFilterFormProps) {
@@ -110,25 +113,27 @@ export function AdminFilterForm({
 
   return (
     <form
-      className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center"
+      className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center"
       action=""
       method="get"
       onSubmit={handleSubmit}
       aria-busy={isPending}
     >
-      {/* Preserve segment + dates when submitting search */}
+      {/* Preserve segment + actor when submitting search without JS */}
       {activeSegment !== "all" && (
-        <input
-          type="hidden"
-          name={ADMIN_SEGMENT_PARAM}
-          value={activeSegment}
-        />
+        <input type="hidden" name={ADMIN_SEGMENT_PARAM} value={activeSegment} />
+      )}
+      {activeActor !== "all" && (
+        <input type="hidden" name={ADMIN_ACTOR_PARAM} value={activeActor} />
       )}
 
       <label className="sr-only" htmlFor="admin-search">
         {searchPlaceholder}
       </label>
-      <div className="min-w-0 sm:max-w-xs sm:flex-1">
+      {/* The floor is what makes the row wrap instead of squeeze: a flex item
+          that can reach zero contributes nothing to the line's minimum, so the
+          browser fits everything on one line and collapses the search box. */}
+      <div className="min-w-0 sm:min-w-60 sm:max-w-xs sm:flex-1">
         <input
           id="admin-search"
           name={ADMIN_SEARCH_PARAM}

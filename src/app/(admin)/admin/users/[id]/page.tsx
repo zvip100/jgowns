@@ -1,9 +1,11 @@
 import { cache } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ArrowRight } from "lucide-react";
 
 import { ADMIN_EMPTY_VALUE } from "@/lib/admin/constants";
 import { getAdminListingsForUser } from "@/lib/queries/admin/listings";
+import { getAuditLogForActor } from "@/lib/queries/admin/logs";
 import { getAdminPaymentsFor } from "@/lib/queries/admin/payments";
 import { getAdminUser } from "@/lib/queries/admin/users";
 
@@ -12,14 +14,17 @@ import { AdminListPanel } from "../../../AdminListPanel";
 import { AdminPageHeader } from "../../../AdminPageHeader";
 import { AdminSectionHeading } from "../../../AdminSectionHeading";
 import { AdminPendingActionButton } from "../../../AdminPendingActionButton";
+import { AuditActionPill } from "../../../AuditActionPill";
+import { AuditActorGlyph } from "../../../AuditActorGlyph";
 import { StatusPill } from "../../../StatusPill";
 import { isAdminDemoMode } from "../../../admin-demo";
 import {
   FIXTURE_LISTINGS,
   FIXTURE_PAYMENTS,
+  demoAuditLogForActor,
   getFixtureUser,
 } from "../../../admin-fixtures";
-import { formatAdminDate, formatCents } from "../../../admin-url";
+import { formatAdminDate, formatAdminDateTime, formatCents } from "../../../admin-url";
 
 import type { Metadata } from "next";
 import type {
@@ -57,7 +62,10 @@ export default async function AdminUserDetailPage({
   const user = await loadUser(id);
   if (!user) notFound();
 
-  const [listings, payments] = isDemo
+  // Demo mode branches for activity too: calling the real reader here would
+  // put genuine audit rows under a fixture user, which is exactly the mixing
+  // the toggle exists to prevent.
+  const [listings, payments, activity] = isDemo
     ? [
         FIXTURE_LISTINGS.filter(
           (listing: AdminListing): boolean => listing.user_id === user.id,
@@ -65,10 +73,12 @@ export default async function AdminUserDetailPage({
         FIXTURE_PAYMENTS.filter(
           (payment: AdminPaymentRow): boolean => payment.user_id === user.id,
         ),
+        demoAuditLogForActor(user.id),
       ]
     : await Promise.all([
         getAdminListingsForUser(user.id),
         getAdminPaymentsFor({ userId: user.id }),
+        getAuditLogForActor(user.id),
       ]);
 
   return (
@@ -188,6 +198,41 @@ export default async function AdminUserDetailPage({
             </li>
           ))}
         </AdminListPanel>
+      </section>
+
+      <section>
+        <AdminSectionHeading>Activity</AdminSectionHeading>
+        <AdminListPanel
+          isEmpty={activity.length === 0}
+          emptyLabel="No recorded activity."
+        >
+          {activity.map((entry) => (
+            <li key={entry.id} className="flex gap-2 px-4 py-3 text-sm">
+              <AuditActorGlyph role={entry.actor_role} className="mt-0.5" />
+              <div className="min-w-0">
+                <AuditActionPill action={entry.action} />
+                {/* Every row here is this person's, so the actor name would be
+                    the page title repeated; the glyph still carries the role. */}
+                <p className="mt-1 truncate text-xs text-(--muted-ink)">
+                  {entry.entity_label}
+                </p>
+                <time
+                  className="mt-1 block text-xs text-(--muted-ink)"
+                  dateTime={entry.created_at}
+                >
+                  {formatAdminDateTime(entry.created_at)}
+                </time>
+              </div>
+            </li>
+          ))}
+        </AdminListPanel>
+        <Link
+          href={`/admin/logs?q=${encodeURIComponent(user.email)}`}
+          className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-(--accent-deep) hover:text-(--ink)"
+        >
+          View all
+          <ArrowRight className="size-3.5" aria-hidden />
+        </Link>
       </section>
     </div>
   );

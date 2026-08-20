@@ -8,6 +8,8 @@ import {
   FIXTURE_PAYMENTS,
   FIXTURE_USERS,
   demoAuditLog,
+  demoAuditLogForActor,
+  demoAuditLogForListing,
   demoListings,
   demoMessages,
   demoMetrics,
@@ -47,6 +49,7 @@ function params(overrides: Partial<AdminListParams> = {}): AdminListParams {
     status: "all",
     searchQuery: "",
     query: "",
+    actor: "all",
     from: "",
     to: "",
     page: 1,
@@ -190,14 +193,89 @@ describe("demoAuditLog", () => {
   });
 
   it("searches the actor", () => {
-    expect(demoAuditLog(params({ query: "admin@" })).totalCount).toBe(
-      FIXTURE_AUDIT_LOG.length,
-    );
+    const adminRows = FIXTURE_AUDIT_LOG.filter(
+      (e) => e.actor_email === "admin@jgowns.com",
+    ).length;
+
+    expect(adminRows).toBeGreaterThan(0);
+    expect(demoAuditLog(params({ query: "admin@" })).totalCount).toBe(adminRows);
+  });
+
+  // A system row carries no actor email; an unguarded toLowerCase() throws here.
+  it("searches without tripping over a null actor email", () => {
+    expect(
+      FIXTURE_AUDIT_LOG.some((e) => e.actor_email === null),
+    ).toBe(true);
+    expect(() => demoAuditLog(params({ query: "gown" }))).not.toThrow();
   });
 
   it("searches the stored action slug", () => {
     const result = demoAuditLog(params({ query: "listing.suspend" }));
     expect(result.rows).toHaveLength(1);
+  });
+
+  // The page resolves the human label to slugs before the demo branch, so
+  // searching what is on screen works in demo mode too.
+  it("matches slugs the page resolved from a human label", () => {
+    expect(demoAuditLog(params({ query: "fee paid" })).totalCount).toBe(0);
+
+    const result = demoAuditLog(params({ query: "fee paid" }), [
+      "payment.succeeded",
+    ]);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].action).toBe("payment.succeeded");
+  });
+
+  it.each(["admin", "seller", "system"])("filters to %s rows", (actor) => {
+    const result = demoAuditLog(params({ actor }));
+    expect(result.totalCount).toBeGreaterThan(0);
+    expect(result.rows.every((e) => e.actor_role === actor)).toBe(true);
+  });
+
+  // Both rows of a cascade share a transaction timestamp, so only `sequence`
+  // puts "Size 8 sold" ahead of "Listing marked sold".
+  it("breaks a same-transaction tie on sequence, newest first", () => {
+    const rows = demoAuditLog(params()).rows;
+    const sizeSold = rows.findIndex((e) => e.action === "listing.size_sold");
+    const markSold = rows.findIndex((e) => e.action === "listing.mark_sold");
+
+    expect(sizeSold).toBeGreaterThanOrEqual(0);
+    expect(markSold).toBeGreaterThanOrEqual(0);
+    expect(rows[sizeSold].created_at).toBe(rows[markSold].created_at);
+    expect(markSold).toBeLessThan(sizeSold);
+  });
+});
+
+describe("demoAuditLogForActor", () => {
+  it("returns only what that person did, newest first", () => {
+    const rows = demoAuditLogForActor("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb");
+
+    expect(rows.length).toBeGreaterThan(0);
+    expect(
+      rows.every((e) => e.actor_id === "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"),
+    ).toBe(true);
+    expect(rows).toEqual([...rows].sort((a, b) => b.sequence - a.sequence));
+  });
+
+  it("returns nothing for a person with no recorded activity", () => {
+    expect(demoAuditLogForActor("no-such-user")).toEqual([]);
+  });
+});
+
+describe("demoAuditLogForListing", () => {
+  const LISTING = "22222222-2222-4222-8222-222222222222";
+
+  it("includes the listing's payment events, which the entity read would hide", () => {
+    const rows = demoAuditLogForListing(LISTING);
+
+    expect(rows.some((e) => e.entity_type === "payment")).toBe(true);
+    expect(rows.every((e) => e.entity_id === LISTING)).toBe(true);
+  });
+
+  it("leaves user rows out", () => {
+    expect(
+      demoAuditLogForListing("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"),
+    ).toEqual([]);
   });
 });
 

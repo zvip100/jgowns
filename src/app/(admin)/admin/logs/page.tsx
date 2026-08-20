@@ -8,12 +8,14 @@ import { getAdminAuditLog } from "@/lib/queries/admin/logs";
 import { AdminListPage } from "../../AdminListPage";
 import {
   AUDIT_ACTION_LABELS,
+  auditActorName,
   describeAuditChanges,
 } from "../../admin-audit-labels";
 import { isAdminDemoMode } from "../../admin-demo";
 import { demoAuditLog } from "../../admin-fixtures";
 import { formatAdminDateTime } from "../../admin-url";
 import { AuditActionPill } from "../../AuditActionPill";
+import { AuditActorGlyph } from "../../AuditActorGlyph";
 
 import { LogChanges } from "./LogChanges";
 
@@ -55,11 +57,11 @@ async function loadLogs(
 ): Promise<AdminListResult<AdminAuditLogEntry>> {
   const params = parseAdminListParams(await searchParams);
 
-  if (await isAdminDemoMode()) return demoAuditLog(params);
-
   // The table reads "Listing suspended" but stores `listing.suspend`, so
   // searching the phrase on screen has to find the row it came from. The
-  // labels live here, so the slugs they match are resolved here too.
+  // labels live here, so the slugs they match are resolved here too. Resolved
+  // ahead of the demo branch: the fixtures mirror real filtering, and searching
+  // "Fee paid" has to work in both modes.
   const labelMatchedActions = params.query
     ? Object.entries(AUDIT_ACTION_LABELS)
         .filter(([, label]: [string, string]): boolean =>
@@ -67,6 +69,8 @@ async function loadLogs(
         )
         .map(([action]: [string, string]): string => action)
     : [];
+
+  if (await isAdminDemoMode()) return demoAuditLog(params, labelMatchedActions);
 
   return getAdminAuditLog(params, labelMatchedActions);
 }
@@ -78,6 +82,7 @@ export default function AdminLogsPage({ searchParams }: AdminLogsPageProps) {
       title="Logs"
       countNoun="audit event"
       segments={SEGMENTS}
+      actorFilter
       searchPlaceholder="Search actor, action, or entity"
       headers={["Time", "Actor", "Action", "Entity", "Reason", "Change"]}
       emptyTitle="No log entries match"
@@ -88,7 +93,20 @@ export default function AdminLogsPage({ searchParams }: AdminLogsPageProps) {
           <TableCell className="align-top text-(--muted-ink)">
             {formatAdminDateTime(entry.created_at)}
           </TableCell>
-          <TableCell className="align-top">{entry.actor_email}</TableCell>
+          <TableCell className="align-top">
+            <span className="flex items-center gap-2">
+              <AuditActorGlyph role={entry.actor_role} />
+              <span
+                className={
+                  entry.actor_role === "system"
+                    ? "text-(--muted-ink) italic"
+                    : undefined
+                }
+              >
+                {auditActorName(entry.actor_email, entry.actor_role)}
+              </span>
+            </span>
+          </TableCell>
           <TableCell className="align-top">
             <AuditActionPill action={entry.action} />
           </TableCell>

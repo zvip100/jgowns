@@ -10,11 +10,7 @@ import {
 } from "@/components/MobileMenu";
 import { WishlistSheet } from "@/components/wishlist/WishlistSheet";
 import { WishlistTrigger } from "@/components/wishlist/WishlistTrigger";
-
-const DESKTOP_LINK_CLASS =
-  "text-[0.9rem] font-semibold tracking-[0.06em] uppercase text-[#6d5a49] hover:text-[#a0733f]";
-const MOBILE_LINK_CLASS =
-  "flex min-h-11 items-center text-[0.9rem] font-semibold uppercase tracking-[0.06em] text-[#6d5a49]";
+import { NAV_LINK_CLASS, NAV_LINK_MOBILE_CLASS } from "@/lib/styles";
 
 export default function Navbar() {
   return (
@@ -33,7 +29,7 @@ export default function Navbar() {
 
           {/* Desktop nav */}
           <div className="hidden items-center gap-5 md:flex">
-            <Link href="/browse" className={DESKTOP_LINK_CLASS}>
+            <Link href="/browse" className={NAV_LINK_CLASS}>
               Browse
             </Link>
             <Suspense fallback={null}>
@@ -52,7 +48,7 @@ export default function Navbar() {
 
         {/* Mobile menu */}
         <MobileMenuPanel>
-          <Link href="/browse" className={MOBILE_LINK_CLASS}>
+          <Link href="/browse" className={NAV_LINK_MOBILE_CLASS}>
             Browse
           </Link>
           <Suspense fallback={null}>
