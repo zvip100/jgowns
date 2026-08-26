@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { isAdminDemoMode } from "@/app/(admin)/admin-demo";
+import { isAdminDemoMode } from "@/lib/admin/demo";
 import {
   FIXTURE_AUDIT_LOG,
   FIXTURE_LISTINGS,

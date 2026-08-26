@@ -5,7 +5,11 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
-import { postAuthPath, safeNextPath } from "@/lib/auth-redirect";
+import {
+  BANNED_ACCOUNT_MESSAGE,
+  postAuthPath,
+  safeNextPath,
+} from "@/lib/auth-redirect";
 import { createClient } from "@/lib/supabase/server";
 import { optionalPhoneSchema } from "@/lib/utils";
 
@@ -111,7 +115,10 @@ export async function signIn(
 
   const supabase = await createClient();
   const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
-  if (error) return { error: error.message };
+  if (error) {
+    if (error.code === "user_banned") return { error: BANNED_ACCOUNT_MESSAGE };
+    return { error: error.message };
+  }
 
   revalidatePath("/", "layout");
   redirect(postAuthPath(data.user, input.next));

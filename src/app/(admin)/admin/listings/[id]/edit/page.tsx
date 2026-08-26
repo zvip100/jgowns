@@ -4,8 +4,9 @@ import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 
 import { getAdminListing } from "@/lib/queries/admin/listings";
+import { sortListingSizes } from "@/lib/listing-variants";
 
-import { isAdminDemoMode } from "../../../../admin-demo";
+import { isAdminDemoMode } from "@/lib/admin/demo";
 import { getFixtureListing } from "../../../../admin-fixtures";
 import { StatusPill } from "../../../../StatusPill";
 
@@ -39,6 +40,7 @@ export default async function AdminListingEditPage({
   params,
 }: AdminListingEditPageProps) {
   const { id } = await params;
+  const isDemo = await isAdminDemoMode();
   const listing = await loadListing(id);
   if (!listing) notFound();
 
@@ -62,6 +64,7 @@ export default async function AdminListingEditPage({
       </header>
 
       <AdminListingEditForm
+        isDemo={isDemo}
         listing={{
           id: listing.id,
           title: listing.title,
@@ -70,8 +73,14 @@ export default async function AdminListingEditPage({
           condition: listing.condition,
           category: listing.category,
           color: listing.color,
+          sell_mode: listing.sell_mode,
+          bundle_price: listing.bundle_price,
           contact_email: listing.contact_email,
           contact_phone: listing.contact_phone,
+          contact_methods: listing.contact_methods,
+          sizes: sortListingSizes(listing.sizes).map(
+            ({ size, size_group, price }) => ({ size, size_group, price }),
+          ),
         }}
       />
     </div>

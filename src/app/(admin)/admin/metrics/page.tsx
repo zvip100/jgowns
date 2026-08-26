@@ -12,7 +12,7 @@ import {
   adminLocationShareLabel,
   adminPriceBandLabel,
 } from "../../admin-audit-labels";
-import { isAdminDemoMode } from "../../admin-demo";
+import { isAdminDemoMode } from "@/lib/admin/demo";
 import { demoMetrics } from "../../admin-fixtures";
 import { AdminFact } from "../../AdminFact";
 import { AdminPageHeader } from "../../AdminPageHeader";

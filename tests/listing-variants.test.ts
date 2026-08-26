@@ -51,6 +51,9 @@ function makeListing(
     contact_methods: [],
     status: "active",
     created_at: "2026-01-01T00:00:00Z",
+    suspension_slug: null,
+    suspension_reason: null,
+    previous_status: null,
     sizes,
     ...overrides,
   };

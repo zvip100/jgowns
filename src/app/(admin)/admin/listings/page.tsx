@@ -14,7 +14,7 @@ import { getAdminListings } from "@/lib/queries/admin/listings";
 import { AdminListPage } from "../../AdminListPage";
 import { AdminThumbnail } from "../../AdminThumbnail";
 import { adminCategoryLabel } from "../../admin-audit-labels";
-import { isAdminDemoMode } from "../../admin-demo";
+import { isAdminDemoMode } from "@/lib/admin/demo";
 import { demoListings } from "../../admin-fixtures";
 import { toListingWithSizes } from "@/lib/admin/types";
 import { formatAdminDate } from "../../admin-url";

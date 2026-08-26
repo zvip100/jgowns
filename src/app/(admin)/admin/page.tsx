@@ -27,7 +27,7 @@ import {
 import { getAdminOverview } from "@/lib/queries/admin/overview";
 
 import { AdminDemoToggle } from "../AdminDemoToggle";
-import { isAdminDemoMode } from "../admin-demo";
+import { isAdminDemoMode } from "@/lib/admin/demo";
 import { demoOverview } from "../admin-fixtures";
 import { AdminPageHeader } from "../AdminPageHeader";
 import { AdminSectionHeading } from "../AdminSectionHeading";
@@ -37,7 +37,7 @@ import { auditActorName } from "../admin-audit-labels";
 import { toListingWithSizes } from "@/lib/admin/types";
 import { formatAdminDateTime, formatCents } from "../admin-url";
 import { StatCluster } from "../StatCluster";
-import { ADMIN_STATUS_LABELS } from "../admin-status";
+import { ADMIN_STATUS_LABELS } from "../admin-audit-labels";
 import { StatusPill } from "../StatusPill";
 
 import type { Metadata } from "next";

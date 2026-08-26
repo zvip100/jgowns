@@ -228,6 +228,19 @@ describe("signIn", () => {
     expect(mockRedirect).not.toHaveBeenCalled();
   });
 
+  it("shows the banned-account message instead of Supabase's raw error", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      error: { message: "User is banned", code: "user_banned" },
+    });
+
+    const result = await signIn({ email: "a@b.com", password: "secret6" });
+
+    expect(result).toEqual({
+      error: "Your account has been banned. Contact us for details.",
+    });
+    expect(mockRedirect).not.toHaveBeenCalled();
+  });
+
   it("rejects an invalid email before calling Supabase", async () => {
     const result = await signIn({ email: "not-an-email", password: "secret6" });
 

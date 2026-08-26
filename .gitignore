@@ -42,8 +42,9 @@ next-env.d.ts
 
 .codex
 
-# DB migrations
+# DB migrations & tests
 /src/supabase/migrations
+/src/supabase/tests
 
 docs
 

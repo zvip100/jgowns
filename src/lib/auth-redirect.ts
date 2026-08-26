@@ -3,6 +3,33 @@ import { isAdmin } from "@/lib/admin/is-admin";
 export const DEFAULT_POST_AUTH_PATH = "/dashboard";
 export const ADMIN_POST_AUTH_PATH = "/admin";
 
+/** Shown for both the password and Google sign-in paths (Supabase's `user_banned` error). */
+export const BANNED_ACCOUNT_MESSAGE =
+  "Your account has been banned. Contact us for details.";
+
+/** Keyed by the `/login?error=` reason; single source of truth for both render paths. */
+export const AUTH_SIGN_IN_ERROR_MESSAGES: Record<string, string> = {
+  auth: "We could not sign you in. Please try again.",
+  banned: BANNED_ACCOUNT_MESSAGE,
+};
+
+/**
+ * A banned account (or another pre-code failure) never reaches our OAuth callback
+ * route as a `?code=`: GoTrue rejects it and redirects the browser straight back
+ * with the reason in a URL fragment, which never reaches the server at all. Parsed
+ * client-side once the browser has the full URL, against the same reason keys as
+ * `AUTH_SIGN_IN_ERROR_MESSAGES`.
+ */
+export function authErrorReasonFromHash(
+  hash: string,
+): keyof typeof AUTH_SIGN_IN_ERROR_MESSAGES | null {
+  if (!hash) return null;
+  const params = new URLSearchParams(hash.replace(/^#/, ""));
+  if (params.get("error_code") === "user_banned") return "banned";
+  if (params.get("error")) return "auth";
+  return null;
+}
+
 const ADMIN_PATH_PATTERN = /^\/admin([/?#]|$)/;
 const API_PATH_PATTERN = /^\/api([/?#]|$)/;
 

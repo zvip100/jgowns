@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   ADMIN_PRICE_BAND_LABELS,
   ADMIN_SELL_MODE_LABELS,
+  ADMIN_STATUS_LABELS,
   AUDIT_ACTION_LABELS,
   AUDIT_ACTION_TONES,
   AUDIT_SYSTEM_ACTOR_LABEL,
@@ -21,12 +22,13 @@ import { SELL_MODES } from "@/lib/types";
 import { LogChanges } from "@/app/(admin)/admin/logs/LogChanges";
 import { AuditActionPill } from "@/app/(admin)/AuditActionPill";
 import { AuditActorGlyph } from "@/app/(admin)/AuditActorGlyph";
-import {
-  ADMIN_STATUS_LABELS,
-  ADMIN_STATUS_TONES,
-} from "@/app/(admin)/admin-status";
+
 import { StatusPill } from "@/app/(admin)/StatusPill";
-import { AUDIT_ROLE_GLYPH_CLASS, PILL_TONE_CLASS } from "@/lib/styles";
+import {
+  AUDIT_ROLE_GLYPH_CLASS,
+  LISTING_STATUS_TONE,
+  PILL_TONE_CLASS,
+} from "@/lib/styles";
 
 import type { AdminAuditAction } from "@/lib/admin/types";
 
@@ -394,10 +396,10 @@ describe("StatusPill", () => {
   });
 
   it("gives every status a tone", () => {
-    expect(Object.keys(ADMIN_STATUS_TONES)).toEqual(
+    expect(Object.keys(LISTING_STATUS_TONE)).toEqual(
       Object.keys(ADMIN_STATUS_LABELS),
     );
-    for (const tone of Object.values(ADMIN_STATUS_TONES)) {
+    for (const tone of Object.values(LISTING_STATUS_TONE)) {
       expect(PILL_TONE_CLASS[tone]).toBeTruthy();
     }
   });

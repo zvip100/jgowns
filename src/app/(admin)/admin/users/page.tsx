@@ -6,7 +6,7 @@ import { parseAdminListParams } from "@/lib/admin/list";
 import { getAdminUsers } from "@/lib/queries/admin/users";
 
 import { AdminListPage } from "../../AdminListPage";
-import { isAdminDemoMode } from "../../admin-demo";
+import { isAdminDemoMode } from "@/lib/admin/demo";
 import { demoUsers } from "../../admin-fixtures";
 import { formatAdminDate } from "../../admin-url";
 

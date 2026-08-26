@@ -10,8 +10,8 @@ import type { ListingPayment } from "@/lib/types";
 
 /**
  * Publishing-fee rows. Read-only: `record_listing_payment` stays service-role
- * only, so there is no admin insert, update, or delete path here. The Phase 3
- * rescue action re-verifies against Stripe rather than trusting these rows.
+ * only, so there is no admin insert, update, or delete path here. The rescue
+ * action re-verifies against Stripe rather than trusting these rows.
  */
 
 // `!inner` so a title filter narrows the payment rows themselves rather than

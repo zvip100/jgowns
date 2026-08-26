@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 
 import { ADMIN_EMPTY_VALUE } from "@/lib/admin/constants";
+import { isAdminDemoMode } from "@/lib/admin/demo";
 import { getAdminListingsForUser } from "@/lib/queries/admin/listings";
 import { getAuditLogForActor } from "@/lib/queries/admin/logs";
 import { getAdminPaymentsFor } from "@/lib/queries/admin/payments";
@@ -13,11 +14,14 @@ import { AdminFact } from "../../../AdminFact";
 import { AdminListPanel } from "../../../AdminListPanel";
 import { AdminPageHeader } from "../../../AdminPageHeader";
 import { AdminSectionHeading } from "../../../AdminSectionHeading";
-import { AdminPendingActionButton } from "../../../AdminPendingActionButton";
 import { AuditActionPill } from "../../../AuditActionPill";
 import { AuditActorGlyph } from "../../../AuditActorGlyph";
 import { StatusPill } from "../../../StatusPill";
-import { isAdminDemoMode } from "../../../admin-demo";
+import {
+  AdminBanUserButton,
+  AdminDeleteUserButton,
+  AdminUnbanUserButton,
+} from "../../../admin-action-buttons";
 import {
   FIXTURE_LISTINGS,
   FIXTURE_PAYMENTS,
@@ -111,47 +115,16 @@ export default async function AdminUserDetailPage({
 
       <section>
         <AdminSectionHeading>Actions</AdminSectionHeading>
-        <p className="mt-1 text-sm text-(--muted-ink)">
-          Confirm dialogs open; writes are inert until Phase 3.
-        </p>
+        {/* No force sign-out: the Auth Admin API revokes a session by JWT, not
+            by user id, and an admin never holds another person's token. Ban is
+            the substitute, and an open session lasts until its token expires. */}
         <div className="mt-3 flex flex-wrap gap-2">
           {user.is_banned ? (
-            <AdminPendingActionButton
-              title="Unban user?"
-              description="They will be able to sign in again."
-              confirmLabel="Unban"
-              ariaLabel="Unban user"
-              buttonLabel="Unban"
-              icon="unban"
-            />
+            <AdminUnbanUserButton userId={user.id} isDemo={isDemo} />
           ) : (
-            <AdminPendingActionButton
-              title="Ban user?"
-              description="Blocks sign-in and suspends their active listings."
-              confirmLabel="Ban"
-              ariaLabel="Ban user"
-              buttonLabel="Ban"
-              icon="ban"
-              confirmVariant="destructive"
-            />
+            <AdminBanUserButton userId={user.id} isDemo={isDemo} />
           )}
-          <AdminPendingActionButton
-            title="Force sign-out?"
-            description="Ends all sessions for this account. Also revokes an admin claim immediately."
-            confirmLabel="Sign out"
-            ariaLabel="Force sign-out"
-            buttonLabel="Force sign-out"
-            icon="signOut"
-          />
-          <AdminPendingActionButton
-            title="Delete account?"
-            description="Destructive. Prefer ban when possible. Cascades listings, payments, and wishlist items."
-            confirmLabel="Delete"
-            ariaLabel="Delete account"
-            buttonLabel="Delete"
-            icon="delete"
-            confirmVariant="destructive"
-          />
+          <AdminDeleteUserButton userId={user.id} isDemo={isDemo} />
         </div>
       </section>
 

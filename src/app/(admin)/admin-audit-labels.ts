@@ -1,12 +1,23 @@
 import { ADMIN_EMPTY_VALUE } from "@/lib/admin/constants";
 import { GOWN_CATEGORY_LABELS } from "@/lib/gown-sizes";
 
-import { ADMIN_STATUS_LABELS } from "./admin-status";
 import { formatCents, formatDollars } from "./admin-url";
 
-import type { AdminActorRole, AdminAuditAction } from "@/lib/admin/types";
+import type {
+  AdminActorRole,
+  AdminAuditAction,
+  AdminListingStatus,
+} from "@/lib/admin/types";
 import type { PillTone } from "@/lib/styles";
 import type { SellMode } from "@/lib/types";
+
+export const ADMIN_STATUS_LABELS: Record<AdminListingStatus, string> = {
+  active: "Active",
+  sold: "Sold",
+  removed: "Removed",
+  pending_payment: "Payment required",
+  suspended: "Suspended",
+};
 
 export const AUDIT_ACTION_LABELS: Record<AdminAuditAction, string> = {
   "listing.suspend": "Listing suspended",

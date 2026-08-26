@@ -10,8 +10,6 @@ import {
   getFixtureUser,
 } from "@/app/(admin)/admin-fixtures";
 import { toListingWithSizes } from "@/lib/admin/types";
-import { adminActionPending, ADMIN_BACKEND_PENDING_ERROR } from "@/app/(admin)/admin-pending";
-import { ADMIN_ACTION_ICONS } from "@/app/(admin)/AdminPendingActionButton";
 
 describe("getFixtureListing", () => {
   it("finds a listing by id", () => {
@@ -43,14 +41,16 @@ describe("toListingWithSizes", () => {
     expect(mapped.sizes).toHaveLength(listing.sizes.length);
     expect(mapped).not.toHaveProperty("saved_count");
     expect(mapped).not.toHaveProperty("seller_email");
-    expect(mapped).not.toHaveProperty("suspension_reason");
-    expect(mapped).not.toHaveProperty("previous_status");
   });
 
-  it("maps suspended onto removed until Listing.status is widened", () => {
+  it("keeps the moderation columns, which are marketplace fields now", () => {
     const suspended = FIXTURE_LISTINGS.find((l) => l.status === "suspended");
     expect(suspended).toBeDefined();
-    expect(toListingWithSizes(suspended!).status).toBe("removed");
+    const mapped = toListingWithSizes(suspended!);
+    expect(mapped.status).toBe("suspended");
+    expect(mapped.suspension_slug).toBe(suspended!.suspension_slug);
+    expect(mapped.suspension_reason).toBe(suspended!.suspension_reason);
+    expect(mapped.previous_status).toBe(suspended!.previous_status);
   });
 
   it("passes every other status through unchanged", () => {
@@ -58,34 +58,6 @@ describe("toListingWithSizes", () => {
       (l) => l.status !== "suspended",
     )) {
       expect(toListingWithSizes(listing).status).toBe(listing.status);
-    }
-  });
-});
-
-describe("adminActionPending", () => {
-  it("always resolves to the Phase 1 backend-pending error", async () => {
-    await expect(adminActionPending()).resolves.toEqual({
-      error: ADMIN_BACKEND_PENDING_ERROR,
-    });
-  });
-});
-
-describe("ADMIN_ACTION_ICONS", () => {
-  it("carries every action key callers look up, so none crosses the RSC boundary as a prop", () => {
-    expect(Object.keys(ADMIN_ACTION_ICONS).sort()).toEqual([
-      "ban",
-      "delete",
-      "markSold",
-      "reactivate",
-      "removeImage",
-      "rescue",
-      "restore",
-      "signOut",
-      "unban",
-    ]);
-
-    for (const icon of Object.values(ADMIN_ACTION_ICONS)) {
-      expect(icon).toBeDefined();
     }
   });
 });

@@ -3,8 +3,16 @@
 import { useCallback, useRef, useState } from "react";
 import { unstable_rethrow, useRouter } from "next/navigation";
 
+import { useSizeRows } from "@/hooks/useSizeRows";
 import { isValidSizePair } from "@/lib/gown-sizes";
 import { createListing, updateListing } from "@/lib/actions/sell";
+import {
+  EMPTY_LISTING_ERRORS,
+  collectListingFieldErrors,
+  hasListingErrors,
+  hasListingFieldErrors,
+  toggleContactMethod as toggleContactMethodValue,
+} from "@/lib/listing-form";
 import { toast } from "@/lib/toast";
 import { digitsOnlyPhone, imageSlotFormKeys } from "@/lib/utils";
 import { listingInputSchema } from "@/lib/validations/listing-schema";
@@ -20,105 +28,20 @@ import {
   type ImageSlotState,
 } from "@/lib/types";
 
+import type {
+  ListingFormErrors,
+  SizeRowError,
+} from "@/lib/listing-form";
+
 /** Scalar form fields — size rows, set pricing, and contact methods live in their own state. */
 type ListingScalarFormData = Partial<
   Omit<ListingFormData, "sizes" | "contact_methods" | "status">
 >;
 
-/** Fields that surface an inline error directly below the control. */
-export type ListingFieldName =
-  | "title"
-  | "location"
-  | "condition"
-  | "category"
-  | "contact_email"
-  | "contact_phone"
-  | "bundle_price";
-
-/** Per-row inline errors for a size row (size picker + price). */
-export type SizeRowError = { size?: string; price?: string };
-
-export type ListingFormErrors = {
-  fields: Partial<Record<ListingFieldName, string>>;
-  /** Indexed parallel to the size rows. */
-  sizes: SizeRowError[];
-  /** Shown next to the submit button; the catch-all for the form. */
-  general: string;
-};
-
-export const EMPTY_LISTING_ERRORS: ListingFormErrors = {
-  fields: {},
-  sizes: [],
-  general: "",
-};
-
 const FIX_HIGHLIGHTED_FIELDS = "Please fix the highlighted fields.";
-const CONTACT_PHONE_ERROR = "Leave phone blank, or enter a valid phone number.";
 const EITHER_NOT_DISCOUNTED_ERROR =
   "The price for all sizes together should be less than the sizes priced individually.";
 const MISSING_PHOTO_ERROR = "Please add at least one gown photo.";
-
-const SCALAR_FIELD_NAMES = new Set<ListingFieldName>([
-  "title",
-  "location",
-  "condition",
-  "category",
-  "contact_email",
-  "bundle_price",
-]);
-
-type IssueLike = { path: PropertyKey[]; message: string };
-
-/** Route each zod issue to the control it belongs to; unmapped issues (sell_mode,
- * contact_methods) fall through to the general line. First message per slot wins. */
-export function collectListingFieldErrors(
-  issues: readonly IssueLike[],
-): ListingFormErrors {
-  const fields: ListingFormErrors["fields"] = {};
-  const sizes: SizeRowError[] = [];
-  let general = "";
-
-  const setField = (name: ListingFieldName, message: string) => {
-    if (!fields[name]) fields[name] = message;
-  };
-  const setSize = (index: number, key: keyof SizeRowError, message: string) => {
-    const row = (sizes[index] ??= {});
-    if (!row[key]) row[key] = message;
-  };
-
-  for (const issue of issues) {
-    const [head, second, third] = issue.path;
-    if (head === "sizes" && typeof second === "number") {
-      setSize(second, third === "price" ? "price" : "size", issue.message);
-      continue;
-    }
-    if (head === "contact_phone") {
-      setField("contact_phone", CONTACT_PHONE_ERROR);
-      continue;
-    }
-    if (
-      typeof head === "string" &&
-      SCALAR_FIELD_NAMES.has(head as ListingFieldName)
-    ) {
-      setField(head as ListingFieldName, issue.message);
-      continue;
-    }
-    if (!general) general = issue.message;
-  }
-
-  return { fields, sizes, general };
-}
-
-function hasFieldOrSizeErrors(errors: ListingFormErrors): boolean {
-  return (
-    Object.keys(errors.fields).length > 0 ||
-    errors.sizes.some((row) => Boolean(row?.size || row?.price))
-  );
-}
-
-export function hasListingErrors(errors: ListingFormErrors): boolean {
-  return hasFieldOrSizeErrors(errors) || errors.general.length > 0;
-}
 
 type ListingValidationInput = {
   form: ListingScalarFormData;
@@ -178,7 +101,7 @@ export function validateListingForm({
     }
   }
 
-  if (hasFieldOrSizeErrors(errors)) {
+  if (hasListingFieldErrors(errors)) {
     errors.general = FIX_HIGHLIGHTED_FIELDS;
   } else if (!hasActivePhoto) {
     errors.general = MISSING_PHOTO_ERROR;
@@ -323,9 +246,18 @@ export function useListingFormSubmit({
   const [form, setForm] = useState<ListingScalarFormData>(() =>
     buildInitialForm(initial),
   );
-  const [sizeRows, setSizeRows] = useState<ListingSizeRowState[]>(() =>
-    buildInitialRows(initial),
-  );
+  const {
+    rows: sizeRows,
+    updateRow,
+    addRow,
+    removeRow,
+    clearInvalidRows,
+  } = useSizeRows(() => buildInitialRows(initial), {
+    onRowsExhausted: () => {
+      setSellOnlyAsSetState(false);
+      setBundlePrice("");
+    },
+  });
   const [sellOnlyAsSet, setSellOnlyAsSetState] = useState(
     initial?.sell_mode === "set_only",
   );
@@ -350,22 +282,21 @@ export function useListingFormSubmit({
     [],
   );
 
-  const setCategory = useCallback((value: string) => {
-    const category = GOWN_CATEGORIES.some((c) => c.id === value)
-      ? (value as GownCategoryId)
-      : null;
-    setForm((f) => ({ ...f, category }));
-    setSizeRows((rows) =>
-      rows.map((row) => {
-        const keepSize =
-          category &&
-          row.size &&
-          row.size_group &&
-          isValidSizePair(category, row.size_group, row.size);
-        return keepSize ? row : { ...row, size: "", size_group: null };
-      }),
-    );
-  }, []);
+  const setCategory = useCallback(
+    (value: string) => {
+      const category = GOWN_CATEGORIES.some((c) => c.id === value)
+        ? (value as GownCategoryId)
+        : null;
+      setForm((f) => ({ ...f, category }));
+      clearInvalidRows(
+        (row) =>
+          category != null &&
+          row.size_group != null &&
+          isValidSizePair(category, row.size_group, row.size),
+      );
+    },
+    [clearInvalidRows],
+  );
 
   const setContactPhone = useCallback((value: string) => {
     const digits = digitsOnlyPhone(value);
@@ -376,44 +307,9 @@ export function useListingFormSubmit({
 
   const toggleContactMethod = useCallback(
     (method: ContactMethod, checked: boolean) => {
-      setContactMethods((prev) =>
-        checked
-          ? prev.includes(method)
-            ? prev
-            : [...prev, method]
-          : prev.filter((m) => m !== method),
-      );
+      setContactMethods((prev) => toggleContactMethodValue(prev, method, checked));
     },
     [],
-  );
-
-  const updateRow = useCallback(
-    (key: string, patch: Partial<Omit<ListingSizeRowState, "key">>) => {
-      setSizeRows((rows) =>
-        rows.map((row) => (row.key === key ? { ...row, ...patch } : row)),
-      );
-    },
-    [],
-  );
-
-  const addRow = useCallback(() => {
-    setSizeRows((rows) => [
-      ...rows,
-      { key: crypto.randomUUID(), size: "", size_group: null, price: "" },
-    ]);
-  }, []);
-
-  const removeRow = useCallback(
-    (key: string) => {
-      if (sizeRows.length <= 1) return;
-      const next = sizeRows.filter((row) => row.key !== key);
-      setSizeRows(next);
-      if (next.length === 1) {
-        setSellOnlyAsSetState(false);
-        setBundlePrice("");
-      }
-    },
-    [sizeRows],
   );
 
   const setSellOnlyAsSet = useCallback((value: boolean) => {
@@ -538,7 +434,7 @@ export function useListingFormSubmit({
       }
     } catch (e: unknown) {
       unstable_rethrow(e);
-      setErrors({ fields: {}, sizes: [], general: "Something went wrong." });
+      toast.error("Something went wrong.");
     } finally {
       setLoading(false);
     }

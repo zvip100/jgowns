@@ -1,18 +1,13 @@
 import { Suspense } from 'react';
-import { TriangleAlert } from 'lucide-react';
 
-import { safeNextPath } from '@/lib/auth-redirect';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AUTH_SIGN_IN_ERROR_MESSAGES, safeNextPath } from '@/lib/auth-redirect';
 
+import AuthErrorBanner from './AuthErrorBanner';
 import GoogleAuthButton from './GoogleAuthButton';
 
 import type { ReactNode } from 'react';
 
 type AuthSearchParams = { next?: string; error?: string };
-
-const AUTH_ERROR_MESSAGES: Record<string, string> = {
-  auth: 'We could not sign you in. Please try again.',
-};
 
 type AuthScreenBodyProps = {
   searchParams: Promise<AuthSearchParams>;
@@ -29,16 +24,11 @@ async function AuthScreenBody({
   // Empty means "no destination requested", which is what lets an admin land on
   // /admin by default while still honoring an explicit next=/dashboard.
   const redirectTo = safeNextPath(next) ?? '';
-  const errorMessage = error ? AUTH_ERROR_MESSAGES[error] : undefined;
+  const errorMessage = error ? AUTH_SIGN_IN_ERROR_MESSAGES[error] : undefined;
 
   return (
     <>
-      {errorMessage && (
-        <Alert variant="destructive">
-          <TriangleAlert />
-          <AlertDescription>{errorMessage}</AlertDescription>
-        </Alert>
-      )}
+      <AuthErrorBanner initialMessage={errorMessage} />
       {hasGoogleAuth && (
         <>
           <GoogleAuthButton next={redirectTo} />

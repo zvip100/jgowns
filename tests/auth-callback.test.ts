@@ -122,4 +122,17 @@ describe("GET auth callback", () => {
       "https://jgowns.test/login?error=auth",
     );
   });
+
+  it("redirects a banned account's exchange with error=banned", async () => {
+    mockExchangeCodeForSession.mockResolvedValue({
+      error: { message: "User is banned", code: "user_banned" },
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const response = await GET(callbackRequest("?code=bad-code"));
+
+    expect(response.headers.get("location")).toBe(
+      "https://jgowns.test/login?error=banned",
+    );
+  });
 });

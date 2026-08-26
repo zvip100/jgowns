@@ -6,7 +6,7 @@ import { isAdmin } from "@/lib/admin/is-admin";
 import { getCurrentUser } from "@/lib/queries/auth";
 import { createClient } from "@/lib/supabase/server";
 
-import { isAdminDemoMode } from "./admin-demo";
+import { isAdminDemoMode } from "@/lib/admin/demo";
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminTopBar } from "./AdminTopBar";
 import AdminLoading from "./loading";

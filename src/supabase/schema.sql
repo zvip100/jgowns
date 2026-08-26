@@ -28,11 +28,49 @@ create table listings (
   status text default 'active' check (status in ('active', 'sold', 'removed', 'pending_payment', 'suspended')),
   created_at timestamp with time zone default now(),
   -- Lifecycle timestamps behind the admin metrics. sold_at is stamped and
-  -- cleared by the status RPCs below; suspended_at is written by the Phase 3
-  -- moderation RPC; updated_at is maintained by the touch trigger.
+  -- cleared by the status RPCs below; suspended_at is written by
+  -- admin_suspend_listing and cleared by admin_restore_listing; updated_at is
+  -- maintained by the touch trigger.
   sold_at timestamptz,
   suspended_at timestamptz,
   updated_at timestamptz not null default now(),
+  -- Moderation state. previous_status is what makes restore exact: a suspended
+  -- pending_payment listing restored to a hardcoded 'active' would be a free
+  -- publish, and one suspended out of 'sold' would un-sell a gown.
+  suspension_slug text,
+  suspension_reason text,
+  previous_status text,
+  constraint listings_suspension_slug_check check (
+    suspension_slug is null
+    or suspension_slug in (
+      'spam', 'wrong-category', 'prohibited-item',
+      'image-policy', 'duplicate', 'other'
+    )
+  ),
+  -- The status guard makes admin_suspend_listing the only door an admin can
+  -- use; this makes a malformed suspended row unrepresentable through any door,
+  -- including the SQL editor. Neither is redundant: the guard cannot see
+  -- whether a reason was supplied, and the constraint cannot see who is
+  -- writing. suspension_reason is not null here while the note is optional, so
+  -- the RPC falls back to the slug when no note is given and the seller-facing
+  -- renderer maps a bare slug to its own sentence. suspension_slug is
+  -- deliberately not a term: it is required by the RPC signature and the client
+  -- schema, so a fourth term would add no protection.
+  -- 'removed' allows previous_status either way: null for a listing removed
+  -- before migration 034 existed (never stamped), or set by remove_listing()
+  -- since -- not to restore its exact prior status (that stays exclusive to
+  -- suspend), only so admin_restore_listing can tell whether the listing had
+  -- already gone live before removal, or was still unpaid.
+  constraint listings_suspension_fields_check check (
+    (status = 'suspended'
+       and suspension_reason is not null
+       and previous_status is not null)
+    or (status = 'removed'
+        and suspension_reason is null)
+    or (status not in ('suspended', 'removed')
+        and suspension_reason is null
+        and previous_status is null)
+  ),
   constraint listings_image_arrays_check check (
     cardinality(image_urls) between 1 and 3
     and cardinality(image_blur_data_urls) = cardinality(image_urls)
@@ -215,6 +253,13 @@ create policy "Sellers can delete own listings" on listings for delete using (au
 -- scoped `to authenticated` so anonymous browse traffic never evaluates them.
 create policy "Admins can view all listings" on listings
   for select to authenticated using ((select is_admin()));
+-- No admin delete policy: hard delete is excluded from v1, so granting it would
+-- be a privilege nothing uses. An update policy carries an explicit `with
+-- check` too, or Postgres reuses `using` as the check and the two drift later.
+create policy "Admins can update all listings" on listings
+  for update to authenticated
+  using ((select is_admin()))
+  with check ((select is_admin()));
 
 alter table listing_sizes enable row level security;
 
@@ -257,6 +302,18 @@ create policy "Sellers can delete own listing sizes" on listing_sizes
 -- listings in every status, including ones no select policy above exposes.
 create policy "Admins can view all listing sizes" on listing_sizes
   for select to authenticated using ((select is_admin()));
+-- All three write verbs, not just update: update_listing_with_variants
+-- reconciles a size set by deleting, re-pricing, and inserting, so an
+-- update-only grant would fail the moment an admin edits which sizes a listing
+-- offers.
+create policy "Admins can insert listing sizes" on listing_sizes
+  for insert to authenticated with check ((select is_admin()));
+create policy "Admins can update listing sizes" on listing_sizes
+  for update to authenticated
+  using ((select is_admin()))
+  with check ((select is_admin()));
+create policy "Admins can delete listing sizes" on listing_sizes
+  for delete to authenticated using ((select is_admin()));
 
 alter table contact_messages enable row level security;
 
@@ -310,6 +367,11 @@ create policy "Admins can read the audit log" on admin_audit_log
 create policy "Public image access" on storage.objects for select using (bucket_id = 'gown-images');
 create policy "Auth users can upload images" on storage.objects for insert with check (bucket_id = 'gown-images' and auth.role() = 'authenticated');
 create policy "Users can delete own images" on storage.objects for delete using (bucket_id = 'gown-images' and auth.uid() = owner);
+-- Without this an admin cannot remove another seller's photo at all: the owner
+-- policy above is the bucket's only delete grant.
+create policy "Admins can delete listing images" on storage.objects
+  for delete to authenticated
+  using (bucket_id = 'gown-images' and (select is_admin()));
 
 -- Atomic "mark listing sold": flip the listing status and all of its size
 -- variants in one transaction, so a mid-way failure can't leave the listing
@@ -327,6 +389,12 @@ set search_path = ''
 as $$
 declare
   v_uid uuid := (select auth.uid());
+  -- Admins reach every status transition by widening the four seller RPCs
+  -- rather than by cloning them, so the transition guards, the audit-cascade
+  -- suppression, and the write-order dependency exist once. The predicate stays
+  -- inline, so an unrelated seller still gets 'Listing not found' and learns
+  -- nothing about what exists.
+  v_is_admin boolean := (select public.is_admin());
   v_count int;
 begin
   if v_uid is null then
@@ -337,7 +405,9 @@ begin
 
   update public.listings
      set status = 'sold', sold_at = now()
-   where id = p_listing_id and user_id = v_uid and status = 'active';
+   where id = p_listing_id
+     and (user_id = v_uid or v_is_admin)
+     and status = 'active';
 
   get diagnostics v_count = row_count;
   if v_count = 0 then
@@ -356,6 +426,7 @@ begin
   -- read as part of this cascade and go unlogged. It cannot be cleared inside
   -- the row trigger, which would unsuppress the rest of this cascade.
   perform set_config('app.audit_cascade', '', true);
+  perform set_config('app.status_write', '', true);
 end;
 $$;
 
@@ -375,6 +446,7 @@ set search_path = ''
 as $$
 declare
   v_uid uuid := (select auth.uid());
+  v_is_admin boolean := (select public.is_admin());
   v_count int;
 begin
   if v_uid is null then
@@ -387,7 +459,9 @@ begin
   -- as a sale in the time-series or drag the median time-to-sold.
   update public.listings
      set status = 'active', sold_at = null
-   where id = p_listing_id and user_id = v_uid and status = 'sold';
+   where id = p_listing_id
+     and (user_id = v_uid or v_is_admin)
+     and status = 'sold';
 
   get diagnostics v_count = row_count;
   if v_count = 0 then
@@ -402,6 +476,7 @@ begin
 
   -- One-shot, same reasoning as mark_listing_sold above.
   perform set_config('app.audit_cascade', '', true);
+  perform set_config('app.status_write', '', true);
 end;
 $$;
 
@@ -423,6 +498,7 @@ set search_path = ''
 as $$
 declare
   v_uid uuid := (select auth.uid());
+  v_is_admin boolean := (select public.is_admin());
   v_count int;
   v_available int;
 begin
@@ -451,12 +527,20 @@ begin
    where listing_id = p_listing_id and status = 'available';
 
   -- Selling off the last variant is a sale like any other, so it stamps
-  -- sold_at exactly as mark_listing_sold does.
+  -- sold_at exactly as mark_listing_sold does. The parent predicate needs the
+  -- same widening as the variant update above, or an admin selling the last
+  -- variant flips the size while the listing silently stays active, which is
+  -- exactly the divergence this RPC exists to prevent.
   if v_available = 0 then
     update public.listings
        set status = 'sold', sold_at = now()
-     where id = p_listing_id and user_id = v_uid;
+     where id = p_listing_id
+       and (user_id = v_uid or v_is_admin);
   end if;
+
+  -- After the `if`, not inside it: the parent update is the last status
+  -- statement on the path that has one, and the other path has none.
+  perform set_config('app.status_write', '', true);
 end;
 $$;
 
@@ -464,6 +548,16 @@ $$;
 -- action because guard_listing_status_write() refuses direct status writes; the
 -- Stripe session expiry stays in removeListing, since it cannot join this
 -- transaction.
+-- Widened for an admin caller (migration 034), exactly like the four seller
+-- RPCs in migration 030: an admin removes a listing on the seller's own
+-- explicit request ("take it down for good"), never as moderation, which is
+-- what admin_suspend_listing is for. `<> 'suspended'` closes the seller's own
+-- escape from moderation state, and now also stops an admin removal from
+-- overwriting a suspension's own previous_status. previous_status is stamped
+-- again as of migration 034 -- not to restore the listing's exact prior
+-- status (that stays exclusive to suspend), only so admin_restore_listing can
+-- tell whether the listing had already gone live before removal, or was
+-- still pending_payment and must not restore straight to active for free.
 create or replace function remove_listing(p_listing_id uuid)
 returns void
 language plpgsql
@@ -472,6 +566,7 @@ set search_path = ''
 as $$
 declare
   v_uid uuid := (select auth.uid());
+  v_is_admin boolean := (select public.is_admin());
   v_count int;
 begin
   if v_uid is null then
@@ -481,15 +576,19 @@ begin
   perform set_config('app.status_write', 'on', true);
 
   update public.listings
-     set status = 'removed'
+     set status = 'removed',
+         previous_status = status
    where id = p_listing_id
-     and user_id = v_uid
-     and status <> 'removed';
+     and (user_id = v_uid or v_is_admin)
+     and status <> 'removed'
+     and status <> 'suspended';
 
   get diagnostics v_count = row_count;
   if v_count = 0 then
     raise exception 'Listing not found' using errcode = 'P0002';
   end if;
+
+  perform set_config('app.status_write', '', true);
 end;
 $$;
 
@@ -497,6 +596,64 @@ revoke execute on function remove_listing(uuid) from public;
 grant execute on function remove_listing(uuid) to authenticated;
 
 grant execute on function mark_size_sold(uuid, uuid) to authenticated;
+
+-- Mirrors mark_size_sold, including where the precondition lives: the active
+-- parent is a predicate on the UPDATE itself, not a separate read, so a suspend
+-- or a mark-sold landing between the two cannot leave one variant available
+-- under a non-active listing. Ownership is RLS's job here, exactly as there,
+-- which is also what lets an admin call it for another seller.
+create or replace function reactivate_size(p_listing_id uuid, p_size_id uuid)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_uid uuid := (select auth.uid());
+  v_is_admin boolean := (select public.is_admin());
+  v_count int;
+begin
+  if v_uid is null then
+    raise exception 'Not authenticated' using errcode = '28000';
+  end if;
+
+  update public.listing_sizes ls
+     set status = 'available'
+   where ls.id = p_size_id
+     and ls.listing_id = p_listing_id
+     and exists (
+       select 1 from public.listings l
+        where l.id = ls.listing_id and l.status = 'active'
+     );
+
+  get diagnostics v_count = row_count;
+  if v_count > 0 then
+    return;
+  end if;
+
+  -- Only to tell the caller which precondition failed. Scoped to the same
+  -- ownership-or-admin authority as the UPDATE above, not RLS's broader
+  -- "Public can view sizes of active listings" read policy, or an active
+  -- listing would leak "not active" to a caller with no rights to it at all.
+  -- A row invisible under THAT authority reads as not found, so an unrelated
+  -- seller still learns nothing about what exists.
+  if exists (
+    select 1 from public.listing_sizes ls
+     where ls.id = p_size_id and ls.listing_id = p_listing_id
+       and exists (
+         select 1 from public.listings l
+          where l.id = ls.listing_id and (l.user_id = v_uid or v_is_admin)
+       )
+  ) then
+    raise exception 'Listing is not active' using errcode = '55000';
+  end if;
+
+  raise exception 'Size not found' using errcode = 'P0002';
+end;
+$$;
+
+revoke execute on function reactivate_size(uuid, uuid) from public;
+grant execute on function reactivate_size(uuid, uuid) to authenticated;
 
 -- Atomic listing-fee activation: flips a listing_payments row to 'succeeded'
 -- and its parent listing to 'active' in one transaction. Idempotent (safe for
@@ -543,6 +700,19 @@ begin
   update public.listings
      set status = 'active'
    where id = v_listing_id and status = 'pending_payment';
+
+  -- A listing suspended while its Checkout was still open can have the fee land
+  -- afterwards. The moderation state must hold, so status is not touched; what
+  -- moves is the restore TARGET, because restoring a paid listing to
+  -- pending_payment would offer its seller Checkout a second time and charge
+  -- them twice. Leaves the suspension columns populated, so
+  -- listings_suspension_fields_check still holds, and changes nothing the audit
+  -- snapshot reads, so it writes no spurious edit row.
+  update public.listings
+     set previous_status = 'active'
+   where id = v_listing_id
+     and status = 'suspended'
+     and previous_status = 'pending_payment';
 end;
 $$;
 
@@ -587,7 +757,10 @@ begin
   if v_owner is null then
     raise exception 'Listing not found' using errcode = 'P0002';
   end if;
-  if v_owner <> v_uid then
+  -- Admins edit a listing in any status for free here: this RPC never touches
+  -- status, so an admin edit is not an implicit status change and
+  -- guard_listing_status_write never fires.
+  if v_owner <> v_uid and not (select public.is_admin()) then
     raise exception 'Not authorized' using errcode = '42501';
   end if;
 
@@ -650,8 +823,16 @@ begin
     category             = p_listing->>'category',
     sell_mode            = p_listing->>'sell_mode',
     bundle_price         = (p_listing->>'bundle_price')::numeric,
-    image_urls           = array(select jsonb_array_elements_text(p_listing->'image_urls')),
-    image_blur_data_urls = array(select jsonb_array_elements_text(p_listing->'image_blur_data_urls')),
+    -- The admin edit path omits both keys entirely to preserve the current
+    -- photos: only reading a stale array a beat before this UPDATE runs could
+    -- resurrect a URL another admin's concurrent removal just deleted from
+    -- storage. Absent key => keep the row's own current value (migration 033).
+    image_urls           = case when p_listing ? 'image_urls'
+      then array(select jsonb_array_elements_text(p_listing->'image_urls'))
+      else image_urls end,
+    image_blur_data_urls = case when p_listing ? 'image_blur_data_urls'
+      then array(select jsonb_array_elements_text(p_listing->'image_blur_data_urls'))
+      else image_blur_data_urls end,
     contact_email        = p_listing->>'contact_email',
     contact_phone        = p_listing->>'contact_phone',
     contact_methods      = array(select jsonb_array_elements_text(p_listing->'contact_methods'))
@@ -711,11 +892,25 @@ create trigger listings_touch_updated_at
 --
 -- A status change is allowed only from: a caller with no JWT subject (service
 -- role, i.e. the Stripe confirm, the webhook, the sweep; RLS already blocks
--- anon because the seller policy needs auth.uid() = user_id), an admin claim,
--- or a transaction-local flag that only the status RPCs set. The flag is not
+-- anon because the seller policy needs auth.uid() = user_id), or a
+-- transaction-local flag that only the status RPCs set. The flag is not
 -- forgeable from a client: set_config is in pg_catalog and PostgREST exposes
 -- only the exposed schema, and is_local scopes it to the request's own
 -- transaction.
+--
+-- An admin claim is deliberately NOT a third door. With the admin update policy
+-- on listings in place, trusting the claim here would let a raw PostgREST PATCH
+-- set status = 'suspended' with no reason, no previous_status, and no
+-- suspended_at, leaving admin_restore_listing nothing to restore to. Admins go
+-- through the status RPCs like everyone else.
+--
+-- app.status_write is ONE-SHOT: every RPC that opens it closes it once its own
+-- status statements are done, because set_config's third argument scopes the
+-- setting to the TRANSACTION, not the statement, so a flag left on hands the
+-- next statement in that transaction the same permission. The reset always
+-- sits after `get diagnostics`, never between it and its update: set_config is
+-- itself a statement and would overwrite row_count. Failure paths need no
+-- handler, since an aborted (sub)transaction rolls the GUC back with it.
 create or replace function guard_listing_status_write()
 returns trigger
 language plpgsql
@@ -728,10 +923,6 @@ begin
   end if;
 
   if (select auth.uid()) is null then
-    return new;
-  end if;
-
-  if (select public.is_admin()) then
     return new;
   end if;
 
@@ -920,7 +1111,12 @@ begin
       when new.status = 'sold' then 'listing.mark_sold'
       when new.status = 'removed' then 'listing.remove'
       when new.status = 'suspended' then 'listing.suspend'
-      when old.status = 'suspended' then 'listing.restore'
+      -- Restoring out of 'removed' also classifies as restore (migration 034):
+      -- 'new.status = removed' above is checked first, so an ordinary remove
+      -- keeps classifying as 'listing.remove' regardless of who calls it. This
+      -- only adds the reverse direction, and nothing but admin_restore_listing
+      -- can produce that transition today.
+      when old.status in ('suspended', 'removed') then 'listing.restore'
       when old.status = 'sold' and new.status = 'active' then 'listing.reactivate'
       -- pending_payment -> active has two causes and they are not the same
       -- event. A paid activation is already told by payment.succeeded, so a row
@@ -938,6 +1134,16 @@ begin
   else
     v_action := 'listing.edit';
   end if;
+
+  -- A status-stable update classifies as 'listing.edit', which would file a
+  -- photo removal under the wrong slug even though image_count and
+  -- image_digest move correctly in the diff. admin_remove_listing_image sets
+  -- this override, same mechanism and same one-shot rules as app.audit_reason
+  -- and app.audit_variants. Read before the null check, so an override still
+  -- emits a row in a transition this trigger would otherwise suppress.
+  v_action := coalesce(
+    nullif(current_setting('app.audit_action', true), ''), v_action
+  );
 
   if v_action is null then
     return null;
@@ -1502,3 +1708,267 @@ $$;
 
 revoke execute on function admin_metrics_summary() from public;
 grant execute on function admin_metrics_summary() to authenticated;
+
+-- ---------------------------------------------------------------------------
+-- Admin write RPCs (moderation and image removal)
+-- ---------------------------------------------------------------------------
+-- None of these write an audit row. The listings trigger already derives
+-- 'listing.suspend' and 'listing.restore' from the status transition, so an
+-- explicit insert would produce two rows for one event. All they owe the
+-- trigger is the operator's reason, which travels through app.audit_reason
+-- because a set_config issued from TypeScript lands on a different PostgREST
+-- connection and does nothing at all, silently.
+--
+-- Suspension does not cascade to variants. If suspending rewrote variant
+-- statuses, restoring could not put a partially-sold listing back the way it
+-- was, which is also why neither RPC sets app.audit_cascade.
+
+create or replace function admin_suspend_listing(
+  p_listing_id uuid,
+  p_slug text,
+  p_note text default null
+)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_reason text;
+  v_count int;
+begin
+  if not (select public.is_admin()) then
+    raise exception 'Not authorized' using errcode = '42501';
+  end if;
+
+  if p_slug is null or p_slug not in (
+    'spam', 'wrong-category', 'prohibited-item',
+    'image-policy', 'duplicate', 'other'
+  ) then
+    raise exception 'Invalid suspension reason' using errcode = '22023';
+  end if;
+
+  -- The note when there is one, the slug otherwise, so
+  -- listings_suspension_fields_check holds while the note stays optional. The
+  -- seller-facing renderer turns a bare slug back into its own sentence, so
+  -- moderator vocabulary is never shown raw.
+  v_reason := coalesce(nullif(btrim(p_note), ''), p_slug);
+
+  perform set_config('app.status_write', 'on', true);
+  perform set_config('app.audit_reason', v_reason, true);
+
+  -- previous_status reads the pre-update value, which is what makes restore
+  -- exact in every case, including the two that matter most: a suspended
+  -- pending_payment listing restored to 'active' would be a free publish, and
+  -- one suspended out of 'sold' would un-sell a gown.
+  update public.listings
+     set status = 'suspended',
+         suspension_slug = p_slug,
+         suspension_reason = v_reason,
+         previous_status = status,
+         suspended_at = now()
+   where id = p_listing_id
+     and status <> 'suspended';
+
+  get diagnostics v_count = row_count;
+  if v_count = 0 then
+    raise exception 'Listing not found' using errcode = 'P0002';
+  end if;
+
+  -- One-shot, like app.audit_cascade: cleared right after the triggering
+  -- statement, or a later write in the same transaction inherits a moderation
+  -- note that was never about it. app.status_write closes for the same reason,
+  -- and a leaked capability is worse than a leaked note: it hands the next
+  -- statement in the transaction the right to write status directly.
+  perform set_config('app.status_write', '', true);
+  perform set_config('app.audit_reason', '', true);
+end;
+$$;
+
+revoke execute on function admin_suspend_listing(uuid, text, text) from public;
+grant execute on function admin_suspend_listing(uuid, text, text) to authenticated;
+
+-- Restores out of either 'suspended' or 'removed' (migration 034 widened this
+-- from suspended-only, to admit remove_listing()'s own widening beside it).
+-- Suspended still restores to the exact previous_status it was suspended out
+-- of (unchanged). Removed restores to 'active' only if previous_status says
+-- the listing had already gone live (active or sold) before removal; a
+-- listing removed while still pending_payment -- or one removed before
+-- migration 034 existed, so it carries no previous_status at all -- restores
+-- to pending_payment instead. That is the SAFE side of the ambiguity: a
+-- listing that never crossed the fee gate must never come back active for
+-- free, and restoring to anything but exactly 'active' or 'pending_payment'
+-- makes no sense the way restoring a suspension to its exact prior status
+-- does -- there is no reason to bring a removed-then-sold listing back as
+-- 'sold' rather than onto the market. This is what makes an admin able to
+-- restore ANY removed listing, including one a seller removed themselves
+-- through their own RemoveListingButton (which already reaches a
+-- pending_payment listing -- nothing gates that today), without ever
+-- bypassing an unpaid fee.
+create or replace function admin_restore_listing(p_listing_id uuid)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_count int;
+begin
+  if not (select public.is_admin()) then
+    raise exception 'Not authorized' using errcode = '42501';
+  end if;
+
+  perform set_config('app.status_write', 'on', true);
+
+  -- All four columns clear together so listings_suspension_fields_check holds.
+  -- sold_at is deliberately untouched: neither suspend nor remove clears it, so
+  -- a listing routed out of 'sold' restores with its sale date intact.
+  update public.listings
+     set status = case
+           when status = 'suspended' then previous_status
+           when previous_status in ('active', 'sold') then 'active'
+           else 'pending_payment'
+         end,
+         previous_status = null,
+         suspension_slug = null,
+         suspension_reason = null,
+         suspended_at = null
+   where id = p_listing_id
+     and status in ('suspended', 'removed');
+
+  get diagnostics v_count = row_count;
+  if v_count = 0 then
+    raise exception 'Listing not found' using errcode = 'P0002';
+  end if;
+
+  perform set_config('app.status_write', '', true);
+end;
+$$;
+
+revoke execute on function admin_restore_listing(uuid) from public;
+grant execute on function admin_restore_listing(uuid) to authenticated;
+
+-- Ban's companion sweep. One statement, so it is atomic within the database,
+-- and one audit row per listing from the trigger. It RETURNS the ids it
+-- suspended because the server action needs them to invalidate each cached
+-- detail page, and collecting them afterwards would find nothing: the rows are
+-- no longer active by then.
+create or replace function admin_suspend_seller_listings(
+  p_user_id uuid,
+  p_slug text,
+  p_note text default null
+)
+returns uuid[]
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_reason text;
+  v_ids uuid[];
+begin
+  if not (select public.is_admin()) then
+    raise exception 'Not authorized' using errcode = '42501';
+  end if;
+
+  if p_slug is null or p_slug not in (
+    'spam', 'wrong-category', 'prohibited-item',
+    'image-policy', 'duplicate', 'other'
+  ) then
+    raise exception 'Invalid suspension reason' using errcode = '22023';
+  end if;
+
+  v_reason := coalesce(nullif(btrim(p_note), ''), p_slug);
+
+  perform set_config('app.status_write', 'on', true);
+  perform set_config('app.audit_reason', v_reason, true);
+
+  with swept as (
+    update public.listings
+       set status = 'suspended',
+           suspension_slug = p_slug,
+           suspension_reason = v_reason,
+           previous_status = status,
+           suspended_at = now()
+     where user_id = p_user_id
+       and status = 'active'
+    returning id
+  )
+  select coalesce(array_agg(id), '{}'::uuid[]) into v_ids from swept;
+
+  perform set_config('app.status_write', '', true);
+  perform set_config('app.audit_reason', '', true);
+
+  return v_ids;
+end;
+$$;
+
+revoke execute on function admin_suspend_seller_listings(uuid, text, text) from public;
+grant execute on function admin_suspend_seller_listings(uuid, text, text) to authenticated;
+
+-- Removal only; replace is deferred, because it means driving the Vision plus
+-- Sharp pipeline from a page that has no uploader.
+--
+-- Takes the URL and does the array surgery here rather than accepting
+-- pre-computed arrays, so a replayed request cannot rewrite a listing's photos
+-- into anything it likes. The index is found in the listing's own stored array
+-- or the call fails, and the blur entry at that same index goes with it or
+-- listings_image_arrays_check rejects the write.
+create or replace function admin_remove_listing_image(
+  p_listing_id uuid,
+  p_image_url text
+)
+returns void
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_urls text[];
+  v_blurs text[];
+  v_index int;
+begin
+  if not (select public.is_admin()) then
+    raise exception 'Not authorized' using errcode = '42501';
+  end if;
+
+  -- Locked, not a plain read: two operators removing different photos from the
+  -- same listing would otherwise both compute their arrays from the same
+  -- pre-transaction snapshot, and the second write would resurrect the URL the
+  -- first one removed after its storage object was already deleted. The second
+  -- transaction blocks here and re-reads the committed array instead.
+  select l.image_urls, l.image_blur_data_urls
+    into v_urls, v_blurs
+    from public.listings l
+   where l.id = p_listing_id
+     for update;
+
+  if v_urls is null then
+    raise exception 'Listing not found' using errcode = 'P0002';
+  end if;
+
+  v_index := array_position(v_urls, p_image_url);
+  if v_index is null then
+    raise exception 'Image not found' using errcode = 'P0002';
+  end if;
+
+  if cardinality(v_urls) <= 1 then
+    raise exception 'A listing must keep at least one photo'
+      using errcode = '23514';
+  end if;
+
+  perform set_config('app.audit_action', 'listing.image_remove', true);
+
+  update public.listings
+     set image_urls = v_urls[1:v_index - 1] || v_urls[v_index + 1:],
+         image_blur_data_urls =
+           v_blurs[1:v_index - 1] || v_blurs[v_index + 1:]
+   where id = p_listing_id;
+
+  -- One-shot, same rule as app.audit_reason and app.audit_variants.
+  perform set_config('app.audit_action', '', true);
+end;
+$$;
+
+revoke execute on function admin_remove_listing_image(uuid, text) from public;
+grant execute on function admin_remove_listing_image(uuid, text) to authenticated;

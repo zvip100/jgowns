@@ -90,14 +90,16 @@ vi.mock("@/lib/toast", () => ({
 }));
 
 import {
-  EMPTY_LISTING_ERRORS,
-  collectListingFieldErrors,
   deriveSellMode,
-  hasListingErrors,
   useListingFormSubmit,
   validateListingForm,
-  type ListingFormErrors,
 } from "@/hooks/useListingFormSubmit";
+import {
+  EMPTY_LISTING_ERRORS,
+  collectListingFieldErrors,
+  hasListingErrors,
+  type ListingFormErrors,
+} from "@/lib/listing-form";
 
 const LISTING_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const EXISTING_URL = "https://example.com/existing.webp";
@@ -691,7 +693,7 @@ describe("useListingFormSubmit", () => {
       expect(loadingSetterValues()).toEqual([true, false]);
     });
 
-    it("shows a generic inline message when the action rejects with a non-Error", async () => {
+    it("toasts a generic message when the action rejects with a non-Error, staying off the inline surface", async () => {
       setValidCreateState();
       mockCreateListing.mockRejectedValue("kaboom");
 
@@ -703,9 +705,10 @@ describe("useListingFormSubmit", () => {
       await submit.handleSubmit();
 
       expect(mockUnstableRethrow).toHaveBeenCalledWith("kaboom");
-      expect(mockToastError).not.toHaveBeenCalled();
-      expect(lastErrors().general).toBe("Something went wrong.");
-      expect(lastErrors().fields).toEqual({});
+      expect(mockToastError).toHaveBeenCalledWith("Something went wrong.");
+      // A thrown failure is a submit outcome, not field validation: only the
+      // initial reset touches inline errors.
+      expect(errorSetterValues()).toEqual([EMPTY_LISTING_ERRORS]);
       expect(loadingSetterValues()).toEqual([true, false]);
     });
   });
@@ -1281,9 +1284,9 @@ describe("useListingFormSubmit", () => {
 
       submit.sizesController.removeRow("row-1");
 
-      const rowsValues = rowSetterValues();
-      expect(rowsValues).toEqual([
-        [{ key: "row-0", size: "8", size_group: "adult", price: "800" }],
+      const [rowsUpdate] = rowSetterValues() as RowsUpdater[];
+      expect(rowsUpdate(makeTwoRows())).toEqual([
+        { key: "row-0", size: "8", size_group: "adult", price: "800" },
       ]);
       const setOnlyCalls = hookState.setterCalls.filter(
         (call) => call.index === STATE_SELL_ONLY_AS_SET,
@@ -1303,7 +1306,11 @@ describe("useListingFormSubmit", () => {
 
       submit.sizesController.removeRow("row-0");
 
-      expect(rowSetterValues()).toEqual([]);
+      // The setter still runs (removeRow always passes an updater function),
+      // but the updater hands back the same single row unchanged.
+      const [rowsUpdate] = rowSetterValues() as RowsUpdater[];
+      const singleRow = makeValidRows();
+      expect(rowsUpdate(singleRow)).toEqual(singleRow);
     });
 
     it("unchecking 'set only' leaves the per-size prices intact", () => {

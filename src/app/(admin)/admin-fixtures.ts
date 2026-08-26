@@ -39,6 +39,13 @@ import type {
 /** Fixed "now" so overview queues are deterministic under Cache Components (no Date.now()). */
 export const FIXTURE_AS_OF = "2026-07-31T18:00:00.000Z";
 
+/** The moderation columns as they sit on every listing that is not suspended. */
+const NOT_SUSPENDED = {
+  suspension_slug: null,
+  suspension_reason: null,
+  previous_status: null,
+} as const;
+
 /**
  * Inline SVG stand-in for a gown photo. A data URI rather than a remote URL
  * because next.config only allows the Supabase storage host, and rather than a
@@ -93,6 +100,7 @@ export const FIXTURE_LISTINGS: AdminListing[] = [
     created_at: "2026-07-20T14:00:00.000Z",
     saved_count: 12,
     seller_email: "sara@example.com",
+    ...NOT_SUSPENDED,
     sizes: [
       size("s1", "11111111-1111-4111-8111-111111111111", "8", 450, "available", 0),
       size("s2", "11111111-1111-4111-8111-111111111111", "10", 450, "available", 1),
@@ -118,6 +126,7 @@ export const FIXTURE_LISTINGS: AdminListing[] = [
     created_at: "2026-06-10T10:00:00.000Z",
     saved_count: 4,
     seller_email: "leah@example.com",
+    ...NOT_SUSPENDED,
     sizes: [
       size("s3", "22222222-2222-4222-8222-222222222222", "12", 320, "sold", 0),
       size("s4", "22222222-2222-4222-8222-222222222222", "14", 320, "sold", 1),
@@ -144,6 +153,7 @@ export const FIXTURE_LISTINGS: AdminListing[] = [
     created_at: "2026-07-28T09:00:00.000Z",
     saved_count: 0,
     seller_email: "sara@example.com",
+    ...NOT_SUSPENDED,
     sizes: [
       size("s5", "33333333-3333-4333-8333-333333333333", "8", 85, "available", 0),
     ],
@@ -168,6 +178,7 @@ export const FIXTURE_LISTINGS: AdminListing[] = [
     created_at: "2026-07-01T16:30:00.000Z",
     saved_count: 7,
     seller_email: "rivka@example.com",
+    ...NOT_SUSPENDED,
     suspension_slug: "image-policy",
     suspension_reason: "Photos show identifiable faces that were not blurred.",
     previous_status: "active",
@@ -195,6 +206,7 @@ export const FIXTURE_LISTINGS: AdminListing[] = [
     created_at: "2026-05-15T11:00:00.000Z",
     saved_count: 2,
     seller_email: "leah@example.com",
+    ...NOT_SUSPENDED,
     sizes: [
       size("s7", "55555555-5555-4555-8555-555555555555", "10", 175, "available", 0),
     ],
@@ -219,6 +231,7 @@ export const FIXTURE_LISTINGS: AdminListing[] = [
     created_at: "2026-04-01T08:00:00.000Z",
     saved_count: 21,
     seller_email: "chaya@example.com",
+    ...NOT_SUSPENDED,
     sizes: [
       size("s8", "66666666-6666-4666-8666-666666666666", "4", 400, "available", 0),
       size("s9", "66666666-6666-4666-8666-666666666666", "6", 400, "sold", 1),
@@ -659,7 +672,7 @@ export const FIXTURE_OVERVIEW_STATS: AdminOverviewStats = {
   users_total: 5,
   // 1, not 2: the overview's "New this week" card derives its rows from
   // FIXTURE_LISTINGS, and only Navy girls party dress (Jul 28) falls inside
-  // 7 days of FIXTURE_AS_OF. In Phase 3 both come from the same query.
+  // 7 days of FIXTURE_AS_OF, matching the query the real overview runs.
   new_listings_this_week: 1,
   sold_this_week: 0,
   new_users_this_week: 0,

@@ -4,9 +4,9 @@ import { postAuthPath, safeNextPath } from "@/lib/auth-redirect";
 import { SITE_URL } from "@/lib/site";
 import { createClient } from "@/lib/supabase/server";
 
-function loginErrorUrl(next: string | null): string {
+function loginErrorUrl(next: string | null, reason: "auth" | "banned" = "auth"): string {
   const url = new URL("/login", SITE_URL);
-  url.searchParams.set("error", "auth");
+  url.searchParams.set("error", reason);
   if (next) url.searchParams.set("next", next);
   return url.toString();
 }
@@ -25,7 +25,8 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
 
   if (error) {
     console.error("Auth callback failed:", error.message);
-    return NextResponse.redirect(loginErrorUrl(next));
+    const reason = error.code === "user_banned" ? "banned" : "auth";
+    return NextResponse.redirect(loginErrorUrl(next, reason));
   }
 
   // Recovery links carry next=/reset-password, which postAuthPath passes through

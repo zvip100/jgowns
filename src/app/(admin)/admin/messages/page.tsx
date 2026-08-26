@@ -4,7 +4,7 @@ import { parseAdminListParams } from "@/lib/admin/list";
 import { getAdminMessages } from "@/lib/queries/admin/messages";
 
 import { AdminListPage } from "../../AdminListPage";
-import { isAdminDemoMode } from "../../admin-demo";
+import { isAdminDemoMode } from "@/lib/admin/demo";
 import { demoMessages } from "../../admin-fixtures";
 import { formatAdminDateTime } from "../../admin-url";
 

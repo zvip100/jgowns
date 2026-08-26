@@ -6,7 +6,7 @@ import { CategorySizeSelect } from '@/components/CategorySizeSelect';
 import { InputGroupField } from '@/components/form/InputGroupField';
 import { Button } from '@/components/ui/button';
 
-import type { SizeRowError } from '@/hooks/useListingFormSubmit';
+import type { SizeRowError } from '@/lib/listing-form';
 import type {
   GownCategoryId,
   ListingSizeRowState,

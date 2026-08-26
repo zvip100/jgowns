@@ -11,7 +11,7 @@ import {
   auditActorName,
   describeAuditChanges,
 } from "../../admin-audit-labels";
-import { isAdminDemoMode } from "../../admin-demo";
+import { isAdminDemoMode } from "@/lib/admin/demo";
 import { demoAuditLog } from "../../admin-fixtures";
 import { formatAdminDateTime } from "../../admin-url";
 import { AuditActionPill } from "../../AuditActionPill";

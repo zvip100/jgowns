@@ -1,13 +1,13 @@
 import Link from "next/link";
+
 import { TableCell, TableRow } from "@/components/ui/table";
 import { ADMIN_EMPTY_VALUE } from "@/lib/admin/constants";
-
+import { isAdminDemoMode } from "@/lib/admin/demo";
 import { parseAdminListParams } from "@/lib/admin/list";
 import { getAdminPayments } from "@/lib/queries/admin/payments";
 
 import { AdminListPage } from "../../AdminListPage";
-import { AdminPendingActionButton } from "../../AdminPendingActionButton";
-import { isAdminDemoMode } from "../../admin-demo";
+import { AdminRescuePaymentButton } from "../../admin-action-buttons";
 import { demoPayments } from "../../admin-fixtures";
 import {
   formatAdminDate,
@@ -15,10 +15,9 @@ import {
   stripeSessionUrl,
 } from "../../admin-url";
 
+import type { Metadata } from "next";
 import type { AdminListResult } from "@/lib/admin/list";
 import type { AdminPaymentRow } from "@/lib/admin/types";
-
-import type { Metadata } from "next";
 import type { PageSearchParams } from "@/lib/types";
 
 export const metadata: Metadata = {
@@ -48,9 +47,13 @@ async function loadPayments(
   return getAdminPayments(params);
 }
 
-export default function AdminPaymentsPage({
+export default async function AdminPaymentsPage({
   searchParams,
 }: AdminPaymentsPageProps) {
+  // Read here rather than inside loadPayments: the rescue button is rendered by
+  // this page, and a demo screen must not offer a write it will refuse.
+  const isDemo = await isAdminDemoMode();
+
   return (
     <AdminListPage
       basePath="/admin/payments"
@@ -111,14 +114,9 @@ export default function AdminPaymentsPage({
           </TableCell>
           <TableCell>
             {payment.status === "pending" ? (
-              <AdminPendingActionButton
-                title="Rescue payment?"
-                description="Re-verifies the Checkout Session with Stripe, then activates the listing if paid."
-                confirmLabel="Rescue"
-                ariaLabel="Rescue payment"
-                buttonLabel="Rescue"
-                icon="rescue"
-                size="compact"
+              <AdminRescuePaymentButton
+                paymentId={payment.id}
+                isDemo={isDemo}
               />
             ) : (
               <span className="text-xs text-(--muted-ink)">

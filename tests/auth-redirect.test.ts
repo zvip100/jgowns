@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 
 import {
+  authErrorReasonFromHash,
   postAuthPath,
   safeNextPath,
   safePostAuthPath,
@@ -124,6 +125,31 @@ describe("postAuthPath", () => {
         null,
       ),
     ).toBe("/dashboard");
+  });
+});
+
+describe("authErrorReasonFromHash", () => {
+  it("returns banned for Supabase's user_banned fragment", () => {
+    expect(
+      authErrorReasonFromHash(
+        "#error=access_denied&error_code=user_banned&error_description=User+is+banned&sb=",
+      ),
+    ).toBe("banned");
+  });
+
+  it("returns auth for any other error fragment", () => {
+    expect(authErrorReasonFromHash("#error=access_denied&error_code=other")).toBe(
+      "auth",
+    );
+  });
+
+  it("works with or without the leading #", () => {
+    expect(authErrorReasonFromHash("error_code=user_banned")).toBe("banned");
+  });
+
+  it("returns null when there is no fragment or no error in it", () => {
+    expect(authErrorReasonFromHash("")).toBeNull();
+    expect(authErrorReasonFromHash("#next=%2Fdashboard")).toBeNull();
   });
 });
 

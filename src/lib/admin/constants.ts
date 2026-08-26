@@ -24,7 +24,7 @@ export const ADMIN_METRICS_WEEKS = 12;
  * the Phase 1 fixtures so the UI can be reviewed against a full spread of
  * states before the marketplace has one. Lives here rather than beside the
  * toggle because a "use client" module's exports cannot be read server-side.
- * To remove the feature: delete this constant, `(admin)/admin-demo.ts`,
+ * To remove the feature: delete this constant, `lib/admin/demo.ts`,
  * `(admin)/AdminDemoToggle.tsx`, the `demo*` helpers in `admin-fixtures.ts`,
  * the strip in `(admin)/layout.tsx`, and the one-line branch in each loader.
  */
@@ -35,3 +35,10 @@ export const ADMIN_DEMO_COOKIE = "jgowns_admin_demo";
  * is banned in every user-facing surface (AGENTS).
  */
 export const ADMIN_EMPTY_VALUE = "–";
+
+/**
+ * Why a write control is inert, and why an action refused. Lives here rather
+ * than in `lib/admin/guard.ts` so the client leaves that render the disabled
+ * triggers can read it without pulling a server-only module into the bundle.
+ */
+export const ADMIN_DEMO_MODE_MESSAGE = "Turn off demo mode to make changes.";

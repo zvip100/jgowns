@@ -1,3 +1,15 @@
+import type { SuspensionSlug } from '@/lib/suspension';
+
+export const LISTING_STATUSES = [
+  'active',
+  'sold',
+  'removed',
+  'pending_payment',
+  'suspended',
+] as const;
+
+export type ListingStatus = (typeof LISTING_STATUSES)[number];
+
 export type Listing = {
   id: string;
   user_id: string;
@@ -14,8 +26,16 @@ export type Listing = {
   contact_email: string | null;
   contact_phone: string | null;
   contact_methods: ContactMethod[];
-  status: 'active' | 'sold' | 'removed' | 'pending_payment';
+  status: ListingStatus;
   created_at: string;
+  /**
+   * Moderation state, written and cleared together by the suspend/restore RPCs.
+   * `suspension_reason` is the operator's note, falling back to the slug when
+   * none was given; `sellerSuspensionMessage` is what renders it.
+   */
+  suspension_slug: SuspensionSlug | null;
+  suspension_reason: string | null;
+  previous_status: ListingStatus | null;
 };
 
 /** One Stripe Checkout attempt for a listing's one-time publishing fee. */

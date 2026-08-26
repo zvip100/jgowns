@@ -1,25 +1,22 @@
-import type { Listing, ListingPayment, ListingSize, ListingWithSizes } from "@/lib/types";
+import type {
+  Listing,
+  ListingPayment,
+  ListingSize,
+  ListingStatus,
+  ListingWithSizes,
+} from "@/lib/types";
 
 /**
- * Admin listing status including `suspended`.
- * Phase 3 must widen marketplace `Listing.status` (and the DB check constraint)
- * to include `suspended`; until then this type stays admin-local so fixtures and
- * UI can render moderation states without touching seller paths.
+ * Marketplace `Listing["status"]` carries `suspended` from Phase 3 on, so this
+ * is a plain alias, kept because the admin surface reads better with it.
  */
-export type AdminListingStatus =
-  | Listing["status"]
-  | "suspended";
+export type AdminListingStatus = ListingStatus;
 
-export type AdminListing = Omit<Listing, "status"> & {
-  status: AdminListingStatus;
+export type AdminListing = Listing & {
   sizes: ListingSize[];
   /** Aggregate wishlist saves only — never a named buyer's list (§4.8). */
   saved_count: number;
   seller_email: string;
-  /** Present when status is suspended (Phase 3 columns; fixture-only for now). */
-  suspension_reason?: string | null;
-  suspension_slug?: string | null;
-  previous_status?: AdminListingStatus | null;
 };
 
 export type AdminUser = {
@@ -197,21 +194,8 @@ export type AdminMetrics = {
   summary: AdminMetricsSummary;
 };
 
-/**
- * Marketplace ListingWithSizes is a subset of admin listing fields. `suspended`
- * maps to `removed` until Phase 3 widens `Listing.status`.
- */
+/** Drops the two admin-only decorations; every other field already matches. */
 export function toListingWithSizes(listing: AdminListing): ListingWithSizes {
-  const {
-    saved_count: _saved,
-    seller_email: _email,
-    suspension_reason: _reason,
-    suspension_slug: _slug,
-    previous_status: _prev,
-    status,
-    ...rest
-  } = listing;
-  const marketplaceStatus: Listing["status"] =
-    status === "suspended" ? "removed" : status;
-  return { ...rest, status: marketplaceStatus };
+  const { saved_count: _saved, seller_email: _email, ...rest } = listing;
+  return rest;
 }

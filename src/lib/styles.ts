@@ -1,4 +1,5 @@
 import type { AdminActorRole } from "@/lib/admin/types";
+import type { ListingStatus } from "@/lib/types";
 
 /** Shared gold-gradient primary call-to-action button styling */
 export const PRIMARY_CTA_CLASS =
@@ -74,6 +75,20 @@ export const PILL_TONE_CLASS: Record<PillTone, string> = {
   gold: "bg-(--accent)/15 text-(--accent-deep)",
   sold: "bg-(--sold) text-white",
   neutral: "bg-[#f5efe4] text-[#6a5544]",
+};
+
+/**
+ * One listing status reads as one tone everywhere it is shown. Lives here
+ * rather than in the admin segment because the seller dashboard row renders the
+ * same five statuses, and two copies of this map is how a suspended badge ends
+ * up a different red on the two surfaces.
+ */
+export const LISTING_STATUS_TONE: Record<ListingStatus, PillTone> = {
+  active: "positive",
+  sold: "sold",
+  removed: "warning",
+  pending_payment: "gold",
+  suspended: "critical",
 };
 
 /**

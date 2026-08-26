@@ -3,48 +3,79 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Ban, Pencil } from "lucide-react";
 
+import { FormInfoBanner } from "@/components/form/FormInfoBanner";
+import { TableCell, TableRow } from "@/components/ui/table";
 import { ADMIN_EMPTY_VALUE } from "@/lib/admin/constants";
+import { isAdminDemoMode } from "@/lib/admin/demo";
+import { toListingWithSizes } from "@/lib/admin/types";
 import {
   listingPriceSummary,
   sortListingSizes,
 } from "@/lib/listing-variants";
-import { FormInfoBanner } from "@/components/form/FormInfoBanner";
-import { TableCell, TableRow } from "@/components/ui/table";
+import { getAdminListing } from "@/lib/queries/admin/listings";
+import { getAuditLogForListing } from "@/lib/queries/admin/logs";
+import { getAdminPaymentsFor } from "@/lib/queries/admin/payments";
+import {
+  SUSPENSION_SLUG_LABELS,
+  sellerSuspensionMessage,
+} from "@/lib/suspension";
 
 import { AdminFact } from "../../../AdminFact";
 import { AdminListPanel } from "../../../AdminListPanel";
 import { AdminPageHeader } from "../../../AdminPageHeader";
 import { AdminSectionHeading } from "../../../AdminSectionHeading";
-import { AdminPendingActionButton } from "../../../AdminPendingActionButton";
 import { AdminTable } from "../../../AdminTable";
 import { AdminThumbnail } from "../../../AdminThumbnail";
-import { getAdminListing } from "@/lib/queries/admin/listings";
-import { getAuditLogForListing } from "@/lib/queries/admin/logs";
-import { getAdminPaymentsFor } from "@/lib/queries/admin/payments";
-
-import { adminCategoryLabel, auditActorName } from "../../../admin-audit-labels";
 import { AuditActionPill } from "../../../AuditActionPill";
 import { AuditActorGlyph } from "../../../AuditActorGlyph";
-import { isAdminDemoMode } from "../../../admin-demo";
+import { StatusPill } from "../../../StatusPill";
+import {
+  AdminMarkListingSoldButton,
+  AdminMarkSizeSoldButton,
+  AdminReactivateListingButton,
+  AdminReactivateSizeButton,
+  AdminRemoveImageButton,
+  AdminRemoveListingButton,
+  AdminRestoreListingButton,
+  AdminSuspendListingButton,
+} from "../../../admin-action-buttons";
+import {
+  ADMIN_SELL_MODE_LABELS,
+  adminCategoryLabel,
+  auditActorName,
+} from "../../../admin-audit-labels";
 import {
   FIXTURE_PAYMENTS,
   demoAuditLogForListing,
   getFixtureListing,
 } from "../../../admin-fixtures";
-import { toListingWithSizes } from "@/lib/admin/types";
 import {
   formatAdminDate,
   formatAdminDateTime,
   formatCents,
   stripeSessionUrl,
 } from "../../../admin-url";
-import { StatusPill } from "../../../StatusPill";
 
 import type { Metadata } from "next";
+import type { AdminListingStatus } from "@/lib/admin/types";
 
 type AdminListingDetailPageProps = {
   params: Promise<{ id: string }>;
 };
+
+/**
+ * Mirrors admin_restore_listing's own CASE for a removed listing (§4.3
+ * migration 034): active only if the listing had already gone live before
+ * removal, pending_payment otherwise (including a legacy row with no
+ * previous_status at all, on the safe side of that ambiguity).
+ */
+function removedRestoreTarget(
+  previousStatus: AdminListingStatus | null,
+): AdminListingStatus {
+  return previousStatus === "active" || previousStatus === "sold"
+    ? "active"
+    : "pending_payment";
+}
 
 /** Deduped so generateMetadata and the page body share one read. */
 const loadListing = cache(async (id: string) => {
@@ -108,10 +139,19 @@ export default async function AdminListingDetailPage({
         </div>
       </AdminPageHeader>
 
-      {listing.status === "suspended" && listing.suspension_reason && (
+      {listing.status === "suspended" && (
         <FormInfoBanner icon={Ban}>
-          <strong>Suspended by moderation.</strong>{" "}
-          {listing.suspension_reason}
+          <strong>
+            Suspended:{" "}
+            {listing.suspension_slug
+              ? SUSPENSION_SLUG_LABELS[listing.suspension_slug]
+              : "reason not recorded"}
+            .
+          </strong>{" "}
+          {sellerSuspensionMessage(
+            listing.suspension_slug,
+            listing.suspension_reason,
+          )}
         </FormInfoBanner>
       )}
 
@@ -133,7 +173,9 @@ export default async function AdminListingDetailPage({
             </AdminFact>
             <AdminFact label="Condition">{listing.condition}</AdminFact>
             <AdminFact label="Color">{listing.color ?? ADMIN_EMPTY_VALUE}</AdminFact>
-            <AdminFact label="Sell mode">{listing.sell_mode}</AdminFact>
+            <AdminFact label="Sell mode">
+              {ADMIN_SELL_MODE_LABELS[listing.sell_mode]}
+            </AdminFact>
             <AdminFact label="Saved count">{listing.saved_count}</AdminFact>
             <AdminFact label="Created">{formatAdminDate(listing.created_at)}</AdminFact>
             <AdminFact label="Email">
@@ -167,14 +209,11 @@ export default async function AdminListingDetailPage({
                     alt=""
                     size={96}
                   />
-                  <AdminPendingActionButton
-                    title="Remove this photo?"
-                    description="A listing must keep at least one photo."
-                    confirmLabel="Remove"
-                    ariaLabel={`Remove photo ${i + 1}`}
-                    icon="removeImage"
-                    confirmVariant="destructive"
-                    size="icon"
+                  <AdminRemoveImageButton
+                    listingId={listing.id}
+                    imageUrl={url}
+                    position={i + 1}
+                    isDemo={isDemo}
                   />
                 </div>
               ))
@@ -203,25 +242,25 @@ export default async function AdminListingDetailPage({
                 >
                   {s.status === "sold" ? "Sold" : "Available"}
                 </span>
-                {s.status === "available" ? (
-                  <AdminPendingActionButton
-                    title={`Mark size ${s.size} sold?`}
-                    description="Marks this one gown sold on the seller's behalf."
-                    confirmLabel="Mark sold"
-                    ariaLabel={`Mark size ${s.size} sold`}
-                    icon="markSold"
-                    size="icon"
-                  />
-                ) : (
-                  <AdminPendingActionButton
-                    title={`Reactivate size ${s.size}?`}
-                    description="Returns this one gown to available."
-                    confirmLabel="Reactivate"
-                    ariaLabel={`Reactivate size ${s.size}`}
-                    icon="reactivate"
-                    size="icon"
-                  />
-                )}
+                {/* Both RPCs require an active parent, so on any other status
+                    every one of these buttons is a guaranteed failure. Mirrors
+                    ListingRow's showPerSizeActions. */}
+                {listing.status === "active" &&
+                  (s.status === "available" ? (
+                    <AdminMarkSizeSoldButton
+                      listingId={listing.id}
+                      sizeId={s.id}
+                      size={s.size}
+                      isDemo={isDemo}
+                    />
+                  ) : (
+                    <AdminReactivateSizeButton
+                      listingId={listing.id}
+                      sizeId={s.id}
+                      size={s.size}
+                      isDemo={isDemo}
+                    />
+                  ))}
               </span>
             </li>
           ))}
@@ -230,48 +269,30 @@ export default async function AdminListingDetailPage({
 
       <section>
         <AdminSectionHeading>Actions</AdminSectionHeading>
-        <p className="mt-1 text-sm text-(--muted-ink)">
-          Confirm dialogs open; writes are inert until Phase 3.
-        </p>
         <div className="mt-3 flex flex-wrap gap-2">
-          {listing.status === "suspended" ? (
-            <AdminPendingActionButton
-              title="Restore listing?"
-              description={`Restores the listing to ${listing.previous_status ?? "its previous status"}.`}
-              confirmLabel="Restore"
-              ariaLabel="Restore listing"
-              buttonLabel="Restore"
-              icon="restore"
+          {listing.status === "suspended" || listing.status === "removed" ? (
+            <AdminRestoreListingButton
+              listingId={listing.id}
+              previousStatus={
+                listing.status === "suspended"
+                  ? listing.previous_status
+                  : removedRestoreTarget(listing.previous_status)
+              }
+              isDemo={isDemo}
             />
           ) : (
-            <AdminPendingActionButton
-              title="Suspend listing?"
-              description="The seller will see a moderation notice with your reason."
-              confirmLabel="Suspend"
-              ariaLabel="Suspend listing"
-              buttonLabel="Suspend"
-              icon="ban"
-              confirmVariant="destructive"
-            />
+            <>
+              <AdminSuspendListingButton listingId={listing.id} isDemo={isDemo} />
+              <AdminRemoveListingButton listingId={listing.id} isDemo={isDemo} />
+            </>
           )}
           {listing.status === "active" && (
-            <AdminPendingActionButton
-              title="Mark listing sold?"
-              description="Marks this listing and its sizes as sold on the seller's behalf."
-              confirmLabel="Mark sold"
-              ariaLabel="Mark listing sold"
-              buttonLabel="Mark sold"
-              icon="markSold"
-            />
+            <AdminMarkListingSoldButton listingId={listing.id} isDemo={isDemo} />
           )}
           {listing.status === "sold" && (
-            <AdminPendingActionButton
-              title="Reactivate listing?"
-              description="Returns this listing to active on the seller's behalf."
-              confirmLabel="Reactivate"
-              ariaLabel="Reactivate listing"
-              buttonLabel="Reactivate"
-              icon="reactivate"
+            <AdminReactivateListingButton
+              listingId={listing.id}
+              isDemo={isDemo}
             />
           )}
         </div>
