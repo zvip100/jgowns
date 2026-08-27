@@ -17,7 +17,7 @@ export default async function WishlistServerSync() {
   try {
     user = await getCurrentUser();
     if (user) {
-      serverItems = await getUserWishlist();
+      serverItems = await getUserWishlist(user.id);
     }
   } catch (error) {
     console.error("[WishlistServerSync] Failed to load account wishlist", error);

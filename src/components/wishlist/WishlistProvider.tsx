@@ -221,7 +221,6 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
   useEffect(() => {
     if (!isHydrated || !serverPayload) return;
     if (lastSyncedAuthRef.current === serverPayload.isAuthenticated) return;
-    lastSyncedAuthRef.current = serverPayload.isAuthenticated;
 
     setIsAuthenticated(serverPayload.isAuthenticated);
     authedRef.current = serverPayload.isAuthenticated;
@@ -235,9 +234,26 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
       serverItems: serverPayload.items,
     });
 
-    // Signed out (or server unavailable): keep the mirror exactly as-is. Never
-    // clear it, and never touch ownerId (edits made while signed out inherit it).
-    if (plan.type === 'keep-local') return;
+    if (plan.type === 'keep-local') {
+      if (!serverPayload.isAuthenticated) {
+        // Sign-out is a completed auth transition. Keep the mirror and its owner
+        // so signed-out edits still belong to the account they came from.
+        lastSyncedAuthRef.current = false;
+        return;
+      }
+
+      // The account is known but its wishlist read failed. Keep this auth state
+      // retryable, and let the first signed-in account claim only a guest cache.
+      lastSyncedAuthRef.current = null;
+      const userId = serverPayload.userId;
+      if (userId !== null && ownerIdRef.current === null) {
+        ownerIdRef.current = userId;
+        persist(itemsRef.current, userId);
+      }
+      return;
+    }
+
+    lastSyncedAuthRef.current = serverPayload.isAuthenticated;
 
     const userId = serverPayload.userId;
 

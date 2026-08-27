@@ -138,7 +138,7 @@ export async function mergeWishlist(
   }
 
   try {
-    const merged = await getUserWishlist();
+    const merged = await getUserWishlist(user.id);
     return { success: true, items: merged };
   } catch {
     return { success: false, error: "Couldn't load your wishlist. Please try again." };

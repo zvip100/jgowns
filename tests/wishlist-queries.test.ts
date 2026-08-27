@@ -6,6 +6,7 @@ const {
   chainIn,
   setQueryResult,
   serverClient,
+  userChainEq,
   userChainOrder,
   setUserQueryResult,
 } = vi.hoisted(() => {
@@ -23,9 +24,10 @@ const {
   chain.then = (resolve: (value: { data: unknown; error: unknown }) => void) =>
     resolve(queryResult);
 
-  // Session-scoped chain for getUserWishlist: from().select().order() → thenable.
+  // Session-scoped chain for getUserWishlist: from().select().eq().order() → thenable.
   const userChain: Record<string, unknown> = {};
   userChain.select = vi.fn().mockReturnValue(userChain);
+  userChain.eq = vi.fn().mockReturnValue(userChain);
   userChain.order = vi.fn().mockReturnValue(userChain);
   userChain.then = (
     resolve: (value: { data: unknown; error: unknown }) => void,
@@ -39,6 +41,7 @@ const {
       queryResult = result;
     },
     serverClient: { from: vi.fn().mockReturnValue(userChain) },
+    userChainEq: userChain.eq,
     userChainOrder: userChain.order,
     setUserQueryResult: (result: { data: unknown; error: unknown }) => {
       userQueryResult = result;
@@ -55,6 +58,7 @@ import { getUserWishlist, getWishlistStatus } from "@/lib/queries/wishlist";
 
 const ID_ACTIVE = "11111111-1111-1111-1111-111111111111";
 const ID_SOLD = "22222222-2222-2222-2222-222222222222";
+const USER_ID = "99999999-9999-9999-9999-999999999999";
 
 function listingRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -75,6 +79,7 @@ function listingRow(overrides: Record<string, unknown> = {}) {
 beforeEach(() => {
   (chainSelect as ReturnType<typeof vi.fn>).mockClear();
   (chainIn as ReturnType<typeof vi.fn>).mockClear();
+  (userChainEq as ReturnType<typeof vi.fn>).mockClear();
   (userChainOrder as ReturnType<typeof vi.fn>).mockClear();
   setQueryResult({ data: [], error: null });
   setUserQueryResult({ data: [], error: null });
@@ -171,8 +176,9 @@ describe("getUserWishlist", () => {
   it("maps a joined active listing to live data, newest-first ordered", async () => {
     setUserQueryResult({ data: [wishlistRow()], error: null });
 
-    const result = await getUserWishlist();
+    const result = await getUserWishlist(USER_ID);
 
+    expect(userChainEq).toHaveBeenCalledWith("user_id", USER_ID);
     expect(userChainOrder).toHaveBeenCalledWith("created_at", {
       ascending: false,
     });
@@ -200,7 +206,7 @@ describe("getUserWishlist", () => {
       error: null,
     });
 
-    const result = await getUserWishlist();
+    const result = await getUserWishlist(USER_ID);
 
     expect(result[0]?.status).toBe("sold");
   });
@@ -211,7 +217,7 @@ describe("getUserWishlist", () => {
       error: null,
     });
 
-    const result = await getUserWishlist();
+    const result = await getUserWishlist(USER_ID);
 
     expect(result).toEqual([
       {
@@ -232,7 +238,9 @@ describe("getUserWishlist", () => {
       error: { message: "boom", details: "", hint: "", code: "PGRST" },
     });
 
-    await expect(getUserWishlist()).rejects.toThrow("Failed to load user wishlist");
+    await expect(getUserWishlist(USER_ID)).rejects.toThrow(
+      "Failed to load user wishlist",
+    );
     expect(consoleError).toHaveBeenCalledOnce();
     consoleError.mockRestore();
   });
@@ -240,7 +248,7 @@ describe("getUserWishlist", () => {
   it("returns an empty array when data is null without an error", async () => {
     setUserQueryResult({ data: null, error: null });
 
-    const result = await getUserWishlist();
+    const result = await getUserWishlist(USER_ID);
 
     expect(result).toEqual([]);
   });
