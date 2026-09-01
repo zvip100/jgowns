@@ -70,6 +70,20 @@ describe("ConfirmActionButton: live trigger", () => {
   });
 });
 
+describe("ConfirmActionButton: the button label", () => {
+  it("hides the label below sm by default, so a packed action row still fits", () => {
+    const html = render({ buttonLabel: "Suspend" });
+    expect(html).toContain("Suspend");
+    expect(html).toContain('class="hidden sm:inline"');
+  });
+
+  it("keeps it at every width when the control stands alone in its own row", () => {
+    const html = render({ buttonLabel: "Add photo", isLabelAlwaysShown: true });
+    expect(html).toContain("Add photo");
+    expect(html).not.toContain("hidden sm:inline");
+  });
+});
+
 describe("ConfirmActionButton: inert trigger", () => {
   it("renders disabled and says why, so a demo screen never offers the write", () => {
     const html = render({

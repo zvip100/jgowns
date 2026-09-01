@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ConfirmActionBodyState } from '@/components/ConfirmActionDialog';
-import type { ServerActionErrorResult } from '@/lib/types';
+import type { ServerActionResult } from '@/lib/types';
 
 type ConfirmActionButtonProps<TValue> = {
   title: string;
@@ -18,6 +18,13 @@ type ConfirmActionButtonProps<TValue> = {
   pendingLabel: string;
   ariaLabel: string;
   buttonLabel?: string;
+  /**
+   * Keeps `buttonLabel` visible below `sm`, where it is otherwise hidden so a
+   * packed row of admin actions can fit. A control that stands alone in its own
+   * row has no such constraint, and an unlabelled icon there reads as a stray
+   * glyph rather than an action.
+   */
+  isLabelAlwaysShown?: boolean;
   icon: LucideIcon;
   confirmVariant?: 'default' | 'destructive';
   successMessage?: string;
@@ -31,7 +38,7 @@ type ConfirmActionButtonProps<TValue> = {
   renderBody?: (state: ConfirmActionBodyState<TValue>) => ReactNode;
   validate?: (value: TValue) => boolean;
   onOpen?: () => void;
-  onConfirm: (value: TValue) => Promise<ServerActionErrorResult>;
+  onConfirm: (value: TValue) => Promise<ServerActionResult>;
 };
 
 /** An inert trigger explains itself; a live one keeps the last action error. */
@@ -52,6 +59,7 @@ export default function ConfirmActionButton<TValue = void>({
   pendingLabel,
   ariaLabel,
   buttonLabel,
+  isLabelAlwaysShown = false,
   icon: Icon,
   confirmVariant = 'default',
   successMessage,
@@ -112,7 +120,9 @@ export default function ConfirmActionButton<TValue = void>({
               <Icon data-icon="inline-start" />
             )}
             {buttonLabel && (
-              <span className="hidden sm:inline">{buttonLabel}</span>
+              <span className={isLabelAlwaysShown ? undefined : "hidden sm:inline"}>
+                {buttonLabel}
+              </span>
             )}
           </Button>
         )

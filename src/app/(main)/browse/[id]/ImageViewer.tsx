@@ -6,7 +6,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import useEmblaCarousel from 'embla-carousel-react';
 
 import { blurProps, cn } from '@/lib/utils';
-import { Lightbox } from './Lightbox';
+import { Lightbox } from '@/components/lightbox/Lightbox';
 
 const heroNavButtonClass =
   'absolute top-1/2 z-10 flex size-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur-sm transition hover:bg-black/70';

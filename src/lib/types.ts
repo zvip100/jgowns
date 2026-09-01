@@ -140,6 +140,27 @@ export type ImageSlotState = {
 
 export const MAX_LISTING_IMAGES = 3;
 
+/**
+ * Bounds on a photo an ADMIN uploads on a seller's behalf. The seller upload
+ * takes any `image/*` up to the 30 MB body limit and is deliberately untouched.
+ *
+ * HEIC is excluded on purpose: sharp cannot decode it without libheif, so
+ * accepting it would surface as a generic pipeline failure rather than a
+ * message the operator can act on. The size cap sits under
+ * `serverActions.bodySizeLimit` for the same reason.
+ */
+export const ACCEPTED_LISTING_IMAGE_TYPES = [
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+] as const;
+
+export const MAX_LISTING_IMAGE_MB = 25;
+export const MAX_LISTING_IMAGE_BYTES = MAX_LISTING_IMAGE_MB * 1024 * 1024;
+
+/** Bound on a stored blur placeholder, shared by both generators and the form's own guard. */
+export const MAX_BLUR_DATA_URL_LENGTH = 4096;
+
 export const GOWN_CATEGORIES = [
   { id: "bridal", label: "Bridal" },
   { id: "mother-of-the-bride", label: "Mother of the Bride" },
@@ -178,6 +199,14 @@ export type BrowseFilters = {
 /** Server actions that return an optional user-facing error string (stay on same page). */
 export type ServerActionErrorResult = {
   error?: string;
+};
+
+/**
+ * For an action whose success is not always the same news. `notice` replaces the
+ * caller's fixed success message for that one run; it never means failure.
+ */
+export type ServerActionResult = ServerActionErrorResult & {
+  notice?: string;
 };
 
 // --- Buyer wishlist (Phase 1, docs/wishlist-spec.md) ---

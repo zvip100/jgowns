@@ -1,6 +1,10 @@
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+
+vi.mock("@/app/(admin)/AdminRefreshControl", () => ({
+  AdminRefreshControl: () => "Admin refresh control",
+}));
 
 import { AdminListPage } from "@/app/(admin)/AdminListPage";
 import { AdminListSkeleton } from "@/app/(admin)/AdminListSkeleton";
@@ -24,6 +28,8 @@ describe("AdminPageHeader", () => {
     expect(html).toContain("<h1");
     expect(html).toContain("Listings");
     expect(html).toContain("12 listings");
+    expect(html).toContain("Admin refresh control");
+    expect(html).not.toContain("md:pr-80");
   });
 
   it("omits the description paragraph when none is given", () => {
@@ -62,8 +68,9 @@ describe("AdminPageHeader", () => {
 
     expect(html).toContain("text-[1.75rem]");
     expect(html).toContain("sm:text-[2.1rem]");
-    expect(html).toContain("sm:items-start");
-    expect(html).not.toContain("sm:items-end");
+    expect(html).toContain(
+      "sm:flex-row sm:justify-between sm:items-start",
+    );
   });
 
   it("renders a trailing action and a meta row from children", () => {
@@ -82,6 +89,9 @@ describe("AdminPageHeader", () => {
 
     expect(html).toContain("Edit listing");
     expect(html).toContain("Active");
+    expect(html.indexOf("Edit listing")).toBeLessThan(
+      html.indexOf("Admin refresh control"),
+    );
   });
 });
 

@@ -18,7 +18,7 @@ import { toast } from '@/lib/toast';
 import { PRIMARY_CTA_CLASS } from '@/lib/styles';
 
 import type { ReactNode } from 'react';
-import type { ServerActionErrorResult } from '@/lib/types';
+import type { ServerActionResult } from '@/lib/types';
 
 type ConfirmActionDialogState = {
   error: string | null;
@@ -59,7 +59,7 @@ type ConfirmActionDialogProps<TValue> = {
    * opens still showing the last attempt's message.
    */
   onOpen?: () => void;
-  onConfirm: (value: TValue) => Promise<ServerActionErrorResult>;
+  onConfirm: (value: TValue) => Promise<ServerActionResult>;
   renderTrigger: (state: ConfirmActionDialogState) => ReactNode;
 };
 
@@ -110,7 +110,9 @@ export default function ConfirmActionDialog<TValue = void>({
       }
 
       setIsOpen(false);
-      if (successMessage) toast.success(successMessage);
+      // An action whose success is not always the same news says so itself.
+      const outcome = result?.notice ?? successMessage;
+      if (outcome) toast.success(outcome);
     } catch (actionError: unknown) {
       console.error('Confirmed action failed:', actionError);
       setError('Something went wrong. Please try again.');

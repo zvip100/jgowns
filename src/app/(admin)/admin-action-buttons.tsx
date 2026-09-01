@@ -1,12 +1,18 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import {
   Ban,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   ImageOff,
+  ImagePlus,
+  ImageUp,
   LifeBuoy,
+  Loader2,
   RotateCcw,
+  ScanFace,
   ShoppingBag,
   Trash2,
   UserCheck,
@@ -18,12 +24,16 @@ import { TextareaField } from "@/components/form/TextareaField";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ADMIN_DEMO_MODE_MESSAGE } from "@/lib/admin/constants";
 import {
+  adminAddListingImage,
   adminMarkListingSold,
   adminMarkSizeSold,
+  adminMoveListingImage,
   adminReactivateListing,
   adminReactivateSize,
   adminRemoveListing,
   adminRemoveListingImage,
+  adminReplaceListingImage,
+  adminReprocessListingImage,
   adminRestoreListing,
   adminSuspendListing,
 } from "@/lib/actions/admin/listings";
@@ -38,10 +48,17 @@ import {
   SUSPENSION_SLUGS,
   SUSPENSION_SLUG_LABELS,
 } from "@/lib/suspension";
-import { suspendListingSchema } from "@/lib/validations/admin/listing-schema";
+import { toast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
+import {
+  listingImageFileSchema,
+  suspendListingSchema,
+} from "@/lib/validations/admin/listing-schema";
 
+import { AdminImageFileField } from "./AdminImageFileField";
 import { ADMIN_STATUS_LABELS } from "./admin-audit-labels";
 
+import type { ConfirmActionBodyState } from "@/components/ConfirmActionDialog";
 import type { AdminListingStatus } from "@/lib/admin/types";
 
 /**
@@ -346,6 +363,272 @@ export function AdminRemoveImageButton({
       {...demoProps(isDemo)}
       triggerStyle="inline-icon"
       onConfirm={() => adminRemoveListingImage(listingId, imageUrl)}
+    />
+  );
+}
+
+export function AdminReprocessImageButton({
+  listingId,
+  imageUrl,
+  position,
+  isDemo,
+}: AdminRemoveImageButtonProps) {
+  return (
+    <ConfirmActionButton
+      title="Reprocess this photo?"
+      description="Reruns face blur and optimization, then replaces the photo."
+      confirmLabel="Reprocess"
+      pendingLabel="Reprocessing..."
+      ariaLabel={`Reprocess photo ${position}`}
+      icon={ScanFace}
+      successMessage="Photo reprocessed"
+      triggerClassName={TRIGGER_CLASS.icon}
+      {...demoProps(isDemo)}
+      triggerStyle="inline-icon"
+      onConfirm={() => adminReprocessListingImage(listingId, imageUrl)}
+    />
+  );
+}
+
+/**
+ * The value both photo dialogs carry. Nullable rather than absent so the body
+ * can render its cleared state without the dialog's own `initialValue` cast.
+ */
+type PhotoValue = { file: File | null };
+
+const EMPTY_PHOTO_VALUE: PhotoValue = { file: null };
+
+/**
+ * The photo dialogs' shared body, validate gate, and reopen reset. Both
+ * dialogs run the same schema the action re-runs, so the operator sees the
+ * message on the field before a round trip rather than in a banner after one.
+ */
+function usePhotoFileSlot(id: string, label: string) {
+  const [fileError, setFileError] = useState<string>();
+
+  return {
+    onOpen: () => setFileError(undefined),
+    validate: (value: PhotoValue) => {
+      const parsed = listingImageFileSchema.safeParse(value.file);
+      setFileError(parsed.success ? undefined : parsed.error.issues[0]?.message);
+      return parsed.success;
+    },
+    renderBody: ({
+      value,
+      setValue,
+      isPending,
+    }: ConfirmActionBodyState<PhotoValue>) => (
+      <AdminImageFileField
+        id={id}
+        label={label}
+        file={value.file}
+        error={fileError}
+        disabled={isPending}
+        onSelect={(file) => {
+          setFileError(undefined);
+          setValue({ file });
+        }}
+      />
+    ),
+  };
+}
+
+function photoFormData(file: File | null): FormData {
+  const formData = new FormData();
+  if (file) formData.set("photo", file);
+  return formData;
+}
+
+export function AdminReplaceImageButton({
+  listingId,
+  imageUrl,
+  position,
+  isDemo,
+}: AdminRemoveImageButtonProps) {
+  const slot = usePhotoFileSlot("replace-photo", "New photo");
+
+  return (
+    <ConfirmActionButton<PhotoValue>
+      title="Replace this photo?"
+      description="The new photo runs through face blur and optimization. The current photo is deleted once the replacement is saved."
+      confirmLabel="Replace"
+      pendingLabel="Replacing..."
+      ariaLabel={`Replace photo ${position}`}
+      icon={ImageUp}
+      // Destructive because it does destroy the photo that is there now, even
+      // though the replacement has to land first.
+      confirmVariant="destructive"
+      triggerClassName={TRIGGER_CLASS.icon}
+      {...demoProps(isDemo)}
+      triggerStyle="inline-icon"
+      initialValue={EMPTY_PHOTO_VALUE}
+      renderBody={slot.renderBody}
+      onOpen={slot.onOpen}
+      validate={slot.validate}
+      // No successMessage: the action always returns a face-count notice, which
+      // the dialog prefers on the success path.
+      onConfirm={(value) =>
+        adminReplaceListingImage(listingId, imageUrl, photoFormData(value.file))
+      }
+    />
+  );
+}
+
+export function AdminAddImageButton({ listingId, isDemo }: AdminListingIdProps) {
+  const slot = usePhotoFileSlot("add-photo", "Photo");
+
+  return (
+    <ConfirmActionButton<PhotoValue>
+      title="Add a photo?"
+      description="Runs face blur and optimization, then adds the photo to this listing."
+      confirmLabel="Add photo"
+      pendingLabel="Adding..."
+      ariaLabel="Add a photo"
+      buttonLabel="Add photo"
+      // Stands alone under the grid rather than in a packed row, so it keeps
+      // its label at every width instead of collapsing to a bare glyph.
+      isLabelAlwaysShown
+      icon={ImagePlus}
+      triggerClassName={TRIGGER_CLASS.default}
+      {...demoProps(isDemo)}
+      initialValue={EMPTY_PHOTO_VALUE}
+      renderBody={slot.renderBody}
+      onOpen={slot.onOpen}
+      validate={slot.validate}
+      onConfirm={(value) =>
+        adminAddListingImage(listingId, photoFormData(value.file))
+      }
+    />
+  );
+}
+
+type AdminPhotoMoveButtonProps = AdminWriteControlProps & {
+  listingId: string;
+  imageUrl: string;
+  /** 1-based, matching the RPC's own array indexing. */
+  position: number;
+  offset: -1 | 1;
+  /** Already at that end of the row. */
+  atEnd?: boolean;
+};
+
+/**
+ * Photo 1 is the listing's cover on the browse grid, so a move in or out of it
+ * is the one reorder a buyer can see. Every other move only rearranges photos
+ * nobody outside the admin is looking at.
+ */
+function isCoverMove(position: number, offset: -1 | 1): boolean {
+  return Math.min(position, position + offset) === 1;
+}
+
+function movePhotoLabel(position: number, offset: -1 | 1): string {
+  return `Move photo ${position} ${offset === -1 ? "left" : "right"}`;
+}
+
+function movePhotoIcon(offset: -1 | 1) {
+  return offset === -1 ? ChevronLeft : ChevronRight;
+}
+
+/**
+ * A reorder is the one admin write that skips the confirm dialog: it is
+ * trivially reversible, it is used several times in a row, and there is no
+ * consequence to warn about, so a dialog per nudge would be friction with no
+ * information in it.
+ *
+ * The exception to that exception is a move that changes the COVER photo, which
+ * is the image buyers see on the browse grid. That one is confirmed like every
+ * other buyer-visible change.
+ *
+ * Both shapes render the identical trigger, so the control row does not change
+ * appearance depending on which one a photo happens to get.
+ */
+export function AdminPhotoMoveButton(props: AdminPhotoMoveButtonProps) {
+  return isCoverMove(props.position, props.offset) ? (
+    <ConfirmedPhotoMoveButton {...props} />
+  ) : (
+    <ImmediatePhotoMoveButton {...props} />
+  );
+}
+
+/** No success toast: the thumbnails visibly move, so only a failure has anything to say. */
+function ImmediatePhotoMoveButton({
+  listingId,
+  imageUrl,
+  position,
+  offset,
+  atEnd,
+  isDemo,
+}: AdminPhotoMoveButtonProps) {
+  const [isPending, startTransition] = useTransition();
+
+  const label = movePhotoLabel(position, offset);
+  const Icon = movePhotoIcon(offset);
+  const isInert = Boolean(isDemo) || Boolean(atEnd);
+
+  return (
+    <button
+      type="button"
+      disabled={isInert || isPending}
+      aria-label={label}
+      title={isDemo ? ADMIN_DEMO_MODE_MESSAGE : label}
+      // shadcn's Button dims itself when disabled; this raw trigger has to.
+      className={cn(TRIGGER_CLASS.icon, isInert && "opacity-50")}
+      onClick={() =>
+        startTransition(async () => {
+          const result = await adminMoveListingImage(
+            listingId,
+            position,
+            imageUrl,
+            offset,
+          );
+          if (result?.error) toast.error(result.error);
+        })
+      }
+    >
+      {isPending ? (
+        <Loader2 className="size-3.5 animate-spin" />
+      ) : (
+        <Icon className="size-3.5" />
+      )}
+    </button>
+  );
+}
+
+/**
+ * Also no success message, for the same reason as the immediate shape: the
+ * dialog closes onto a grid where the photo has already moved.
+ */
+function ConfirmedPhotoMoveButton({
+  listingId,
+  imageUrl,
+  position,
+  offset,
+  atEnd,
+  isDemo,
+}: AdminPhotoMoveButtonProps) {
+  // Moving left INTO position 1 promotes; moving right OUT of it demotes.
+  const isPromotion = offset === -1;
+
+  return (
+    <ConfirmActionButton
+      title={isPromotion ? "Make this the cover photo?" : "Change the cover photo?"}
+      description={
+        isPromotion
+          ? "The first photo is the one buyers see on the browse page."
+          : "The next photo takes its place as the one buyers see on the browse page."
+      }
+      confirmLabel="Move"
+      pendingLabel="Moving..."
+      ariaLabel={movePhotoLabel(position, offset)}
+      icon={movePhotoIcon(offset)}
+      triggerClassName={TRIGGER_CLASS.icon}
+      triggerStyle="inline-icon"
+      disabled={Boolean(isDemo) || Boolean(atEnd)}
+      // Only demo mode has something to explain; at an end the label is enough.
+      disabledTitle={isDemo ? ADMIN_DEMO_MODE_MESSAGE : undefined}
+      onConfirm={() =>
+        adminMoveListingImage(listingId, position, imageUrl, offset)
+      }
     />
   );
 }

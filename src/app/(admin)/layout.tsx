@@ -7,6 +7,7 @@ import { getCurrentUser } from "@/lib/queries/auth";
 import { createClient } from "@/lib/supabase/server";
 
 import { isAdminDemoMode } from "@/lib/admin/demo";
+import { AdminRefreshProvider } from "./AdminRefreshProvider";
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminTopBar } from "./AdminTopBar";
 import AdminLoading from "./loading";
@@ -72,7 +73,9 @@ async function AdminShell({ children }: AdminShellProps) {
           </p>
         )}
         <Suspense fallback={<AdminLoading />}>
-          <AdminAuthBoundary>{children}</AdminAuthBoundary>
+          <AdminAuthBoundary>
+            <AdminRefreshProvider>{children}</AdminRefreshProvider>
+          </AdminAuthBoundary>
         </Suspense>
       </main>
     </div>

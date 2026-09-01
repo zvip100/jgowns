@@ -25,7 +25,6 @@ import { AdminListPanel } from "../../../AdminListPanel";
 import { AdminPageHeader } from "../../../AdminPageHeader";
 import { AdminSectionHeading } from "../../../AdminSectionHeading";
 import { AdminTable } from "../../../AdminTable";
-import { AdminThumbnail } from "../../../AdminThumbnail";
 import { AuditActionPill } from "../../../AuditActionPill";
 import { AuditActorGlyph } from "../../../AuditActorGlyph";
 import { StatusPill } from "../../../StatusPill";
@@ -34,7 +33,6 @@ import {
   AdminMarkSizeSoldButton,
   AdminReactivateListingButton,
   AdminReactivateSizeButton,
-  AdminRemoveImageButton,
   AdminRemoveListingButton,
   AdminRestoreListingButton,
   AdminSuspendListingButton,
@@ -55,6 +53,7 @@ import {
   formatCents,
   stripeSessionUrl,
 } from "../../../admin-url";
+import { AdminPhotoGrid } from "./AdminPhotoGrid";
 
 import type { Metadata } from "next";
 import type { AdminListingStatus } from "@/lib/admin/types";
@@ -155,70 +154,64 @@ export default async function AdminListingDetailPage({
         </FormInfoBanner>
       )}
 
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_16rem]">
-        <div className="surface-panel hairline rounded-2xl p-5">
-          <AdminSectionHeading>Details</AdminSectionHeading>
-          <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
-            <AdminFact label="Seller">
-              <Link
-                href={`/admin/users/${listing.user_id}`}
-                className="text-(--accent-deep) hover:underline"
-              >
-                {listing.seller_email}
-              </Link>
-            </AdminFact>
-            <AdminFact label="Category">{category}</AdminFact>
-            <AdminFact label="Location">
-              {listing.location ?? ADMIN_EMPTY_VALUE}
-            </AdminFact>
-            <AdminFact label="Condition">{listing.condition}</AdminFact>
-            <AdminFact label="Color">{listing.color ?? ADMIN_EMPTY_VALUE}</AdminFact>
-            <AdminFact label="Sell mode">
-              {ADMIN_SELL_MODE_LABELS[listing.sell_mode]}
-            </AdminFact>
-            <AdminFact label="Saved count">{listing.saved_count}</AdminFact>
-            <AdminFact label="Created">{formatAdminDate(listing.created_at)}</AdminFact>
-            <AdminFact label="Email">
-              {listing.contact_email ?? ADMIN_EMPTY_VALUE}
-            </AdminFact>
-            <AdminFact label="Phone">
-              {listing.contact_phone ?? ADMIN_EMPTY_VALUE}
-            </AdminFact>
-            <AdminFact label="Contact methods">
-              {listing.contact_methods.length
-                ? listing.contact_methods.join(", ")
-                : ADMIN_EMPTY_VALUE}
-            </AdminFact>
-          </dl>
-          {listing.description && (
-            <p className="mt-4 text-sm text-(--muted-ink)">{listing.description}</p>
-          )}
-        </div>
+      <section className="surface-panel hairline rounded-2xl p-5">
+        <AdminSectionHeading>Details</AdminSectionHeading>
+        <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
+          <AdminFact label="Seller">
+            <Link
+              href={`/admin/users/${listing.user_id}`}
+              className="text-(--accent-deep) hover:underline"
+            >
+              {listing.seller_email}
+            </Link>
+          </AdminFact>
+          <AdminFact label="Category">{category}</AdminFact>
+          <AdminFact label="Location">
+            {listing.location ?? ADMIN_EMPTY_VALUE}
+          </AdminFact>
+          <AdminFact label="Condition">{listing.condition}</AdminFact>
+          <AdminFact label="Color">
+            {listing.color ?? ADMIN_EMPTY_VALUE}
+          </AdminFact>
+          <AdminFact label="Sell mode">
+            {ADMIN_SELL_MODE_LABELS[listing.sell_mode]}
+          </AdminFact>
+          <AdminFact label="Saved count">{listing.saved_count}</AdminFact>
+          <AdminFact label="Created">
+            {formatAdminDate(listing.created_at)}
+          </AdminFact>
+          <AdminFact label="Email">
+            {listing.contact_email ?? ADMIN_EMPTY_VALUE}
+          </AdminFact>
+          <AdminFact label="Phone">
+            {listing.contact_phone ?? ADMIN_EMPTY_VALUE}
+          </AdminFact>
+          <AdminFact label="Contact methods">
+            {listing.contact_methods.length
+              ? listing.contact_methods.join(", ")
+              : ADMIN_EMPTY_VALUE}
+          </AdminFact>
+        </dl>
+        {listing.description && (
+          <p className="mt-4 text-sm text-(--muted-ink)">
+            {listing.description}
+          </p>
+        )}
+      </section>
 
-        <div className="surface-panel hairline self-start rounded-2xl p-4">
-          <AdminSectionHeading>Photos</AdminSectionHeading>
-          <div className="mt-3 flex flex-wrap gap-3">
-            {listing.image_urls.length === 0 ? (
-              <p className="text-sm text-(--muted-ink)">No photos.</p>
-            ) : (
-              listing.image_urls.map((url, i) => (
-                <div key={url} className="flex flex-col items-center gap-2">
-                  <AdminThumbnail
-                    src={url}
-                    blurDataURL={listing.image_blur_data_urls[i]}
-                    alt=""
-                    size={96}
-                  />
-                  <AdminRemoveImageButton
-                    listingId={listing.id}
-                    imageUrl={url}
-                    position={i + 1}
-                    isDemo={isDemo}
-                  />
-                </div>
-              ))
-            )}
-          </div>
+      {/* Full content width rather than the old 16rem sidebar column: at 96px
+          three photos wrapped two-and-one, and judging a face blur needs the
+          thumbnail to actually be legible. */}
+      <section className="surface-panel hairline rounded-2xl p-5">
+        <AdminSectionHeading>Photos</AdminSectionHeading>
+        <div className="mt-4">
+          <AdminPhotoGrid
+            listingId={listing.id}
+            title={listing.title}
+            imageUrls={listing.image_urls}
+            blurDataUrls={listing.image_blur_data_urls}
+            isDemo={isDemo}
+          />
         </div>
       </section>
 

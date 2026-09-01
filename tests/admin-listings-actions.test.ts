@@ -6,6 +6,10 @@ const {
   mockRpc,
   mockFrom,
   mockDeleteListingImages,
+  mockProcessListingImage,
+  mockBlurPlaceholderDataUrl,
+  mockDownloadListingImage,
+  mockUploadListingImage,
   calls,
 } = vi.hoisted(() => ({
   mockGetAdminActionClient: vi.fn(),
@@ -13,6 +17,10 @@ const {
   mockRpc: vi.fn(),
   mockFrom: vi.fn(),
   mockDeleteListingImages: vi.fn(),
+  mockProcessListingImage: vi.fn(),
+  mockBlurPlaceholderDataUrl: vi.fn(),
+  mockDownloadListingImage: vi.fn(),
+  mockUploadListingImage: vi.fn(),
   calls: [] as string[],
 }));
 
@@ -41,14 +49,26 @@ vi.mock("@/lib/admin/guard", () => ({
 vi.mock("@/lib/actions/images", () => ({
   deleteListingImages: mockDeleteListingImages,
 }));
+vi.mock("@/lib/images/pipeline", () => ({
+  processListingImage: mockProcessListingImage,
+  blurPlaceholderDataUrl: mockBlurPlaceholderDataUrl,
+}));
+vi.mock("@/lib/images/storage", () => ({
+  downloadListingImage: mockDownloadListingImage,
+  uploadListingImage: mockUploadListingImage,
+}));
 
 import {
+  adminAddListingImage,
   adminMarkListingSold,
   adminMarkSizeSold,
+  adminMoveListingImage,
   adminReactivateListing,
   adminReactivateSize,
   adminRemoveListing,
   adminRemoveListingImage,
+  adminReplaceListingImage,
+  adminReprocessListingImage,
   adminRestoreListing,
   adminSuspendListing,
   adminUpdateListing,
@@ -60,8 +80,31 @@ const LISTING_ID = "11111111-1111-4111-8111-111111111111";
 const SIZE_ID = "22222222-2222-4222-8222-222222222222";
 const IMAGE_URL =
   "https://proj.supabase.co/storage/v1/object/public/gown-images/a.webp";
+const NEW_IMAGE_URL =
+  "https://proj.supabase.co/storage/v1/object/public/gown-images/b.webp";
 
-type MaybeError = { error: null | { message: string; code?: string } };
+type MaybeError = {
+  data?: string[] | null;
+  error: null | { message: string; code?: string };
+};
+
+/**
+ * The one authorized client every action is handed. Held as a constant so a
+ * test can assert the cleanup helper was passed THIS client rather than left to
+ * reacquire a session of its own.
+ */
+const SUPABASE = { rpc: mockRpc, from: mockFrom };
+
+/** A picked photo, as it crosses the server-action boundary. */
+function photoForm(
+  file: File = new File([new Uint8Array([1, 2, 3])], "gown.jpg", {
+    type: "image/jpeg",
+  }),
+): FormData {
+  const formData = new FormData();
+  formData.set("photo", file);
+  return formData;
+}
 
 /** One chainable stub standing in for whatever `.from(...)` chain runs next. */
 function tableStub(result: unknown) {
@@ -79,7 +122,7 @@ function tableStub(result: unknown) {
 function allowAdmin(): void {
   mockGetAdminActionClient.mockResolvedValue({
     ok: true,
-    supabase: { rpc: mockRpc, from: mockFrom },
+    supabase: SUPABASE,
     admin: { id: "admin-1", email: "admin@jgowns.com" },
   });
 }
@@ -111,7 +154,10 @@ beforeEach(() => {
   allowAdmin();
   mockRpc.mockImplementation(async (name: string) => {
     calls.push(`rpc:${name}`);
-    return { error: null } satisfies MaybeError;
+    // The photo RPCs return the array they committed; the shape is what the
+    // delete guard reads, so the default is a committed array without the URL
+    // any of these tests acts on.
+    return { data: [NEW_IMAGE_URL], error: null } satisfies MaybeError;
   });
   mockFrom.mockImplementation(() =>
     tableStub({ data: { status: "active" }, error: null }),
@@ -119,6 +165,19 @@ beforeEach(() => {
   mockDeleteListingImages.mockImplementation(async () => {
     calls.push("storage:delete");
     return { ok: true };
+  });
+  mockDownloadListingImage.mockImplementation(async () => {
+    calls.push("storage:download");
+    return Buffer.from("original");
+  });
+  mockProcessListingImage.mockImplementation(async () => {
+    calls.push("pipeline");
+    return { webp: Buffer.from("reprocessed"), facesDetected: 1, visionOk: true };
+  });
+  mockBlurPlaceholderDataUrl.mockResolvedValue("data:image/jpeg;base64,tiny");
+  mockUploadListingImage.mockImplementation(async () => {
+    calls.push("storage:upload");
+    return NEW_IMAGE_URL;
   });
 });
 
@@ -135,6 +194,19 @@ const ALL_ACTIONS: [string, () => Promise<{ error?: string }>][] = [
   [
     "adminRemoveListingImage",
     () => adminRemoveListingImage(LISTING_ID, IMAGE_URL),
+  ],
+  [
+    "adminReprocessListingImage",
+    () => adminReprocessListingImage(LISTING_ID, IMAGE_URL),
+  ],
+  [
+    "adminReplaceListingImage",
+    () => adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm()),
+  ],
+  ["adminAddListingImage", () => adminAddListingImage(LISTING_ID, photoForm())],
+  [
+    "adminMoveListingImage",
+    () => adminMoveListingImage(LISTING_ID, 1, IMAGE_URL, 1),
   ],
 ];
 
@@ -504,7 +576,38 @@ describe("adminRemoveListingImage", () => {
 
   it("deletes only the URL it was given, never a client-supplied path", async () => {
     await adminRemoveListingImage(LISTING_ID, IMAGE_URL);
-    expect(mockDeleteListingImages).toHaveBeenCalledExactlyOnceWith([IMAGE_URL]);
+    expect(mockDeleteListingImages).toHaveBeenCalledExactlyOnceWith(
+      [IMAGE_URL],
+      SUPABASE,
+    );
+  });
+
+  it("keeps the object when the committed array still references it", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockRpc.mockResolvedValue({ data: [IMAGE_URL, NEW_IMAGE_URL], error: null });
+
+    await expect(
+      adminRemoveListingImage(LISTING_ID, IMAGE_URL),
+    ).resolves.toEqual({});
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+    expect(mockUpdateTag).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  // The deploy gap: the app ships before migration 036, so the older
+  // void-returning function answers and nothing can prove the URL is gone.
+  it("keeps the object when the write returned no array at all", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockRpc.mockResolvedValue({ data: null, error: null });
+
+    await expect(
+      adminRemoveListingImage(LISTING_ID, IMAGE_URL),
+    ).resolves.toEqual({});
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+    expect(mockUpdateTag).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
   });
 
   it("never touches storage when the database write failed", async () => {
@@ -540,6 +643,227 @@ describe("adminRemoveListingImage", () => {
     await expect(
       adminRemoveListingImage(LISTING_ID, IMAGE_URL),
     ).resolves.toEqual({});
+    expect(mockUpdateTag).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+});
+
+describe("adminReprocessListingImage", () => {
+  beforeEach(() => {
+    mockFrom.mockImplementation(() =>
+      tableStub({ data: { image_urls: [IMAGE_URL] }, error: null }),
+    );
+  });
+
+  it("uploads the new object before the row commits, and drops the old one after", async () => {
+    await expect(
+      adminReprocessListingImage(LISTING_ID, IMAGE_URL),
+    ).resolves.toEqual({ notice: "Photo reprocessed. 1 face blurred." });
+
+    expect(calls).toEqual([
+      "storage:download",
+      "pipeline",
+      "storage:upload",
+      "rpc:admin_replace_listing_image",
+      "storage:delete",
+    ]);
+    expect(mockDeleteListingImages).toHaveBeenCalledExactlyOnceWith(
+      [IMAGE_URL],
+      SUPABASE,
+    );
+    expect(mockUpdateTag).toHaveBeenCalledTimes(2);
+  });
+
+  it("hands the RPC both URLs and the regenerated placeholder", async () => {
+    await adminReprocessListingImage(LISTING_ID, IMAGE_URL);
+
+    expect(mockRpc).toHaveBeenCalledExactlyOnceWith(
+      "admin_replace_listing_image",
+      {
+        p_listing_id: LISTING_ID,
+        p_old_url: IMAGE_URL,
+        p_new_url: NEW_IMAGE_URL,
+        p_new_blur: "data:image/jpeg;base64,tiny",
+        p_audit_action: "listing.image_reprocess",
+      },
+    );
+  });
+
+  it("uploads the processed bytes as webp, never the original content type", async () => {
+    await adminReprocessListingImage(LISTING_ID, IMAGE_URL);
+
+    expect(mockUploadListingImage).toHaveBeenCalledExactlyOnceWith({
+      supabase: expect.anything(),
+      body: Buffer.from("reprocessed"),
+      contentType: "image/webp",
+      // The admin prefix is what lets the seller delete this object later.
+      listingId: LISTING_ID,
+    });
+  });
+
+  it("pluralizes the face count", async () => {
+    mockProcessListingImage.mockResolvedValue({
+      webp: Buffer.from("reprocessed"),
+      facesDetected: 3,
+      visionOk: true,
+    });
+
+    await expect(
+      adminReprocessListingImage(LISTING_ID, IMAGE_URL),
+    ).resolves.toEqual({ notice: "Photo reprocessed. 3 faces blurred." });
+  });
+
+  it("commits and says so when detection ran but found no face", async () => {
+    mockProcessListingImage.mockResolvedValue({
+      webp: Buffer.from("reprocessed"),
+      facesDetected: 0,
+      visionOk: true,
+    });
+
+    await expect(
+      adminReprocessListingImage(LISTING_ID, IMAGE_URL),
+    ).resolves.toEqual({ notice: "Photo reprocessed. No faces were detected." });
+    expect(mockRpc).toHaveBeenCalledOnce();
+  });
+
+  it("refuses before any write when face detection could not run", async () => {
+    mockProcessListingImage.mockResolvedValue({
+      webp: Buffer.from("reprocessed"),
+      facesDetected: 0,
+      visionOk: false,
+    });
+
+    await expect(
+      adminReprocessListingImage(LISTING_ID, IMAGE_URL),
+    ).resolves.toEqual({
+      error: "Face detection is unavailable right now. Try again later.",
+    });
+    expect(mockUploadListingImage).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("deletes the freshly uploaded object when the row write fails", async () => {
+    mockRpc.mockResolvedValue({ error: { message: "boom", code: "P0002" } });
+
+    await expect(
+      adminReprocessListingImage(LISTING_ID, IMAGE_URL),
+    ).resolves.toEqual({ error: "Photo not found" });
+    expect(mockDeleteListingImages).toHaveBeenCalledExactlyOnceWith(
+      [NEW_IMAGE_URL],
+      SUPABASE,
+    );
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("keeps the upload when the RPC failure carries no code, since it may have committed", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockRpc.mockResolvedValue({ error: { message: "TypeError: fetch failed", code: "" } });
+
+    await expect(
+      adminReprocessListingImage(LISTING_ID, IMAGE_URL),
+    ).resolves.toEqual({ error: "Something went wrong. Please try again." });
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("logs rather than swallows a failed rollback delete", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockRpc.mockResolvedValue({ error: { message: "boom", code: "P0002" } });
+    mockDeleteListingImages.mockResolvedValue({ error: "storage down" });
+
+    await expect(
+      adminReprocessListingImage(LISTING_ID, IMAGE_URL),
+    ).resolves.toEqual({ error: "Photo not found" });
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("keeps the mapped error when the rollback delete itself rejects", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockRpc.mockResolvedValue({ error: { message: "boom", code: "P0002" } });
+    mockDeleteListingImages.mockRejectedValue(new Error("network"));
+
+    await expect(
+      adminReprocessListingImage(LISTING_ID, IMAGE_URL),
+    ).resolves.toEqual({ error: "Photo not found" });
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("maps an unexpected RPC code through the shared mapper", async () => {
+    mockRpc.mockResolvedValue({ error: { message: "raw", code: "42501" } });
+
+    await expect(
+      adminReprocessListingImage(LISTING_ID, IMAGE_URL),
+    ).resolves.toEqual({ error: "Not authorized" });
+    expect(mockDeleteListingImages).toHaveBeenCalledExactlyOnceWith(
+      [NEW_IMAGE_URL],
+      SUPABASE,
+    );
+  });
+
+  it("stops when the URL is no longer on the listing", async () => {
+    mockFrom.mockImplementation(() =>
+      tableStub({ data: { image_urls: [NEW_IMAGE_URL] }, error: null }),
+    );
+
+    await expect(
+      adminReprocessListingImage(LISTING_ID, IMAGE_URL),
+    ).resolves.toEqual({ error: "Photo not found" });
+    expect(mockDownloadListingImage).not.toHaveBeenCalled();
+  });
+
+  it("stops when the listing does not exist", async () => {
+    mockFrom.mockImplementation(() => tableStub({ data: null, error: null }));
+
+    await expect(
+      adminReprocessListingImage(LISTING_ID, IMAGE_URL),
+    ).resolves.toEqual({ error: "Listing not found" });
+    expect(mockDownloadListingImage).not.toHaveBeenCalled();
+  });
+
+  it("reports a pipeline failure without touching storage or the row", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockProcessListingImage.mockRejectedValue(new Error("unsupported format"));
+
+    await expect(
+      adminReprocessListingImage(LISTING_ID, IMAGE_URL),
+    ).resolves.toEqual({ error: "This photo could not be processed." });
+    expect(mockUploadListingImage).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it("reports an upload failure without touching the row", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockUploadListingImage.mockRejectedValue(new Error("bucket full"));
+
+    await expect(
+      adminReprocessListingImage(LISTING_ID, IMAGE_URL),
+    ).resolves.toEqual({ error: "The reprocessed photo could not be saved." });
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it("rejects a malformed URL before reading the listing", async () => {
+    await expect(
+      adminReprocessListingImage(LISTING_ID, "../../secret.webp"),
+    ).resolves.toEqual({ error: "Invalid image" });
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it("still succeeds when deleting the replaced object fails", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockDeleteListingImages.mockResolvedValue({ error: "storage down" });
+
+    await expect(
+      adminReprocessListingImage(LISTING_ID, IMAGE_URL),
+    ).resolves.toEqual({ notice: "Photo reprocessed. 1 face blurred." });
     expect(mockUpdateTag).toHaveBeenCalledTimes(2);
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
@@ -586,6 +910,478 @@ describe("RPC error mapping", () => {
     await adminRemoveListing(LISTING_ID);
     await adminMarkListingSold(LISTING_ID);
     await adminReactivateListing(LISTING_ID);
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+});
+
+describe("adminReplaceListingImage", () => {
+  beforeEach(() => {
+    mockFrom.mockImplementation(() =>
+      tableStub({ data: { image_urls: [IMAGE_URL] }, error: null }),
+    );
+  });
+
+  it("uploads the replacement first and only then drops the old object", async () => {
+    await expect(
+      adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm()),
+    ).resolves.toEqual({ notice: "Photo replaced. 1 face blurred." });
+
+    expect(calls).toEqual([
+      "pipeline",
+      "storage:upload",
+      "rpc:admin_replace_listing_image",
+      "storage:delete",
+    ]);
+    expect(mockUpdateTag).toHaveBeenCalledTimes(2);
+  });
+
+  it("logs a replace, never a reprocess", async () => {
+    await adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm());
+
+    expect(mockRpc).toHaveBeenCalledExactlyOnceWith(
+      "admin_replace_listing_image",
+      {
+        p_listing_id: LISTING_ID,
+        p_old_url: IMAGE_URL,
+        p_new_url: NEW_IMAGE_URL,
+        p_new_blur: "data:image/jpeg;base64,tiny",
+        p_audit_action: "listing.image_replace",
+      },
+    );
+  });
+
+  it("uploads under the listing's admin prefix, as webp", async () => {
+    await adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm());
+
+    expect(mockUploadListingImage).toHaveBeenCalledExactlyOnceWith({
+      supabase: expect.anything(),
+      body: Buffer.from("reprocessed"),
+      contentType: "image/webp",
+      listingId: LISTING_ID,
+    });
+  });
+
+  it("hands the cleanup the authorized client", async () => {
+    await adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm());
+    expect(mockDeleteListingImages).toHaveBeenCalledExactlyOnceWith(
+      [IMAGE_URL],
+      SUPABASE,
+    );
+  });
+
+  it("reports the face count for zero, one, and many", async () => {
+    mockProcessListingImage.mockResolvedValue({
+      webp: Buffer.from("reprocessed"),
+      facesDetected: 0,
+      visionOk: true,
+    });
+    await expect(
+      adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm()),
+    ).resolves.toEqual({ notice: "Photo replaced. No faces were detected." });
+
+    mockProcessListingImage.mockResolvedValue({
+      webp: Buffer.from("reprocessed"),
+      facesDetected: 2,
+      visionOk: true,
+    });
+    await expect(
+      adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm()),
+    ).resolves.toEqual({ notice: "Photo replaced. 2 faces blurred." });
+  });
+
+  it("refuses with no file at all", async () => {
+    await expect(
+      adminReplaceListingImage(LISTING_ID, IMAGE_URL, new FormData()),
+    ).resolves.toEqual({ error: "Choose a photo." });
+    expect(mockFrom).not.toHaveBeenCalled();
+    expect(mockProcessListingImage).not.toHaveBeenCalled();
+  });
+
+  it("refuses a file type sharp cannot decode", async () => {
+    const heic = new File([new Uint8Array([1])], "gown.heic", {
+      type: "image/heic",
+    });
+
+    await expect(
+      adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm(heic)),
+    ).resolves.toEqual({ error: "Upload a JPEG, PNG, or WebP image." });
+    expect(mockProcessListingImage).not.toHaveBeenCalled();
+  });
+
+  it("refuses an empty file and an oversized one", async () => {
+    const empty = new File([], "gown.jpg", { type: "image/jpeg" });
+    await expect(
+      adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm(empty)),
+    ).resolves.toEqual({ error: "Keep the photo under 25 MB." });
+
+    const huge = new File(
+      [new Uint8Array(25 * 1024 * 1024 + 1)],
+      "gown.jpg",
+      { type: "image/jpeg" },
+    );
+    await expect(
+      adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm(huge)),
+    ).resolves.toEqual({ error: "Keep the photo under 25 MB." });
+    expect(mockProcessListingImage).not.toHaveBeenCalled();
+  });
+
+  it("stops before the pipeline when the photo is no longer on the listing", async () => {
+    mockFrom.mockImplementation(() =>
+      tableStub({ data: { image_urls: [NEW_IMAGE_URL] }, error: null }),
+    );
+
+    await expect(
+      adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm()),
+    ).resolves.toEqual({ error: "Photo not found" });
+    expect(mockProcessListingImage).not.toHaveBeenCalled();
+  });
+
+  it("stops when the listing does not exist", async () => {
+    mockFrom.mockImplementation(() => tableStub({ data: null, error: null }));
+
+    await expect(
+      adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm()),
+    ).resolves.toEqual({ error: "Listing not found" });
+    expect(mockProcessListingImage).not.toHaveBeenCalled();
+  });
+
+  it("leaves the old photo alone when the pipeline throws", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockProcessListingImage.mockRejectedValue(new Error("unsupported"));
+
+    await expect(
+      adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm()),
+    ).resolves.toEqual({ error: "This photo could not be processed." });
+    expect(mockUploadListingImage).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it("leaves the old photo alone when face detection could not run", async () => {
+    mockProcessListingImage.mockResolvedValue({
+      webp: Buffer.from("reprocessed"),
+      facesDetected: 0,
+      visionOk: false,
+    });
+
+    await expect(
+      adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm()),
+    ).resolves.toEqual({
+      error: "Face detection is unavailable right now. Try again later.",
+    });
+    expect(mockUploadListingImage).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+  });
+
+  // The hard constraint the whole feature exists for.
+  it("never deletes the old object when the upload failed", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockUploadListingImage.mockRejectedValue(new Error("bucket full"));
+
+    await expect(
+      adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm()),
+    ).resolves.toEqual({ error: "The replacement photo could not be saved." });
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it("deletes the fresh upload when the database refused, and keeps the old one", async () => {
+    mockRpc.mockResolvedValue({ error: { message: "boom", code: "P0002" } });
+
+    await expect(
+      adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm()),
+    ).resolves.toEqual({ error: "Photo not found" });
+    expect(mockDeleteListingImages).toHaveBeenCalledExactlyOnceWith(
+      [NEW_IMAGE_URL],
+      SUPABASE,
+    );
+  });
+
+  it("keeps the fresh upload when the failure carries no code", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockRpc.mockResolvedValue({
+      error: { message: "TypeError: fetch failed", code: "" },
+    });
+
+    await expect(
+      adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm()),
+    ).resolves.toEqual({ error: "Something went wrong. Please try again." });
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("does not surface suspend's reason copy for a rejected audit slug", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockRpc.mockResolvedValue({ error: { message: "raw", code: "22023" } });
+
+    await expect(
+      adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm()),
+    ).resolves.toEqual({ error: "Something went wrong. Please try again." });
+    warn.mockRestore();
+  });
+
+  it("keeps the old object when the committed array still references it", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockRpc.mockResolvedValue({
+      data: [NEW_IMAGE_URL, IMAGE_URL],
+      error: null,
+    });
+
+    await expect(
+      adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm()),
+    ).resolves.toEqual({ notice: "Photo replaced. 1 face blurred." });
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+    expect(mockUpdateTag).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("keeps the old object when the swap returned no array at all", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockRpc.mockResolvedValue({ data: null, error: null });
+
+    await expect(
+      adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm()),
+    ).resolves.toEqual({ notice: "Photo replaced. 1 face blurred." });
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+    expect(mockUpdateTag).toHaveBeenCalledTimes(2);
+    warn.mockRestore();
+  });
+
+  it("still succeeds when the cleanup returns an error", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockDeleteListingImages.mockResolvedValue({ error: "storage down" });
+
+    await expect(
+      adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm()),
+    ).resolves.toEqual({ notice: "Photo replaced. 1 face blurred." });
+    expect(mockUpdateTag).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("still succeeds when the cleanup itself rejects", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockDeleteListingImages.mockRejectedValue(new Error("network"));
+
+    await expect(
+      adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm()),
+    ).resolves.toEqual({ notice: "Photo replaced. 1 face blurred." });
+    expect(mockUpdateTag).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("rejects a malformed URL before reading the listing", async () => {
+    await expect(
+      adminReplaceListingImage(LISTING_ID, "../../secret.webp", photoForm()),
+    ).resolves.toEqual({ error: "Invalid image" });
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+});
+
+describe("adminAddListingImage", () => {
+  beforeEach(() => {
+    mockFrom.mockImplementation(() =>
+      tableStub({ data: { image_urls: [IMAGE_URL] }, error: null }),
+    );
+  });
+
+  it("appends after the upload and deletes nothing", async () => {
+    await expect(
+      adminAddListingImage(LISTING_ID, photoForm()),
+    ).resolves.toEqual({ notice: "Photo added. 1 face blurred." });
+
+    expect(calls).toEqual([
+      "pipeline",
+      "storage:upload",
+      "rpc:admin_append_listing_image",
+    ]);
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+    expect(mockUpdateTag).toHaveBeenCalledTimes(2);
+  });
+
+  it("hands the RPC the new URL and its placeholder", async () => {
+    await adminAddListingImage(LISTING_ID, photoForm());
+
+    expect(mockRpc).toHaveBeenCalledExactlyOnceWith(
+      "admin_append_listing_image",
+      {
+        p_listing_id: LISTING_ID,
+        p_new_url: NEW_IMAGE_URL,
+        p_new_blur: "data:image/jpeg;base64,tiny",
+      },
+    );
+  });
+
+  it("refuses at three photos before the pipeline costs anything", async () => {
+    mockFrom.mockImplementation(() =>
+      tableStub({
+        data: { image_urls: [IMAGE_URL, NEW_IMAGE_URL, "https://x/c.webp"] },
+        error: null,
+      }),
+    );
+
+    await expect(
+      adminAddListingImage(LISTING_ID, photoForm()),
+    ).resolves.toEqual({ error: "A listing can hold at most three photos." });
+    expect(mockProcessListingImage).not.toHaveBeenCalled();
+    expect(mockUploadListingImage).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it("reports the database's own refusal at three in the same words", async () => {
+    mockRpc.mockResolvedValue({
+      error: { message: "at most three", code: "23514" },
+    });
+
+    await expect(
+      adminAddListingImage(LISTING_ID, photoForm()),
+    ).resolves.toEqual({ error: "A listing can hold at most three photos." });
+    expect(mockDeleteListingImages).toHaveBeenCalledExactlyOnceWith(
+      [NEW_IMAGE_URL],
+      SUPABASE,
+    );
+  });
+
+  it("refuses an invalid listing id before anything else", async () => {
+    await expect(adminAddListingImage("nope", photoForm())).resolves.toEqual({
+      error: "Invalid listing id",
+    });
+    expect(mockFrom).not.toHaveBeenCalled();
+  });
+
+  it("refuses a missing or wrong-type file", async () => {
+    await expect(
+      adminAddListingImage(LISTING_ID, new FormData()),
+    ).resolves.toEqual({ error: "Choose a photo." });
+
+    const gif = new File([new Uint8Array([1])], "a.gif", { type: "image/gif" });
+    await expect(
+      adminAddListingImage(LISTING_ID, photoForm(gif)),
+    ).resolves.toEqual({ error: "Upload a JPEG, PNG, or WebP image." });
+    expect(mockProcessListingImage).not.toHaveBeenCalled();
+  });
+
+  it("writes nothing when face detection could not run", async () => {
+    mockProcessListingImage.mockResolvedValue({
+      webp: Buffer.from("reprocessed"),
+      facesDetected: 0,
+      visionOk: false,
+    });
+
+    await expect(
+      adminAddListingImage(LISTING_ID, photoForm()),
+    ).resolves.toEqual({
+      error: "Face detection is unavailable right now. Try again later.",
+    });
+    expect(mockUploadListingImage).not.toHaveBeenCalled();
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it("reports an upload failure without touching the row", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockUploadListingImage.mockRejectedValue(new Error("bucket full"));
+
+    await expect(
+      adminAddListingImage(LISTING_ID, photoForm()),
+    ).resolves.toEqual({ error: "The photo could not be saved." });
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it("keeps the upload when the append failure carries no code", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockRpc.mockResolvedValue({
+      error: { message: "TypeError: fetch failed", code: "" },
+    });
+
+    await expect(
+      adminAddListingImage(LISTING_ID, photoForm()),
+    ).resolves.toEqual({ error: "Something went wrong. Please try again." });
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("says nothing about a face when none was found", async () => {
+    mockProcessListingImage.mockResolvedValue({
+      webp: Buffer.from("reprocessed"),
+      facesDetected: 0,
+      visionOk: true,
+    });
+
+    await expect(
+      adminAddListingImage(LISTING_ID, photoForm()),
+    ).resolves.toEqual({ notice: "Photo added. No faces were detected." });
+  });
+});
+
+describe("adminMoveListingImage", () => {
+  it("addresses the photo by position AND by the URL the page believes is there", async () => {
+    await expect(
+      adminMoveListingImage(LISTING_ID, 2, IMAGE_URL, -1),
+    ).resolves.toEqual({});
+
+    expect(mockRpc).toHaveBeenCalledExactlyOnceWith("admin_move_listing_image", {
+      p_listing_id: LISTING_ID,
+      p_index: 2,
+      p_expected_url: IMAGE_URL,
+      p_offset: -1,
+    });
+    expect(mockUpdateTag).toHaveBeenCalledTimes(2);
+  });
+
+  it("touches storage on no path at all", async () => {
+    await adminMoveListingImage(LISTING_ID, 1, IMAGE_URL, 1);
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+    expect(mockUploadListingImage).not.toHaveBeenCalled();
+  });
+
+  it("refuses an offset that is not one step", async () => {
+    await expect(
+      adminMoveListingImage(LISTING_ID, 1, IMAGE_URL, 2),
+    ).resolves.toEqual({ error: "Invalid move" });
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it("refuses a position outside the array bounds", async () => {
+    await expect(
+      adminMoveListingImage(LISTING_ID, 0, IMAGE_URL, 1),
+    ).resolves.toEqual({ error: "Invalid move" });
+    await expect(
+      adminMoveListingImage(LISTING_ID, 4, IMAGE_URL, 1),
+    ).resolves.toEqual({ error: "Invalid move" });
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it("refuses a malformed listing id or image URL", async () => {
+    await expect(
+      adminMoveListingImage("nope", 1, IMAGE_URL, 1),
+    ).resolves.toEqual({ error: "Invalid move" });
+    await expect(
+      adminMoveListingImage(LISTING_ID, 1, "../../secret.webp", 1),
+    ).resolves.toEqual({ error: "Invalid move" });
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it("says the page is stale rather than repeating suspend's reason copy", async () => {
+    mockRpc.mockResolvedValue({ error: { message: "raw", code: "22023" } });
+    await expect(
+      adminMoveListingImage(LISTING_ID, 1, IMAGE_URL, -1),
+    ).resolves.toEqual({
+      error: "That move is no longer possible. Refresh the page.",
+    });
+
+    mockRpc.mockResolvedValue({ error: { message: "raw", code: "P0002" } });
+    await expect(
+      adminMoveListingImage(LISTING_ID, 1, IMAGE_URL, 1),
+    ).resolves.toEqual({ error: "Photo not found" });
     expect(mockUpdateTag).not.toHaveBeenCalled();
   });
 });

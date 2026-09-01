@@ -10,9 +10,15 @@ import {
 import {
   adminListingIdSchema,
   adminSizeIdSchema,
-  removeListingImageSchema,
+  listingImageFileSchema,
+  listingImageMoveSchema,
+  listingImageTargetSchema,
   suspendListingSchema,
 } from "@/lib/validations/admin/listing-schema";
+import {
+  ACCEPTED_LISTING_IMAGE_TYPES,
+  MAX_LISTING_IMAGE_BYTES,
+} from "@/lib/types";
 import { adminPaymentIdSchema } from "@/lib/validations/admin/payment-schema";
 import {
   BAN_DURATION,
@@ -168,9 +174,9 @@ describe("id schemas", () => {
   });
 });
 
-describe("removeListingImageSchema", () => {
+describe("listingImageTargetSchema", () => {
   it("accepts a listing uuid plus a URL", () => {
-    const parsed = removeListingImageSchema.safeParse({
+    const parsed = listingImageTargetSchema.safeParse({
       listingId: UUID,
       imageUrl: "https://example.supabase.co/storage/v1/object/public/gown-images/a.webp",
     });
@@ -179,7 +185,7 @@ describe("removeListingImageSchema", () => {
 
   it("rejects a bucket path masquerading as a URL", () => {
     expect(
-      removeListingImageSchema.safeParse({
+      listingImageTargetSchema.safeParse({
         listingId: UUID,
         imageUrl: "../../secret.webp",
       }).success,
@@ -188,7 +194,7 @@ describe("removeListingImageSchema", () => {
 
   it("rejects an invalid listing id", () => {
     expect(
-      removeListingImageSchema.safeParse({
+      listingImageTargetSchema.safeParse({
         listingId: "nope",
         imageUrl: "https://example.com/a.webp",
       }).success,
@@ -259,5 +265,116 @@ describe("suspend issues are addressed to a field, not a banner", () => {
     expect(parsed.success).toBe(false);
     const paths = parsed.error?.issues.map((i) => i.path[0]) ?? [];
     expect(new Set(paths)).toEqual(new Set(["slug", "note"]));
+  });
+});
+
+function photo(
+  type: string,
+  bytes: number,
+  name = "gown.jpg",
+): File {
+  return new File([new Uint8Array(bytes)], name, { type });
+}
+
+describe("listingImageFileSchema", () => {
+  it("accepts every type sharp can decode without a native extra", () => {
+    for (const type of ACCEPTED_LISTING_IMAGE_TYPES) {
+      expect(listingImageFileSchema.safeParse(photo(type, 10)).success).toBe(
+        true,
+      );
+    }
+  });
+
+  it("accepts a file exactly at the size cap", () => {
+    const parsed = listingImageFileSchema.safeParse(
+      photo("image/jpeg", MAX_LISTING_IMAGE_BYTES),
+    );
+    expect(parsed.success).toBe(true);
+  });
+
+  it("asks for a photo when the field carried nothing", () => {
+    for (const value of [null, undefined, "gown.jpg", 42]) {
+      const parsed = listingImageFileSchema.safeParse(value);
+      expect(parsed.success).toBe(false);
+      expect(parsed.error?.issues[0]?.message).toBe("Choose a photo.");
+    }
+  });
+
+  it("rejects HEIC by name, since it would otherwise fail deep in the pipeline", () => {
+    const parsed = listingImageFileSchema.safeParse(
+      photo("image/heic", 10, "gown.heic"),
+    );
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues[0]?.message).toBe(
+      "Upload a JPEG, PNG, or WebP image.",
+    );
+  });
+
+  it("rejects a GIF, which is in the upload map but not this subset", () => {
+    expect(
+      listingImageFileSchema.safeParse(photo("image/gif", 10, "a.gif")).success,
+    ).toBe(false);
+  });
+
+  it("rejects an empty file and one past the cap, in the operator's words", () => {
+    for (const size of [0, MAX_LISTING_IMAGE_BYTES + 1]) {
+      const parsed = listingImageFileSchema.safeParse(photo("image/jpeg", size));
+      expect(parsed.success).toBe(false);
+      expect(parsed.error?.issues[0]?.message).toBe(
+        "Keep the photo under 25 MB.",
+      );
+    }
+  });
+});
+
+describe("listingImageMoveSchema", () => {
+  const BASE = { listingId: UUID, imageUrl: "https://x.test/a.webp" };
+
+  it("accepts a one-step move in either direction at any valid position", () => {
+    for (const position of [1, 2, 3]) {
+      for (const offset of [-1, 1]) {
+        expect(
+          listingImageMoveSchema.safeParse({ ...BASE, position, offset })
+            .success,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("rejects an offset that is not one step", () => {
+    for (const offset of [0, 2, -2]) {
+      expect(
+        listingImageMoveSchema.safeParse({ ...BASE, position: 1, offset })
+          .success,
+      ).toBe(false);
+    }
+  });
+
+  it("rejects a position outside the array, and a fractional one", () => {
+    for (const position of [0, 4, 1.5]) {
+      expect(
+        listingImageMoveSchema.safeParse({ ...BASE, position, offset: 1 })
+          .success,
+      ).toBe(false);
+    }
+  });
+
+  it("rejects a bad listing id or a non-URL target", () => {
+    expect(
+      listingImageMoveSchema.safeParse({
+        ...BASE,
+        listingId: "nope",
+        position: 1,
+        offset: 1,
+      }).success,
+    ).toBe(false);
+    expect(
+      listingImageMoveSchema.safeParse({
+        ...BASE,
+        imageUrl: "../../secret.webp",
+        position: 1,
+        offset: 1,
+      }).success,
+    ).toBe(false);
   });
 });

@@ -7,6 +7,7 @@ import { getAdminListing } from "@/lib/queries/admin/listings";
 import { sortListingSizes } from "@/lib/listing-variants";
 
 import { isAdminDemoMode } from "@/lib/admin/demo";
+import { AdminRefreshControl } from "../../../../AdminRefreshControl";
 import { getFixtureListing } from "../../../../admin-fixtures";
 import { StatusPill } from "../../../../StatusPill";
 
@@ -46,21 +47,24 @@ export default async function AdminListingEditPage({
 
   return (
     <div className="mx-auto flex w-full max-w-2xl flex-col gap-6">
-      <header>
-        <Link
-          href={`/admin/listings/${listing.id}`}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-(--accent-deep) hover:text-(--ink)"
-        >
-          <ArrowLeft className="size-3.5" aria-hidden />
-          Back to listing
-        </Link>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <h1 className="font-display text-[1.75rem] text-(--ink) sm:text-[2rem]">
-            Edit listing
-          </h1>
-          <StatusPill status={listing.status} />
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <Link
+            href={`/admin/listings/${listing.id}`}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-(--accent-deep) hover:text-(--ink)"
+          >
+            <ArrowLeft className="size-3.5" aria-hidden />
+            Back to listing
+          </Link>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <h1 className="font-display text-[1.75rem] text-(--ink) sm:text-[2rem]">
+              Edit listing
+            </h1>
+            <StatusPill status={listing.status} />
+          </div>
+          <p className="mt-1 text-sm text-(--muted-ink)">{listing.title}</p>
         </div>
-        <p className="mt-1 text-sm text-(--muted-ink)">{listing.title}</p>
+        <AdminRefreshControl />
       </header>
 
       <AdminListingEditForm

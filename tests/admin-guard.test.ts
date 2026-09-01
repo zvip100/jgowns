@@ -1,13 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockGetUser, mockIsAdminDemoMode } = vi.hoisted(() => ({
-  mockGetUser: vi.fn(),
-  mockIsAdminDemoMode: vi.fn(),
-}));
+const { mockCreateClient, mockGetUser, mockIsAdminDemoMode } = vi.hoisted(
+  () => ({
+    mockCreateClient: vi.fn(),
+    mockGetUser: vi.fn(),
+    mockIsAdminDemoMode: vi.fn(),
+  }),
+);
 
-vi.mock("@/lib/supabase/server", () => ({
-  createClient: async () => ({ auth: { getUser: mockGetUser } }),
-}));
+vi.mock("@/lib/supabase/server", () => ({ createClient: mockCreateClient }));
 vi.mock("@/lib/admin/demo", () => ({ isAdminDemoMode: mockIsAdminDemoMode }));
 
 import {
@@ -34,6 +35,7 @@ const SELLER = {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockCreateClient.mockResolvedValue({ auth: { getUser: mockGetUser } });
   mockIsAdminDemoMode.mockResolvedValue(false);
 });
 
@@ -183,5 +185,61 @@ describe("runAdminAction", () => {
 
     expect(JSON.stringify(result)).not.toContain("relation");
     error.mockRestore();
+  });
+});
+
+/**
+ * The preamble runs INSIDE the error boundary. A server action is an
+ * independently callable endpoint, so a throw from any of these three would
+ * otherwise reject the promise at the client rather than returning the typed
+ * result every caller destructures (AGENTS §7). The refusals below still have
+ * to read as refusals, not as internal failures.
+ */
+describe("runAdminAction: the guard itself is inside the boundary", () => {
+  it("sanitizes a throw from createClient", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    const body = vi.fn(async () => ({}));
+    mockCreateClient.mockRejectedValue(new Error("cookies() outside a request"));
+
+    await expect(runAdminAction("scope", body)).resolves.toEqual({
+      error: ADMIN_UNEXPECTED_ERROR,
+    });
+    expect(body).not.toHaveBeenCalled();
+    expect(error).toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it("sanitizes a throw from getUser", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockGetUser.mockRejectedValue(new Error("AuthRetryableFetchError"));
+
+    await expect(
+      runAdminAction("scope", async () => ({})),
+    ).resolves.toEqual({ error: ADMIN_UNEXPECTED_ERROR });
+    error.mockRestore();
+  });
+
+  it("sanitizes a throw from the demo-cookie read", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockGetUser.mockResolvedValue({ data: { user: ADMIN } });
+    mockIsAdminDemoMode.mockRejectedValue(new Error("cookies() unavailable"));
+
+    await expect(
+      runAdminAction("scope", async () => ({})),
+    ).resolves.toEqual({ error: ADMIN_UNEXPECTED_ERROR });
+    error.mockRestore();
+  });
+
+  it("still returns the plain refusals, which are returns and not throws", async () => {
+    mockGetUser.mockResolvedValue({ data: { user: SELLER } });
+    await expect(runAdminAction("scope", async () => ({}))).resolves.toEqual({
+      error: ADMIN_NOT_AUTHORIZED_ERROR,
+    });
+
+    mockGetUser.mockResolvedValue({ data: { user: ADMIN } });
+    mockIsAdminDemoMode.mockResolvedValue(true);
+    await expect(runAdminAction("scope", async () => ({}))).resolves.toEqual({
+      error: ADMIN_DEMO_MODE_ERROR,
+    });
   });
 });

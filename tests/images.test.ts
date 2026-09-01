@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, onTestFinished } from "vitest";
 
 const SUPABASE_URL = "https://test.supabase.co";
 
@@ -22,6 +22,7 @@ const {
     resize: vi.fn().mockReturnThis(),
     toBuffer: vi.fn().mockResolvedValue(Buffer.from("processed")),
     webp: vi.fn().mockReturnThis(),
+    jpeg: vi.fn().mockReturnThis(),
     extract: vi.fn().mockReturnThis(),
     blur: vi.fn().mockReturnThis(),
     composite: vi.fn().mockReturnThis(),
@@ -84,6 +85,35 @@ describe("optimizeListingPhoto", () => {
     }
     expect(mockSharp).toHaveBeenCalled();
     expect(mockFaceDetection).toHaveBeenCalled();
+  });
+
+  it("returns a server-made blur placeholder alongside the optimized image", async () => {
+    const formData = new FormData();
+    formData.set("image", makeImageFile());
+
+    const result = await optimizeListingPhoto(formData);
+
+    expect("dataUrl" in result).toBe(true);
+    if ("dataUrl" in result) {
+      expect(result.blurDataUrl).toMatch(/^data:image\/jpeg;base64,/);
+    }
+  });
+
+  it("still returns the optimized image when the placeholder cannot be made", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    mockSharpInstance.toBuffer
+      .mockResolvedValueOnce(Buffer.from("processed"))
+      .mockResolvedValueOnce(Buffer.from("processed"))
+      .mockRejectedValueOnce(new Error("bad image"));
+
+    const formData = new FormData();
+    formData.set("image", makeImageFile());
+
+    const result = await optimizeListingPhoto(formData);
+
+    expect("dataUrl" in result).toBe(true);
+    if ("dataUrl" in result) expect(result.blurDataUrl).toBeNull();
   });
 
   it("returns an error and does not call sharp for a non-image MIME type", async () => {

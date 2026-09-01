@@ -101,7 +101,11 @@ export function useListingImageSlots({
         optimizedDataUrl: result.dataUrl,
         optimizeError: '',
         optimizing: false,
-        blurPromise: generateBlurDataUrl(result.dataUrl),
+        // The server already made one from the same buffer it optimized. Canvas
+        // stays the fallback below, for the raw file an optimize failure leaves.
+        blurPromise: result.blurDataUrl
+          ? Promise.resolve(result.blurDataUrl)
+          : generateBlurDataUrl(result.dataUrl),
       });
       return;
     }

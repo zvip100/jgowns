@@ -1,6 +1,5 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
 import { updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -12,11 +11,16 @@ import {
   strOrUndefined,
   variantRowsPayload,
 } from "@/lib/listing-form";
-import { MAX_LISTING_IMAGES, type ServerActionErrorResult } from "@/lib/types";
+import {
+  MAX_BLUR_DATA_URL_LENGTH,
+  MAX_LISTING_IMAGES,
+  type ServerActionErrorResult,
+} from "@/lib/types";
 import { imageSlotFormKeys } from "@/lib/utils";
-import { getAuthClient, type SupabaseServer } from "@/lib/actions/auth";
+import { getAuthClient } from "@/lib/actions/auth";
 import { createListingCheckout } from "@/lib/actions/payments";
 import { deleteListingImages } from "@/lib/actions/images";
+import { uploadListingImage } from "@/lib/images/storage";
 import { listingInputSchema } from "@/lib/validations/listing-schema";
 
 /** One-shot flag consumed by DashboardFlashToast, mirroring the edit flow. */
@@ -33,8 +37,6 @@ function fileOrNull(value: FormDataEntryValue | null): File | null {
   if (typeof value === "string") return null;
   return value;
 }
-
-const MAX_BLUR_DATA_URL_LENGTH = 4096;
 
 /** Blur strings are client-generated tiny data URLs; reject anything else. */
 function sanitizeBlur(value: FormDataEntryValue | null): string {
@@ -68,38 +70,6 @@ function collectImageSlots(
   return slots;
 }
 
-const UPLOAD_EXT_BY_MIME: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "image/gif": "gif",
-  "image/heic": "heic",
-  "image/heif": "heif",
-};
-
-async function uploadListingImage({
-  supabase,
-  file,
-}: {
-  supabase: SupabaseServer;
-  file: File;
-}): Promise<string> {
-  const ext = UPLOAD_EXT_BY_MIME[file.type] ?? "jpg";
-  const path = `${randomUUID()}-${Date.now()}.${ext}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from("gown-images")
-    .upload(path, file);
-
-  if (uploadError) throw new Error(uploadError.message);
-
-  const { data: urlData } = supabase.storage
-    .from("gown-images")
-    .getPublicUrl(path);
-
-  return urlData.publicUrl;
-}
-
 export async function createListing(
   formData: FormData,
 ): Promise<ServerActionErrorResult> {
@@ -129,7 +99,9 @@ export async function createListing(
     );
 
     const uploadResults = await Promise.allSettled(
-      files.map((file) => uploadListingImage({ supabase, file })),
+      files.map((file) =>
+        uploadListingImage({ supabase, body: file, contentType: file.type }),
+      ),
     );
     for (const result of uploadResults) {
       if (result.status === "fulfilled") uploadedUrls.push(result.value);
@@ -252,7 +224,11 @@ export async function updateListing(
     const uploadResults = await Promise.allSettled(
       slots.map((slot) =>
         slot.file
-          ? uploadListingImage({ supabase, file: slot.file })
+          ? uploadListingImage({
+              supabase,
+              body: slot.file,
+              contentType: slot.file.type,
+            })
           : Promise.resolve(null),
       ),
     );

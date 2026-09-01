@@ -129,6 +129,11 @@ create index listings_created_at_idx on listings (created_at desc);
 create index listings_sold_at_idx on listings (sold_at) where sold_at is not null;
 create index listings_status_idx on listings (status);
 
+-- The seller-ownership policies have always filtered this column, and the
+-- storage delete policy for admin-uploaded photos adds a per-object `exists`
+-- over the caller's own listings.
+create index listings_user_id_idx on listings (user_id);
+
 -- One row per Stripe Checkout attempt for a listing's publishing fee. No
 -- update/delete policies for authenticated callers: status transitions are
 -- service-role only — `succeeded` via record_listing_payment, `expired` via
@@ -372,6 +377,33 @@ create policy "Users can delete own images" on storage.objects for delete using 
 create policy "Admins can delete listing images" on storage.objects
   for delete to authenticated
   using (bucket_id = 'gown-images' and (select is_admin()));
+
+-- An object an admin uploaded for a seller's listing is owned by the ADMIN, so
+-- the owner policy above refuses the seller who later removes that photo from
+-- their own dashboard: the row goes correct and the file is stranded.
+--
+-- Provenance comes from the PATH, never from `listings.image_urls`. That column
+-- is seller-writable (update_listing_with_variants is granted to authenticated
+-- and assigns it straight from client jsonb), so a policy keyed on it lets a
+-- seller plant another seller's URL in their own listing and delete a
+-- stranger's object. A seller cannot move an object into a different prefix,
+-- so `admin/<listing_id>/` is a claim only this application can make.
+--
+-- Objects written before migration 036 have flat paths and are not covered;
+-- those stay with the orphan sweep.
+create policy "Sellers can delete admin photos on their own listings"
+on storage.objects for delete
+to authenticated
+using (
+  bucket_id = 'gown-images'
+  and name like 'admin/%'
+  and exists (
+    select 1
+      from public.listings l
+     where l.user_id = (select auth.uid())
+       and starts_with(storage.objects.name, 'admin/' || l.id::text || '/')
+  )
+);
 
 -- Atomic "mark listing sold": flip the listing status and all of its size
 -- variants in one transaction, so a mid-way failure can't leave the listing
@@ -1906,19 +1938,35 @@ $$;
 revoke execute on function admin_suspend_seller_listings(uuid, text, text) from public;
 grant execute on function admin_suspend_seller_listings(uuid, text, text) to authenticated;
 
--- Removal only; replace is deferred, because it means driving the Vision plus
--- Sharp pipeline from a page that has no uploader.
---
--- Takes the URL and does the array surgery here rather than accepting
--- pre-computed arrays, so a replayed request cannot rewrite a listing's photos
--- into anything it likes. The index is found in the listing's own stored array
--- or the call fails, and the blur entry at that same index goes with it or
+-- ---------------------------------------------------------------------------
+-- Photo moderation: remove, replace, append, move
+-- ---------------------------------------------------------------------------
+
+-- Each one takes the URL (or, for a move, the index plus the URL expected to be
+-- there) and does the array surgery here rather than accepting pre-computed
+-- arrays, so a replayed request cannot rewrite a listing's photos into anything
+-- it likes. The index is found in the listing's own stored array or the call
+-- fails, and the blur entry at that same index goes with it or
 -- listings_image_arrays_check rejects the write.
+--
+-- Each returns the COMMITTED array. The action deletes the old storage object
+-- only when the returned array no longer contains that URL: the constraint
+-- bounds count and parity but not uniqueness, so a listing carrying the same
+-- URL twice would otherwise have one index rewritten while the other still
+-- pointed at the object being deleted.
+--
+-- Why RPCs rather than plain UPDATEs from the action: supabase-js can only send
+-- literal values, so a client-side edit means reading the arrays, running the
+-- pipeline (download + Vision + sharp + upload, seconds), and writing back an
+-- array computed from a snapshot that is now stale. Migration 033 documents
+-- exactly what that costs. Here every write is one statement against the row's
+-- own current value, and the audit slug override has to run in this transaction
+-- anyway (audit_listing_change() otherwise files it as 'listing.edit').
 create or replace function admin_remove_listing_image(
   p_listing_id uuid,
   p_image_url text
 )
-returns void
+returns text[]
 language plpgsql
 security invoker
 set search_path = ''
@@ -1963,12 +2011,259 @@ begin
      set image_urls = v_urls[1:v_index - 1] || v_urls[v_index + 1:],
          image_blur_data_urls =
            v_blurs[1:v_index - 1] || v_blurs[v_index + 1:]
-   where id = p_listing_id;
+   where id = p_listing_id
+  returning image_urls into v_urls;
 
   -- One-shot, same rule as app.audit_reason and app.audit_variants.
   perform set_config('app.audit_action', '', true);
+
+  return v_urls;
 end;
 $$;
 
 revoke execute on function admin_remove_listing_image(uuid, text) from public;
 grant execute on function admin_remove_listing_image(uuid, text) to authenticated;
+
+-- Swaps one stored image URL (and its blur placeholder) for a freshly processed
+-- one, in place, without disturbing the other photos. Serves both the reprocess
+-- action (the same photo, re-run through the pipeline) and the replace action
+-- (a different photo the seller sent in), which is why the audit slug is a
+-- parameter: those are not the same event and the log has to tell them apart.
+--
+-- The DEFAULT keeps any caller that sends only four named arguments working,
+-- since PostgREST resolves an RPC by argument NAMES.
+--
+-- The slug is bounded, not proven: a client-supplied value narrowed to two
+-- admin-only outcomes, which is an admin's stated intent rather than an
+-- unforgeable account of what happened. The null branch is not decoration --
+-- SQL `not in` yields NULL for a NULL left operand, so a bare check would let a
+-- null through, set_config would blank the GUC, and the trigger would quietly
+-- file the event as 'listing.edit'.
+--
+-- The object written by both paths is owned by the ADMIN. Under
+-- `admin/<listing_id>/` the seller can still delete it through the storage
+-- policy above; objects written before migration 036 have flat paths and stay
+-- with the orphan sweep.
+create or replace function admin_replace_listing_image(
+  p_listing_id uuid,
+  p_old_url text,
+  p_new_url text,
+  p_new_blur text,
+  p_audit_action text default 'listing.image_reprocess'
+)
+returns text[]
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_urls text[];
+  v_index int;
+begin
+  if not (select public.is_admin()) then
+    raise exception 'Not authorized' using errcode = '42501';
+  end if;
+
+  if p_audit_action is null
+     or p_audit_action not in ('listing.image_reprocess', 'listing.image_replace')
+  then
+    raise exception 'Invalid audit action' using errcode = '22023';
+  end if;
+
+  -- Locked for the same reason as admin_remove_listing_image: two operators
+  -- acting on the same listing would otherwise both compute from the same
+  -- pre-transaction snapshot and the second write would undo the first.
+  select l.image_urls
+    into v_urls
+    from public.listings l
+   where l.id = p_listing_id
+     for update;
+
+  if v_urls is null then
+    raise exception 'Listing not found' using errcode = 'P0002';
+  end if;
+
+  v_index := array_position(v_urls, p_old_url);
+  if v_index is null then
+    raise exception 'Image not found' using errcode = 'P0002';
+  end if;
+
+  -- Cardinality does not move, so the listings_image_arrays_check constraint
+  -- cannot be broken here and there is no minimum-photo guard to repeat.
+  perform set_config('app.audit_action', p_audit_action, true);
+
+  update public.listings
+     set image_urls[v_index] = p_new_url,
+         -- coalesce: the server-side placeholder generator can come back empty,
+         -- and the seller path stores '' rather than null in that case.
+         image_blur_data_urls[v_index] = coalesce(p_new_blur, '')
+   where id = p_listing_id
+  returning image_urls into v_urls;
+
+  perform set_config('app.audit_action', '', true);
+
+  return v_urls;
+end;
+$$;
+
+revoke execute on function admin_replace_listing_image(uuid, text, text, text, text)
+  from public;
+grant execute on function admin_replace_listing_image(uuid, text, text, text, text)
+  to authenticated;
+
+-- Appends a photo an admin received out of band. The inverse of removal, and
+-- the same shape.
+create or replace function admin_append_listing_image(
+  p_listing_id uuid,
+  p_new_url text,
+  p_new_blur text
+)
+returns text[]
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_urls text[];
+  v_blurs text[];
+begin
+  if not (select public.is_admin()) then
+    raise exception 'Not authorized' using errcode = '42501';
+  end if;
+
+  -- The lock is load-bearing in a way it is not for a positional swap: two
+  -- operators adding at once would both read cardinality 2, both append, and
+  -- the loser's write would drop the winner's URL.
+  select l.image_urls, l.image_blur_data_urls
+    into v_urls, v_blurs
+    from public.listings l
+   where l.id = p_listing_id
+     for update;
+
+  if v_urls is null then
+    raise exception 'Listing not found' using errcode = 'P0002';
+  end if;
+
+  -- Explicit rather than leaning on listings_image_arrays_check, mirroring how
+  -- removal raises its own minimum, so the action can map the code to operator
+  -- copy instead of surfacing a raw constraint violation.
+  if cardinality(v_urls) >= 3 then
+    raise exception 'A listing can hold at most three photos'
+      using errcode = '23514';
+  end if;
+
+  perform set_config('app.audit_action', 'listing.image_add', true);
+
+  update public.listings
+     set image_urls = v_urls || p_new_url,
+         image_blur_data_urls = v_blurs || coalesce(p_new_blur, '')
+   where id = p_listing_id
+  returning image_urls into v_urls;
+
+  perform set_config('app.audit_action', '', true);
+
+  return v_urls;
+end;
+$$;
+
+revoke execute on function admin_append_listing_image(uuid, text, text) from public;
+grant execute on function admin_append_listing_image(uuid, text, text) to authenticated;
+
+-- Moves one photo one position. Photo 1 is the listing's cover image, so this
+-- is a real capability rather than a nicety.
+--
+-- Deliberately a DIRECTION, not a whole reordered array. Taking an array from
+-- the client means validating it is a permutation of the stored one, and means
+-- the client computed it from a read that is already stale. A direction sends
+-- no array at all and swaps against the row's own locked value.
+--
+-- Addressed by INDEX plus expected URL, unlike the other three photo RPCs.
+-- Duplicate URLs in one array are reachable (image_urls is seller-writable
+-- through update_listing_with_variants), and array_position would then move the
+-- FIRST occurrence rather than the thumbnail that was clicked. Worse, swapping
+-- two identical adjacent entries leaves image_digest unchanged, so the audit
+-- trigger emits no row and the action appears to do nothing. Remove, reprocess
+-- and replace keep URL addressing because acting on either of two byte-
+-- identical entries is indistinguishable from acting on the right one;
+-- position is the whole point here.
+create or replace function admin_move_listing_image(
+  p_listing_id uuid,
+  p_index int,
+  p_expected_url text,
+  p_offset int
+)
+returns text[]
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_urls text[];
+  v_blurs text[];
+  v_target int;
+  v_url text;
+  v_blur text;
+begin
+  if not (select public.is_admin()) then
+    raise exception 'Not authorized' using errcode = '42501';
+  end if;
+
+  if p_offset is null or p_offset not in (-1, 1) then
+    raise exception 'Invalid move' using errcode = '22023';
+  end if;
+
+  select l.image_urls, l.image_blur_data_urls
+    into v_urls, v_blurs
+    from public.listings l
+   where l.id = p_listing_id
+     for update;
+
+  if v_urls is null then
+    raise exception 'Listing not found' using errcode = 'P0002';
+  end if;
+
+  if p_index is null or p_index < 1 or p_index > cardinality(v_urls) then
+    raise exception 'That position is not on this listing' using errcode = '22023';
+  end if;
+
+  -- The photos changed under the operator: their page is stale, and moving
+  -- whatever now sits at that index would move the wrong photo.
+  if v_urls[p_index] is distinct from p_expected_url then
+    raise exception 'Image not found' using errcode = 'P0002';
+  end if;
+
+  v_target := p_index + p_offset;
+  if v_target < 1 or v_target > cardinality(v_urls) then
+    raise exception 'That photo is already at the end' using errcode = '22023';
+  end if;
+
+  -- Refused rather than treated as a silent no-op: swapping two byte-identical
+  -- entries leaves image_digest unchanged, so the audit trigger writes nothing
+  -- and the operator would be told a move happened that no record can show.
+  if v_urls[p_index] = v_urls[v_target] then
+    raise exception 'Those two photos are identical' using errcode = '22023';
+  end if;
+
+  v_url := v_urls[p_index];
+  v_blur := v_blurs[p_index];
+  v_urls[p_index] := v_urls[v_target];
+  v_blurs[p_index] := v_blurs[v_target];
+  v_urls[v_target] := v_url;
+  v_blurs[v_target] := v_blur;
+
+  perform set_config('app.audit_action', 'listing.image_reorder', true);
+
+  update public.listings
+     set image_urls = v_urls,
+         image_blur_data_urls = v_blurs
+   where id = p_listing_id
+  returning image_urls into v_urls;
+
+  perform set_config('app.audit_action', '', true);
+
+  return v_urls;
+end;
+$$;
+
+revoke execute on function admin_move_listing_image(uuid, int, text, int) from public;
+grant execute on function admin_move_listing_image(uuid, int, text, int) to authenticated;

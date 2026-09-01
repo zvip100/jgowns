@@ -4,7 +4,7 @@ import { isAdmin } from "@/lib/admin/is-admin";
 import { createClient } from "@/lib/supabase/server";
 
 import type { SupabaseServer } from "@/lib/actions/auth";
-import type { ServerActionErrorResult } from "@/lib/types";
+import type { ServerActionResult } from "@/lib/types";
 
 /**
  * Server-side claim check for admin code paths that do NOT ride RLS.
@@ -84,8 +84,10 @@ export async function getAdminActionClient(): Promise<
  *
  * A server action is an independently callable endpoint, so an unexpected throw
  * would reject the promise at the client instead of returning the typed result
- * the callers expect (AGENTS §7). The guard's own refusal is returned before
- * the try, so a rejected request never reads as an internal failure.
+ * the callers expect (AGENTS §7). The guard runs INSIDE the try for that
+ * reason: a refusal is an early return rather than an exception, so the refusal
+ * semantics are unchanged, but a throw from `createClient()`, `getUser()`, or
+ * the demo-cookie read is now sanitized like any other.
  *
  * No admin action redirects today. Adding one means `unstable_rethrow(e)` as
  * the first line of this catch, or the NEXT_REDIRECT signal is swallowed and
@@ -93,12 +95,12 @@ export async function getAdminActionClient(): Promise<
  */
 export async function runAdminAction(
   scope: string,
-  run: (auth: AdminActionClient) => Promise<ServerActionErrorResult>,
-): Promise<ServerActionErrorResult> {
-  const auth = await getAdminActionClient();
-  if (!auth.ok) return { error: auth.error };
-
+  run: (auth: AdminActionClient) => Promise<ServerActionResult>,
+): Promise<ServerActionResult> {
   try {
+    const auth = await getAdminActionClient();
+    if (!auth.ok) return { error: auth.error };
+
     return await run(auth);
   } catch (e: unknown) {
     console.error(`[actions/admin] ${scope} threw`, e);
