@@ -45,6 +45,12 @@ type ServerPayload = {
   items: WishlistItem[] | null;
 };
 
+/**
+ * What a toggle actually did, so a caller captures the real outcome rather than
+ * assuming: an add is rejected once the cap is hit.
+ */
+export type WishlistToggleOutcome = 'added' | 'removed' | 'rejected';
+
 type WishlistContextValue = {
   items: WishlistItem[];
   count: number;
@@ -55,8 +61,8 @@ type WishlistContextValue = {
     listingId: string,
     snapshot: WishlistSnapshot,
     status: WishlistItemStatus,
-  ) => void;
-  removeItem: (listingId: string) => void;
+  ) => WishlistToggleOutcome;
+  removeItem: (listingId: string) => boolean;
   syncFromServer: (payload: ServerPayload) => void;
   isOpen: boolean;
   open: () => void;
@@ -310,7 +316,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
       listingId: string,
       snapshot: WishlistSnapshot,
       status: WishlistItemStatus,
-    ): void => {
+    ): WishlistToggleOutcome => {
       const existing = itemsRef.current.find(
         (item) => item.listingId === listingId,
       );
@@ -323,7 +329,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
         if (authedRef.current) {
           mirrorWrite('Remove', () => removeFromWishlist(listingId), toastId);
         }
-        return;
+        return 'removed';
       }
 
       const result = addWishlistItem(itemsRef.current, {
@@ -337,7 +343,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
         // Add rejected (wishlist full) — surface the reason rather than the
         // silent no-op the local state now is.
         toast.error(result.error);
-        return;
+        return 'rejected';
       }
 
       setItems(sortWishlistItems(result.items));
@@ -345,12 +351,13 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
       if (authedRef.current) {
         mirrorWrite('Add', () => addToWishlist(listingId, snapshot), toastId);
       }
+      return 'added';
     },
     [mirrorWrite],
   );
 
   const removeItem = useCallback(
-    (listingId: string) => {
+    (listingId: string): boolean => {
       const removed = itemsRef.current.find(
         (item) => item.listingId === listingId,
       );
@@ -362,6 +369,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
           mirrorWrite('Remove', () => removeFromWishlist(listingId), toastId);
         }
       }
+      return removed !== undefined;
     },
     [mirrorWrite],
   );

@@ -13,12 +13,14 @@ type AuthScreenBodyProps = {
   searchParams: Promise<AuthSearchParams>;
   renderForm: (next: string) => ReactNode;
   hasGoogleAuth: boolean;
+  isRegistration: boolean;
 };
 
 async function AuthScreenBody({
   searchParams,
   renderForm,
   hasGoogleAuth,
+  isRegistration,
 }: AuthScreenBodyProps) {
   const { next, error } = await searchParams;
   // Empty means "no destination requested", which is what lets an admin land on
@@ -31,7 +33,7 @@ async function AuthScreenBody({
       <AuthErrorBanner initialMessage={errorMessage} />
       {hasGoogleAuth && (
         <>
-          <GoogleAuthButton next={redirectTo} />
+          <GoogleAuthButton next={redirectTo} isRegistration={isRegistration} />
           <div className="flex items-center gap-3 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9a8369]">
             <span className="h-px flex-1 bg-[#e0d4c2]" />
             or
@@ -50,6 +52,8 @@ type AuthScreenProps = {
   searchParams: Promise<AuthSearchParams>;
   renderForm: (next: string) => ReactNode;
   hasGoogleAuth?: boolean;
+  /** Set on the register screen, where the Google button starts a signup. */
+  isRegistration?: boolean;
 };
 
 export default function AuthScreen({
@@ -58,6 +62,7 @@ export default function AuthScreen({
   searchParams,
   renderForm,
   hasGoogleAuth = true,
+  isRegistration = false,
 }: AuthScreenProps) {
   return (
     <div className="mx-auto mt-12 max-w-md sm:mt-20">
@@ -72,6 +77,7 @@ export default function AuthScreen({
               searchParams={searchParams}
               renderForm={renderForm}
               hasGoogleAuth={hasGoogleAuth}
+              isRegistration={isRegistration}
             />
           </Suspense>
         </div>

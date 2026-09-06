@@ -7,6 +7,8 @@ import { TextareaField } from "@/components/form/TextareaField";
 import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
 import { submitContactMessage } from "@/lib/actions/contact";
+import { captureEvent } from "@/lib/analytics/client";
+import { SITE_EVENTS } from "@/lib/analytics/events";
 import {
   contactSchema,
   type ContactFieldName,
@@ -52,6 +54,10 @@ export default function ContactForm() {
     setPending(true);
     try {
       const result = await submitContactMessage(formData);
+      captureEvent(SITE_EVENTS.contactFormSubmitted, {
+        succeeded: result.success,
+        error_kind: result.success ? null : "server",
+      });
       if (result.success) {
         form.reset();
         toast.success("Message sent successfully");
@@ -59,6 +65,10 @@ export default function ContactForm() {
         toast.error("Failed to send message", { description: result.error });
       }
     } catch {
+      captureEvent(SITE_EVENTS.contactFormSubmitted, {
+        succeeded: false,
+        error_kind: "network",
+      });
       toast.error("Failed to send message", {
         description: "Please try again in a moment.",
       });

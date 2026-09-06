@@ -3,6 +3,8 @@
 import { Heart } from 'lucide-react';
 
 import { useWishlist } from '@/components/wishlist/WishlistProvider';
+import { captureEvent } from '@/lib/analytics/client';
+import { BUYER_EVENTS } from '@/lib/analytics/events';
 import {
   WISHLIST_HEART_BUTTON_CLASS,
   WISHLIST_HEART_SAVED_CLASS,
@@ -13,6 +15,9 @@ import { cn } from '@/lib/utils';
 type WishlistButtonProps = {
   listingId: string;
   title: string;
+  /** Canonical values for capture. The display `priceLabel` is never parsed for them. */
+  category: string | null;
+  price: number | null;
   priceLabel: string;
   image: string | null;
   blurDataUrl: string | null;
@@ -23,6 +28,8 @@ type WishlistButtonProps = {
 export function WishlistButton({
   listingId,
   title,
+  category,
+  price,
   priceLabel,
   image,
   blurDataUrl,
@@ -40,9 +47,22 @@ export function WishlistButton({
   // the button disappears with no way to re-add.
   if (sold && !saved) return null;
 
-  // A rejected add (wishlist full) is surfaced by toggleItem via a toast.
+  // A rejected add (wishlist full) is surfaced by toggleItem via a toast, and
+  // captures nothing: the gown was never saved.
   function handleClick() {
-    toggleItem(listingId, { title, priceLabel, image, blurDataUrl }, status);
+    const outcome = toggleItem(
+      listingId,
+      { title, priceLabel, image, blurDataUrl },
+      status,
+    );
+    if (outcome === 'rejected') return;
+
+    captureEvent(
+      outcome === 'added'
+        ? BUYER_EVENTS.wishlistAdded
+        : BUYER_EVENTS.wishlistRemoved,
+      { listing_id: listingId, category, price },
+    );
   }
 
   return (

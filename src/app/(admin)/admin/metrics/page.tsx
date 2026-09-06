@@ -3,6 +3,7 @@ import { CreditCard, ExternalLink, Shirt, TrendingUp } from "lucide-react";
 
 import { ADMIN_EMPTY_VALUE } from "@/lib/admin/constants";
 import { getAdminMetrics } from "@/lib/queries/admin/metrics";
+import { POSTHOG_PROJECT_URL } from "@/lib/site";
 
 import { GOWN_CONDITIONS, SELL_MODES } from "@/lib/types";
 
@@ -107,7 +108,7 @@ export default async function AdminMetricsPage() {
         }
         action={
           <a
-            href="https://us.posthog.com"
+            href={POSTHOG_PROJECT_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 text-xs font-semibold text-(--accent-deep) hover:text-(--ink)"

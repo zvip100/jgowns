@@ -16,6 +16,7 @@ const {
   mockGetAuthClient,
   mockIsListingFeeActive,
   mockCreateListingCheckout,
+  mockCaptureServerEvent,
 } = vi.hoisted(() => {
   let urlCounter = 0;
   const mockGetPublicUrl = vi.fn().mockImplementation(() => ({
@@ -31,6 +32,7 @@ const {
   const mockGetAuthClient = vi.fn();
   const mockIsListingFeeActive = vi.fn().mockReturnValue(false);
   const mockCreateListingCheckout = vi.fn();
+  const mockCaptureServerEvent = vi.fn();
 
   return {
     mockInsert,
@@ -42,11 +44,16 @@ const {
     mockGetAuthClient,
     mockIsListingFeeActive,
     mockCreateListingCheckout,
+    mockCaptureServerEvent,
   };
 });
 
 vi.mock("next/cache", () => ({ updateTag: mockUpdateTag }));
 vi.mock("next/navigation", () => ({ redirect: mockRedirect }));
+vi.mock("@/lib/analytics/server", () => ({
+  captureServerError: vi.fn(),
+  captureServerEvent: mockCaptureServerEvent,
+}));
 vi.mock("@/lib/actions/auth", () => ({ getAuthClient: mockGetAuthClient }));
 vi.mock("@/lib/actions/images", () => ({
   deleteListingImages: mockDeleteListingImages,
@@ -68,7 +75,7 @@ function makeBlur(tag: string): string {
   return `data:image/jpeg;base64,${tag}`;
 }
 
-type SizeEntry = { size: string; size_group: string; price: number };
+type SizeEntry = { size: string; size_group: string; price?: number };
 
 const DEFAULT_SIZES: SizeEntry[] = [
   { size: "8", size_group: "adult", price: 800 },
@@ -1128,5 +1135,112 @@ describe("updateListing", () => {
     const payload = capture.payload as Record<string, unknown>;
     expect(payload.contact_methods).toEqual(["text"]);
     expect(payload.contact_phone).toBe("5551234567");
+  });
+});
+
+describe("listing_submitted", () => {
+  beforeEach(() => {
+    mockCaptureServerEvent.mockReset();
+    mockUpdateTag.mockClear();
+    mockIsListingFeeActive.mockReturnValue(false);
+    mockCreateListingCheckout.mockResolvedValue({});
+    let counter = 0;
+    mockGetPublicUrl.mockImplementation(() => ({
+      data: { publicUrl: makeSupabaseUrl(`img-${++counter}.webp`) },
+    }));
+  });
+
+  it("reports the category, lowest price, sell mode and photo count", async () => {
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase({ payload: {} as unknown }),
+    });
+
+    const fd = baseFormData([
+      { size: "8", size_group: "adult", price: 500 },
+      { size: "10", size_group: "adult", price: 400 },
+    ]);
+    fd.set("image_file_0", makeFile("a.webp"));
+    fd.set("blur_0", makeBlur("blur0"));
+    fd.set("image_file_1", makeFile("b.webp"));
+    fd.set("blur_1", makeBlur("blur1"));
+
+    try { await createListing(fd); } catch { /* redirect */ }
+
+    expect(mockCaptureServerEvent).toHaveBeenCalledTimes(1);
+    expect(mockCaptureServerEvent).toHaveBeenCalledWith("listing_submitted", {
+      category: "bridal",
+      price: 400,
+      sell_mode: "individual",
+      photo_count: 2,
+    });
+  });
+
+  it("reports the bundle price for a set-only listing", async () => {
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase({ payload: {} as unknown }),
+    });
+
+    const fd = baseFormData([
+      { size: "8", size_group: "adult" },
+      { size: "10", size_group: "adult" },
+    ]);
+    fd.set("sell_mode", "set_only");
+    fd.set("bundle_price", "700");
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    try { await createListing(fd); } catch { /* redirect */ }
+
+    expect(mockCaptureServerEvent).toHaveBeenCalledWith("listing_submitted", {
+      category: "bridal",
+      price: 700,
+      sell_mode: "set_only",
+      photo_count: 1,
+    });
+  });
+
+  // Never on click: only a committed listing counts as submitted.
+  it("stays silent when the listing insert fails", async () => {
+    const supabase = makeCreateSupabase({ payload: {} as unknown });
+    supabase.from = vi.fn().mockReturnValue({
+      insert: vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({
+            data: null,
+            error: { message: "insert failed" },
+          }),
+        }),
+      }),
+    });
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase,
+    });
+
+    const fd = baseFormData();
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    const result = await createListing(fd);
+
+    expect(result).toEqual({ error: "insert failed" });
+    expect(mockCaptureServerEvent).not.toHaveBeenCalled();
+  });
+
+  it("stays silent when no photo was provided", async () => {
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase({ payload: {} as unknown }),
+    });
+
+    await createListing(baseFormData());
+
+    expect(mockCaptureServerEvent).not.toHaveBeenCalled();
   });
 });

@@ -60,6 +60,8 @@ type LightboxProps = {
   title: string;
   startIndex: number;
   variant?: LightboxVariant;
+  /** Reports the visible photo index while open, so a parent can count what was seen. */
+  onActiveIndexChange?: (index: number) => void;
 };
 
 export function Lightbox({
@@ -70,6 +72,7 @@ export function Lightbox({
   title,
   startIndex,
   variant = 'overlay',
+  onActiveIndexChange,
 }: LightboxProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -86,6 +89,7 @@ export function Lightbox({
           title={title}
           startIndex={startIndex}
           variant={variant}
+          onActiveIndexChange={onActiveIndexChange}
         />
       </DialogContent>
     </Dialog>
@@ -98,6 +102,7 @@ type LightboxContentProps = {
   title: string;
   startIndex: number;
   variant: LightboxVariant;
+  onActiveIndexChange?: (index: number) => void;
 };
 
 /**
@@ -112,6 +117,7 @@ function LightboxContent({
   title,
   startIndex,
   variant,
+  onActiveIndexChange,
 }: LightboxContentProps) {
   const [active, setActive] = useState(startIndex);
   const [zoom, setZoom] = useState(1);
@@ -146,6 +152,10 @@ function LightboxContent({
   useEffect(() => {
     if (zoom === 1) setPan({ x: 0, y: 0 });
   }, [zoom]);
+
+  useEffect(() => {
+    onActiveIndexChange?.(active);
+  }, [active, onActiveIndexChange]);
 
   const goTo = useCallback(
     (index: number) => {

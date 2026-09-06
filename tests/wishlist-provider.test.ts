@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { WISHLIST_STORAGE_KEY } from "@/lib/types";
+import { WISHLIST_MAX_ITEMS, WISHLIST_STORAGE_KEY } from "@/lib/types";
 
 import type { WishlistItem } from "@/lib/types";
 
@@ -220,5 +220,69 @@ describe("WishlistProvider server reconciliation", () => {
     expect(hookState.refs[1]?.current).toBe(OTHER_USER_ID);
     expect(hookState.refs[4]?.current).toBeNull();
     expect(mockSetItem).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * Analytics needs the real outcome of a toggle, not an assumption: an add is
+ * rejected once the cap is hit, so the button must not report a save.
+ */
+describe("WishlistProvider toggle outcomes", () => {
+  type WishlistContextValue = {
+    toggleItem: (
+      listingId: string,
+      snapshot: WishlistItem["snapshot"],
+      status: WishlistItem["status"],
+    ) => "added" | "removed" | "rejected";
+    removeItem: (listingId: string) => boolean;
+  };
+
+  function mountProvider(items: WishlistItem[]): WishlistContextValue {
+    hookState.effects = [];
+    hookState.refCallCount = 0;
+    hookState.setterCalls = [];
+    hookState.stateCallCount = 0;
+    hookState.stateValues = new Map<number, unknown>([
+      [0, items],
+      [1, true],
+      [2, false],
+      [3, false],
+      [4, null],
+    ]);
+
+    const element = WishlistProvider({ children: null }) as unknown as {
+      props: { value: WishlistContextValue };
+    };
+    // itemsRef is populated by an effect, and toggleItem reads it, not state.
+    hookState.effects[0]?.run();
+    return element.props.value;
+  }
+
+  it("reports 'added' for a new save", () => {
+    const context = mountProvider([]);
+    expect(context.toggleItem(LISTING_ID, ITEM.snapshot, "active")).toBe("added");
+  });
+
+  it("reports 'removed' when the gown was already saved", () => {
+    const context = mountProvider([ITEM]);
+    expect(context.toggleItem(LISTING_ID, ITEM.snapshot, "active")).toBe(
+      "removed",
+    );
+  });
+
+  it("reports 'rejected' when the wishlist is full", () => {
+    const full = Array.from({ length: WISHLIST_MAX_ITEMS }, (_, i) => ({
+      ...ITEM,
+      listingId: `listing-${i}`,
+    }));
+    const context = mountProvider(full);
+    expect(context.toggleItem(LISTING_ID, ITEM.snapshot, "active")).toBe(
+      "rejected",
+    );
+  });
+
+  it("reports whether removeItem actually removed a row", () => {
+    expect(mountProvider([ITEM]).removeItem(LISTING_ID)).toBe(true);
+    expect(mountProvider([]).removeItem(LISTING_ID)).toBe(false);
   });
 });

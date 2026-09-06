@@ -5,6 +5,8 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 
+import { SELLER_EVENTS } from "@/lib/analytics/events";
+import { captureServerEvent } from "@/lib/analytics/server";
 import {
   BANNED_ACCOUNT_MESSAGE,
   postAuthPath,
@@ -119,6 +121,10 @@ export async function signIn(
     if (error.code === "user_banned") return { error: BANNED_ACCOUNT_MESSAGE };
     return { error: error.message };
   }
+
+  // The callback route sees only Google, so an email sign-in reports its own
+  // completion or the count would be Google-only (spec §5.2).
+  await captureServerEvent(SELLER_EVENTS.signinCompleted, { method: "email" });
 
   revalidatePath("/", "layout");
   redirect(postAuthPath(data.user, input.next));

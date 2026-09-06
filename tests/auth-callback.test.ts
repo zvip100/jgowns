@@ -1,16 +1,21 @@
 import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockCreateClient, mockExchangeCodeForSession } = vi.hoisted(() => ({
-  mockCreateClient: vi.fn(),
-  mockExchangeCodeForSession: vi.fn(),
-}));
+const { mockCaptureServerEvent, mockCreateClient, mockExchangeCodeForSession } =
+  vi.hoisted(() => ({
+    mockCaptureServerEvent: vi.fn(),
+    mockCreateClient: vi.fn(),
+    mockExchangeCodeForSession: vi.fn(),
+  }));
 
 vi.mock("@/lib/site", () => ({
   SITE_URL: "https://jgowns.test",
 }));
 vi.mock("@/lib/supabase/server", () => ({
   createClient: mockCreateClient,
+}));
+vi.mock("@/lib/analytics/server", () => ({
+  captureServerEvent: mockCaptureServerEvent,
 }));
 
 import { GET } from "@/app/api/auth/callback/route";
@@ -20,6 +25,7 @@ function callbackRequest(query: string): NextRequest {
 }
 
 beforeEach(() => {
+  mockCaptureServerEvent.mockReset();
   mockExchangeCodeForSession.mockReset();
   mockCreateClient.mockReset().mockResolvedValue({
     auth: { exchangeCodeForSession: mockExchangeCodeForSession },
@@ -134,5 +140,88 @@ describe("GET auth callback", () => {
     expect(response.headers.get("location")).toBe(
       "https://jgowns.test/login?error=banned",
     );
+  });
+});
+
+describe("auth completion events", () => {
+  const CREATED_AT = "2026-09-01T12:00:00.000Z";
+
+  function googleUser(lastSignInAt: string) {
+    return {
+      id: "u-google",
+      app_metadata: { provider: "google", role: "seller" },
+      created_at: CREATED_AT,
+      last_sign_in_at: lastSignInAt,
+    };
+  }
+
+  it("counts a confirmed email signup as a registration", async () => {
+    mockExchangeCodeForSession.mockResolvedValue({
+      data: {
+        user: {
+          id: "u-email",
+          app_metadata: { provider: "email", role: "seller" },
+          created_at: CREATED_AT,
+          // Confirmation can land long after signup; email never signs in here.
+          last_sign_in_at: "2026-09-03T12:00:00.000Z",
+        },
+      },
+      error: null,
+    });
+
+    await GET(callbackRequest("?code=auth-code"));
+
+    expect(mockCaptureServerEvent).toHaveBeenCalledTimes(1);
+    expect(mockCaptureServerEvent).toHaveBeenCalledWith("register_completed", {
+      method: "email",
+    });
+  });
+
+  it("counts a first Google sign-in as a registration", async () => {
+    mockExchangeCodeForSession.mockResolvedValue({
+      data: { user: googleUser("2026-09-01T12:00:02.000Z") },
+      error: null,
+    });
+
+    await GET(callbackRequest("?code=auth-code"));
+
+    expect(mockCaptureServerEvent).toHaveBeenCalledWith("register_completed", {
+      method: "google",
+    });
+  });
+
+  it("counts a returning Google user as a sign-in", async () => {
+    mockExchangeCodeForSession.mockResolvedValue({
+      data: { user: googleUser("2026-09-04T12:00:00.000Z") },
+      error: null,
+    });
+
+    await GET(callbackRequest("?code=auth-code"));
+
+    expect(mockCaptureServerEvent).toHaveBeenCalledWith("signin_completed", {
+      method: "google",
+    });
+  });
+
+  it("captures nothing for a password-recovery link", async () => {
+    mockExchangeCodeForSession.mockResolvedValue({
+      data: { user: googleUser("2026-09-04T12:00:00.000Z") },
+      error: null,
+    });
+
+    await GET(callbackRequest("?code=auth-code&next=%2Freset-password"));
+
+    expect(mockCaptureServerEvent).not.toHaveBeenCalled();
+  });
+
+  it("captures nothing when the exchange fails", async () => {
+    mockExchangeCodeForSession.mockResolvedValue({
+      data: {},
+      error: { message: "bad code", code: "invalid_grant" },
+    });
+
+    await GET(callbackRequest("?code=auth-code"));
+
+    expect(mockCaptureServerEvent).not.toHaveBeenCalled();
   });
 });

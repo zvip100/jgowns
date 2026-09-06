@@ -3,22 +3,36 @@
 import { useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 
+import { captureEvent } from '@/lib/analytics/client';
+import { BUYER_EVENTS } from '@/lib/analytics/events';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
+
+import type { ListingContactProperties } from '@/lib/analytics/events';
 
 type CopyButtonProps = {
   value: string;
   label: string;
+  /** Present when the copied value is a seller contact, which is `contact_copied`. */
+  contactProperties?: ListingContactProperties;
   className?: string;
 };
 
-export function CopyButton({ value, label, className }: CopyButtonProps) {
+export function CopyButton({
+  value,
+  label,
+  contactProperties,
+  className,
+}: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
     try {
       await navigator.clipboard.writeText(value);
       setCopied(true);
+      if (contactProperties) {
+        captureEvent(BUYER_EVENTS.contactCopied, contactProperties);
+      }
       toast.success('Link copied');
       setTimeout(() => setCopied(false), 1500);
     } catch (error) {

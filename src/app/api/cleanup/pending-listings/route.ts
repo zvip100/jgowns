@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { captureServerError } from "@/lib/analytics/server";
 import { deleteListingImages } from "@/lib/actions/images";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -46,7 +47,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     .select("id, image_urls");
 
   if (deleteError) {
-    console.error("Pending-listing cleanup: failed to delete stale rows:", deleteError.message);
+    // A sweep that silently stops sweeping is a slow leak of paid-for storage.
+    await captureServerError(
+      { scope: "cleanup.pendingListings.delete" },
+      deleteError,
+    );
     return NextResponse.json({ error: deleteError.message }, { status: 500 });
   }
 

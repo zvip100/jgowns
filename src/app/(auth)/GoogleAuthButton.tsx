@@ -2,6 +2,8 @@
 
 import { useActionState } from 'react';
 import { signInWithGoogle, type GoogleAuthState } from '@/lib/actions/auth';
+import { captureEvent } from '@/lib/analytics/client';
+import { SELLER_EVENTS } from '@/lib/analytics/events';
 import { FieldError } from '@/components/ui/field';
 
 const INITIAL_STATE: GoogleAuthState = { error: null };
@@ -33,9 +35,12 @@ function GoogleIcon({ className }: GoogleIconProps) {
   );
 }
 
-type GoogleAuthButtonProps = { next: string };
+type GoogleAuthButtonProps = { next: string; isRegistration: boolean };
 
-export default function GoogleAuthButton({ next }: GoogleAuthButtonProps) {
+export default function GoogleAuthButton({
+  next,
+  isRegistration,
+}: GoogleAuthButtonProps) {
   const [state, formAction, isPending] = useActionState(
     signInWithGoogle,
     INITIAL_STATE,
@@ -47,6 +52,12 @@ export default function GoogleAuthButton({ next }: GoogleAuthButtonProps) {
       <button
         type="submit"
         disabled={isPending}
+        onClick={
+          isRegistration
+            ? () =>
+                captureEvent(SELLER_EVENTS.registerStarted, { method: 'google' })
+            : undefined
+        }
         className="flex w-full items-center justify-center gap-2.5 rounded-full border border-[#d8c9b5] bg-white py-3 text-xs font-semibold uppercase tracking-[0.12em] text-[#5a4a3a] shadow-[0_8px_20px_rgba(106,74,39,0.12)] hover:-translate-y-0.5 hover:bg-[#faf6ef] disabled:translate-y-0 disabled:opacity-50"
       >
         <GoogleIcon className="h-4 w-4" />

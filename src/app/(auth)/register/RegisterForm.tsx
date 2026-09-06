@@ -3,6 +3,8 @@
 import { useState, useLayoutEffect } from 'react';
 
 import { signUp } from '@/lib/actions/auth';
+import { captureEvent } from '@/lib/analytics/client';
+import { SELLER_EVENTS } from '@/lib/analytics/events';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { FieldError, FieldGroup } from '@/components/ui/field';
 
@@ -35,6 +37,7 @@ export default function RegisterForm({ next }: RegisterFormProps) {
     setMsg('');
     setIsError(false);
     setLoading(true);
+    captureEvent(SELLER_EVENTS.registerStarted, { method: 'email' });
     try {
       const result = await signUp({ email, password, phone, next });
       if ('error' in result) {

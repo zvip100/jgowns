@@ -4,6 +4,7 @@ import { updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { isListingFeeActive } from "@/lib/listing-fee";
+import { listingPriceValue } from "@/lib/listing-variants";
 import {
   listingFormActionError,
   listingRowPayload,
@@ -17,6 +18,8 @@ import {
   type ServerActionErrorResult,
 } from "@/lib/types";
 import { imageSlotFormKeys } from "@/lib/utils";
+import { SELLER_EVENTS } from "@/lib/analytics/events";
+import { captureServerError, captureServerEvent } from "@/lib/analytics/server";
 import { getAuthClient } from "@/lib/actions/auth";
 import { createListingCheckout } from "@/lib/actions/payments";
 import { deleteListingImages } from "@/lib/actions/images";
@@ -151,8 +154,18 @@ export async function createListing(
     // nothing to invalidate yet in the fee-active branch (see §6.1 instead).
     if (!feeActive) updateTag("listings");
     shouldRedirect = true;
+
+    // Server-side because success ends in a redirect, to Stripe or the
+    // dashboard: nothing after this action runs in the seller's tab (spec §5.2).
+    await captureServerEvent(SELLER_EVENTS.listingSubmitted, {
+      category: parsed.category ?? null,
+      price: listingPriceValue(parsed),
+      sell_mode: parsed.sell_mode,
+      photo_count: uploadedUrls.length,
+    });
   } catch (e) {
     if (uploadedUrls.length > 0) await deleteListingImages(uploadedUrls);
+    await captureServerError({ scope: "sell.createListing" }, e);
     return listingFormActionError(e);
   }
 
@@ -305,6 +318,7 @@ export async function updateListing(
   } catch (e) {
     if (newlyUploadedUrls.length > 0)
       await deleteListingImages(newlyUploadedUrls);
+    await captureServerError({ scope: "sell.updateListing" }, e);
     return listingFormActionError(e);
   }
 

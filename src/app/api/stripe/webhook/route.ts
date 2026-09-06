@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 
+import { captureServerError } from "@/lib/analytics/server";
 import { confirmListingPayment } from "@/lib/actions/payments";
 import { getStripe } from "@/lib/stripe/client";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -22,7 +23,14 @@ async function expirePaymentRow(sessionId: string): Promise<NextResponse | null>
     .eq("status", "pending");
 
   if (error) {
-    console.error("Failed to mark listing payment expired:", error.message);
+    // Stripe retries, but a persistent failure is otherwise invisible.
+    await captureServerError(
+      {
+        scope: "stripe.webhook.expirePaymentRow",
+        properties: { session_id: sessionId },
+      },
+      error,
+    );
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   return null;
@@ -97,7 +105,10 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
         break;
     }
   } catch (e) {
-    console.error("Stripe webhook processing failed:", e);
+    await captureServerError(
+      { scope: "stripe.webhook.processing", properties: { event_type: event.type } },
+      e,
+    );
     return NextResponse.json({ error: "Processing failed." }, { status: 500 });
   }
 

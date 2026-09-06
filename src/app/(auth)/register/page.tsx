@@ -21,6 +21,7 @@ export default function RegisterPage({
       title="Create Account"
       subtitle="Sell your gown or save the ones you love"
       searchParams={searchParams}
+      isRegistration
       renderForm={(next) => <RegisterForm next={next} />}
     />
   );

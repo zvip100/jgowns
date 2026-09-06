@@ -1,6 +1,6 @@
-import Link from 'next/link';
 import { Plus } from 'lucide-react';
 
+import { SellCtaLink } from '@/components/SellCtaLink';
 import { Button } from '@/components/ui/button';
 
 import ScrollReveal from './ScrollReveal';
@@ -64,10 +64,10 @@ export default function SellSection() {
                 asChild
                 className="h-12 rounded-full border border-[#b58d5f]/70 gold-gradient px-6 text-xs font-semibold uppercase tracking-[0.14em] text-white shadow-[0_14px_30px_rgba(106,74,39,0.28)] transition hover:-translate-y-0.5 hover:brightness-105"
               >
-                <Link href="/dashboard/new">
+                <SellCtaLink placement="home_sell_section">
                   <Plus data-icon="inline-start" />
                   List Your Gown
-                </Link>
+                </SellCtaLink>
               </Button>
               <p className="text-[0.66rem] font-semibold uppercase tracking-[0.18em] text-(--muted-ink)">
                 You set the price · Direct contact

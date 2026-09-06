@@ -695,7 +695,7 @@ grant execute on function reactivate_size(uuid, uuid) to authenticated;
 -- is confined to code paths that have already verified the event/session
 -- against Stripe's own API — never reachable from a seller session directly.
 create or replace function record_listing_payment(p_session_id text)
-returns void
+returns boolean
 language plpgsql
 security invoker
 set search_path = ''
@@ -703,6 +703,7 @@ as $$
 declare
   v_listing_id uuid;
   v_already_succeeded boolean;
+  v_activated boolean;
 begin
   -- Service-role only, enforced HERE and not by the revoke below. Supabase's
   -- default privileges grant execute to anon/authenticated/service_role by
@@ -733,6 +734,11 @@ begin
      set status = 'active'
    where id = v_listing_id and status = 'pending_payment';
 
+  -- Read `found` immediately: the suspended-listing update below overwrites it.
+  -- Callers need the FIRST pending_payment -> active transition, not every
+  -- idempotent replay, so payment_confirmed can be emitted exactly once.
+  v_activated := found;
+
   -- A listing suspended while its Checkout was still open can have the fee land
   -- afterwards. The moderation state must hold, so status is not touched; what
   -- moves is the restore TARGET, because restoring a paid listing to
@@ -745,6 +751,8 @@ begin
    where id = v_listing_id
      and status = 'suspended'
      and previous_status = 'pending_payment';
+
+  return v_activated;
 end;
 $$;
 

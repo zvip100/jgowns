@@ -6,6 +6,8 @@ import { unstable_rethrow, useRouter } from "next/navigation";
 import { useSizeRows } from "@/hooks/useSizeRows";
 import { isValidSizePair } from "@/lib/gown-sizes";
 import { createListing, updateListing } from "@/lib/actions/sell";
+import { captureEvent } from "@/lib/analytics/client";
+import { SELLER_EVENTS } from "@/lib/analytics/events";
 import {
   EMPTY_LISTING_ERRORS,
   collectListingFieldErrors,
@@ -274,16 +276,31 @@ export function useListingFormSubmit({
   );
   const originalImageUrlsRef = useRef(initial?.image_urls ?? []);
   const initialContactMethodsRef = useRef(contactMethods);
+  const draftStartedRef = useRef(false);
+
+  /**
+   * Fires once, on the first real interaction with a new listing (spec §5.2),
+   * so the funnel denominator is people who tried to list rather than everyone
+   * who loaded the page. A plain page view is already free via $pageview, and
+   * editing an existing listing is not a new draft.
+   */
+  const markDraftStarted = useCallback(() => {
+    if (listingId || draftStartedRef.current) return;
+    draftStartedRef.current = true;
+    captureEvent(SELLER_EVENTS.listingDraftStarted);
+  }, [listingId]);
 
   const setField = useCallback(
     (key: keyof ListingScalarFormData, value: string | number) => {
+      markDraftStarted();
       setForm((f) => ({ ...f, [key]: value }));
     },
-    [],
+    [markDraftStarted],
   );
 
   const setCategory = useCallback(
     (value: string) => {
+      markDraftStarted();
       const category = GOWN_CATEGORIES.some((c) => c.id === value)
         ? (value as GownCategoryId)
         : null;
@@ -295,21 +312,26 @@ export function useListingFormSubmit({
           isValidSizePair(category, row.size_group, row.size),
       );
     },
-    [clearInvalidRows],
+    [clearInvalidRows, markDraftStarted],
   );
 
-  const setContactPhone = useCallback((value: string) => {
-    const digits = digitsOnlyPhone(value);
-    setForm((f) => ({ ...f, contact_phone: digits }));
-    // A contact method only makes sense with a phone number to act on.
-    if (!digits) setContactMethods([]);
-  }, []);
+  const setContactPhone = useCallback(
+    (value: string) => {
+      markDraftStarted();
+      const digits = digitsOnlyPhone(value);
+      setForm((f) => ({ ...f, contact_phone: digits }));
+      // A contact method only makes sense with a phone number to act on.
+      if (!digits) setContactMethods([]);
+    },
+    [markDraftStarted],
+  );
 
   const toggleContactMethod = useCallback(
     (method: ContactMethod, checked: boolean) => {
+      markDraftStarted();
       setContactMethods((prev) => toggleContactMethodValue(prev, method, checked));
     },
-    [],
+    [markDraftStarted],
   );
 
   const setSellOnlyAsSet = useCallback((value: boolean) => {
@@ -318,7 +340,10 @@ export function useListingFormSubmit({
 
   const sizesController: ListingSizesController = {
     rows: sizeRows,
-    updateRow,
+    updateRow: (key, patch) => {
+      markDraftStarted();
+      updateRow(key, patch);
+    },
     addRow,
     removeRow,
     sellOnlyAsSet,
@@ -452,6 +477,7 @@ export function useListingFormSubmit({
 
   return {
     form,
+    markDraftStarted,
     setField,
     setCategory,
     setContactPhone,

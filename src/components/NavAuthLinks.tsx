@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ExternalLink } from "lucide-react";
 
 import { getCurrentUser } from "@/lib/queries/auth";
+import { SellCtaLink } from "@/components/SellCtaLink";
 import SignOutButton from "@/components/SignOutButton";
 import { WishlistTrigger } from "@/components/wishlist/WishlistTrigger";
 import {
@@ -42,9 +43,9 @@ export default async function NavAuthLinks({ variant }: NavAuthLinksProps) {
         <Link href="/dashboard" className={styles.link}>
           My Listings
         </Link>
-        <Link href="/dashboard/new" className={styles.cta}>
+        <SellCtaLink placement="nav" className={styles.cta}>
           + List a Gown
-        </Link>
+        </SellCtaLink>
         {wishlistTrigger}
         {user.isAdmin && (
           <Link
@@ -67,9 +68,9 @@ export default async function NavAuthLinks({ variant }: NavAuthLinksProps) {
       <Link href="/login" className={styles.link}>
         Sign In
       </Link>
-      <Link href="/dashboard/new" className={styles.cta}>
+      <SellCtaLink placement="nav" className={styles.cta}>
         Sell a Gown
-      </Link>
+      </SellCtaLink>
       {wishlistTrigger}
     </>
   );

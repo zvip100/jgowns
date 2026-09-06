@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { optimizeListingPhoto } from '@/lib/actions/images';
+import { captureEvent } from '@/lib/analytics/client';
+import { SELLER_EVENTS } from '@/lib/analytics/events';
 import { generateBlurDataUrl, dataUrlToFile } from '@/lib/image-upload';
 import { MAX_LISTING_IMAGES, type ImageSlotState } from '@/lib/types';
 
@@ -71,6 +73,14 @@ export function useListingImageSlots({
   const onFileSelected = async (index: number, file: File) => {
     const slotId = slots[index].id;
 
+    // One attempt per selected photo, terminated exactly once below. Retrying a
+    // failed photo re-enters here and counts as a new attempt (spec §5.2).
+    captureEvent(SELLER_EVENTS.photoUploadStarted, {
+      file_count: 1,
+      total_size: file.size,
+    });
+    const startedAt = Date.now();
+
     const oldPreview = slots[index].preview;
     if (oldPreview?.startsWith('blob:')) URL.revokeObjectURL(oldPreview);
 
@@ -88,6 +98,21 @@ export function useListingImageSlots({
     const optimizeForm = new FormData();
     optimizeForm.set('image', file);
     const result = await optimizeListingPhoto(optimizeForm);
+
+    // Captured before the staleness guard below: the attempt genuinely finished,
+    // whether or not its slot is still on screen to receive the result.
+    if ('dataUrl' in result) {
+      captureEvent(SELLER_EVENTS.photoUploadSucceeded, {
+        file_count: 1,
+        duration_ms: Date.now() - startedAt,
+      });
+    } else {
+      captureEvent(SELLER_EVENTS.photoUploadFailed, {
+        reason: result.error ? result.error.slice(0, 120) : 'unknown',
+        file_count: 1,
+        total_size: file.size,
+      });
+    }
 
     // The slot was removed, or a newer file replaced it, while optimizing.
     // (Its blob preview is already revoked by whichever action superseded it.)

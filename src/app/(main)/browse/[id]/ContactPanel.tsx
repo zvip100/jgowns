@@ -1,17 +1,18 @@
 import { Mail, MessageSquare, Phone } from "lucide-react";
 
+import { BUYER_EVENTS } from "@/lib/analytics/events";
 import { CONTACT_METHODS, CONTACT_METHOD_LABELS } from "@/lib/types";
-import { cn, formatPhoneDisplay } from "@/lib/utils";
+import { formatPhoneDisplay } from "@/lib/utils";
 
+import { ContactActionLink } from "./ContactActionLink";
 import { CopyButton } from "./CopyButton";
 
+import type { AnalyticsEventName, ListingContactProperties } from "@/lib/analytics/events";
 import type { ContactMethod } from "@/lib/types";
 import type { LucideIcon } from "lucide-react";
 
 const CONTACT_MICRO_LABEL_CLASS =
   "text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-[#a08a72]";
-const CONTACT_PILL_CLASS =
-  "inline-flex items-center gap-1.5 rounded-full border border-[#b58d5f]/70 bg-[#b3854c]/12 px-3.5 py-1.5 text-[0.64rem] font-semibold uppercase tracking-[0.12em] text-[#8a6232] transition-colors hover:bg-[#b3854c]/20";
 
 const CONTACT_METHOD_ICONS: Record<ContactMethod, LucideIcon> = {
   call: Phone,
@@ -21,35 +22,17 @@ const CONTACT_METHOD_HREF: Record<ContactMethod, (phone: string) => string> = {
   call: (phone) => `tel:${phone}`,
   text: (phone) => `sms:${phone}`,
 };
+const CONTACT_METHOD_EVENTS: Record<ContactMethod, AnalyticsEventName> = {
+  call: BUYER_EVENTS.contactCallClicked,
+  text: BUYER_EVENTS.contactTextClicked,
+};
 
 type ContactAction = {
   href: string;
   label: string;
   icon: LucideIcon;
+  eventName: AnalyticsEventName;
 };
-
-function ContactActionLink({
-  href,
-  label,
-  icon: Icon,
-  sold,
-}: ContactAction & { sold: boolean }) {
-  return (
-    <a
-      href={sold ? undefined : href}
-      aria-disabled={sold || undefined}
-      tabIndex={sold ? -1 : undefined}
-      aria-label={`${label} the seller`}
-      className={cn(
-        CONTACT_PILL_CLASS,
-        sold && "pointer-events-none opacity-40 grayscale",
-      )}
-    >
-      <Icon className="size-3.5 shrink-0" aria-hidden="true" />
-      {label}
-    </a>
-  );
-}
 
 type ContactChannelProps = {
   icon: LucideIcon;
@@ -57,6 +40,7 @@ type ContactChannelProps = {
   value: string;
   copyLabel: string;
   actions: ContactAction[];
+  contactProperties: ListingContactProperties;
   sold: boolean;
 };
 
@@ -66,6 +50,7 @@ function ContactChannel({
   value,
   copyLabel,
   actions,
+  contactProperties,
   sold,
 }: ContactChannelProps) {
   return (
@@ -81,14 +66,27 @@ function ContactChannel({
               <p className="min-w-0 truncate text-sm font-medium text-[#3f3025]">
                 {value}
               </p>
-              <CopyButton value={value} label={copyLabel} />
+              <CopyButton
+                value={value}
+                label={copyLabel}
+                contactProperties={contactProperties}
+              />
             </div>
           )}
         </div>
       </div>
       <div className="flex shrink-0 items-center gap-2">
-        {actions.map((action) => (
-          <ContactActionLink key={action.label} {...action} sold={sold} />
+        {actions.map(({ href, label: actionLabel, icon: ActionIcon, eventName }) => (
+          <ContactActionLink
+            key={actionLabel}
+            href={href}
+            label={actionLabel}
+            eventName={eventName}
+            contactProperties={contactProperties}
+            sold={sold}
+          >
+            <ActionIcon className="size-3.5 shrink-0" aria-hidden="true" />
+          </ContactActionLink>
         ))}
       </div>
     </div>
@@ -99,6 +97,7 @@ type ContactPanelProps = {
   contactEmail: string | null;
   contactPhone: string | null;
   contactMethods: ContactMethod[];
+  contactProperties: ListingContactProperties;
   sold: boolean;
 };
 
@@ -106,6 +105,7 @@ export function ContactPanel({
   contactEmail,
   contactPhone,
   contactMethods,
+  contactProperties,
   sold,
 }: ContactPanelProps) {
   const selectedMethods = CONTACT_METHODS.filter((method) =>
@@ -128,8 +128,14 @@ export function ContactPanel({
           value={contactEmail}
           copyLabel="Copy email address"
           actions={[
-            { href: `mailto:${contactEmail}`, label: "Email", icon: Mail },
+            {
+              href: `mailto:${contactEmail}`,
+              label: "Email",
+              icon: Mail,
+              eventName: BUYER_EVENTS.contactEmailClicked,
+            },
           ]}
+          contactProperties={contactProperties}
           sold={sold}
         />
       )}
@@ -146,7 +152,9 @@ export function ContactPanel({
             href: CONTACT_METHOD_HREF[method](contactPhone),
             label: CONTACT_METHOD_LABELS[method],
             icon: CONTACT_METHOD_ICONS[method],
+            eventName: CONTACT_METHOD_EVENTS[method],
           }))}
+          contactProperties={contactProperties}
           sold={sold}
         />
       )}

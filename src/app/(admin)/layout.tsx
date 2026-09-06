@@ -8,6 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 
 import { isAdminDemoMode } from "@/lib/admin/demo";
 import { AdminRefreshProvider } from "./AdminRefreshProvider";
+import { AdminSessionRecordingGuard } from "./AdminSessionRecordingGuard";
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminTopBar } from "./AdminTopBar";
 import AdminLoading from "./loading";
@@ -57,6 +58,7 @@ async function AdminShell({ children }: AdminShellProps) {
 
   return (
     <div className="flex min-h-svh flex-col bg-(--bg-cream) xl:flex-row">
+      <AdminSessionRecordingGuard />
       <AdminTopBar adminEmail={user.email} />
       <AdminSidebar adminEmail={user.email} />
       <main

@@ -1,7 +1,7 @@
-import Link from 'next/link';
 import { Suspense } from 'react';
 import { PackageOpen, Plus, Sparkles } from 'lucide-react';
 
+import { SellCtaLink } from '@/components/SellCtaLink';
 import { isListingFeeActive } from '@/lib/listing-fee';
 import { createClient } from '@/lib/supabase/server';
 import { Button } from '@/components/ui/button';
@@ -83,10 +83,10 @@ async function DashboardContent({
               variant="ghost"
               className="text-(--accent-deep) hover:text-(--ink)"
             >
-              <Link href="/dashboard/new">
+              <SellCtaLink placement="dashboard">
                 <Sparkles data-icon="inline-start" />
                 List your first gown
-              </Link>
+              </SellCtaLink>
             </Button>
           </EmptyContent>
         </Empty>
@@ -132,10 +132,10 @@ export default async function DashboardPage() {
           asChild
           className="h-11 rounded-full border border-[#b58d5f]/70 gold-gradient px-5 text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)] transition hover:-translate-y-0.5 hover:brightness-105"
         >
-          <Link href="/dashboard/new">
+          <SellCtaLink placement="dashboard">
             <Plus data-icon="inline-start" />
             New Listing
-          </Link>
+          </SellCtaLink>
         </Button>
       </header>
 

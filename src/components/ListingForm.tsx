@@ -52,6 +52,7 @@ export default function ListingForm({
 
   const {
     form,
+    markDraftStarted,
     setField,
     setCategory,
     setContactPhone,
@@ -152,7 +153,10 @@ export default function ListingForm({
 
         <ListingPhotoField
           slots={slots}
-          onFileSelected={onFileSelected}
+          onFileSelected={(index, file) => {
+            markDraftStarted();
+            return onFileSelected(index, file);
+          }}
           onClear={onClear}
         />
 

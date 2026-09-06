@@ -2,6 +2,7 @@
 
 import { revalidateTag, updateTag } from "next/cache";
 
+import { captureServerError } from "@/lib/analytics/server";
 import { getAuthClient } from "@/lib/actions/auth";
 import { getStripe } from "@/lib/stripe/client";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -90,7 +91,10 @@ export async function removeListing(
       try {
         session = await stripe.checkout.sessions.retrieve(row.stripe_session_id);
       } catch (e) {
-        console.error("Failed to retrieve Checkout session on remove:", e);
+        await captureServerError(
+          { scope: "listings.removeListing.retrieveSession" },
+          e,
+        );
         return CHECKOUT_CANCEL_ERROR;
       }
 
@@ -105,7 +109,10 @@ export async function removeListing(
         try {
           await stripe.checkout.sessions.expire(row.stripe_session_id);
         } catch (e) {
-          console.error("Failed to expire Checkout session on remove:", e);
+          await captureServerError(
+            { scope: "listings.removeListing.expireSession" },
+            e,
+          );
           return CHECKOUT_CANCEL_ERROR;
         }
       }

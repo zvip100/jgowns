@@ -1,5 +1,6 @@
 "use server";
 
+import { captureServerError } from "@/lib/analytics/server";
 import { getAuthClient, type SupabaseServer } from "@/lib/actions/auth";
 import {
   blurPlaceholderDataUrl,
@@ -45,7 +46,7 @@ export async function optimizeListingPhoto(
       blurDataUrl: await blurPlaceholderDataUrl(processed.webp),
     };
   } catch (e) {
-    console.error("optimizeListingPhoto failed:", e);
+    await captureServerError({ scope: "images.optimizeListingPhoto" }, e);
     return {
       error:
         e instanceof Error && e.message

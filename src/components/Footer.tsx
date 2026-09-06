@@ -3,13 +3,14 @@ import Link from "next/link";
 import { Suspense } from "react";
 
 import Logo from "@/components/Logo";
+import { SellCtaLink } from "@/components/SellCtaLink";
 import { getCurrentUser } from "@/lib/queries/auth";
 import { CONTACT_EMAIL } from "@/lib/site";
 import { GOWN_CATEGORIES } from "@/lib/types";
 
 import type { ReactNode } from "react";
 
-type FooterLink = { label: string; href: string };
+type FooterLink = { label: string; href: string; isSellCta?: boolean };
 type FooterColumnProps = {
   title: string;
   links: readonly FooterLink[];
@@ -27,7 +28,7 @@ const shopLinks: FooterLink[] = [
 ];
 
 const sellLinks: FooterLink[] = [
-  { label: "List Your Gown", href: "/dashboard/new" },
+  { label: "List Your Gown", href: "/dashboard/new", isSellCta: true },
   { label: "My Dashboard", href: "/dashboard" },
 ];
 
@@ -65,9 +66,15 @@ function FooterColumn({ title, links, children }: FooterColumnProps) {
       <ul className="flex flex-col gap-2.5 text-sm">
         {links.map((link) => (
           <li key={`${title}-${link.label}`}>
-            <Link href={link.href} className={LINK_CLASS}>
-              {link.label}
-            </Link>
+            {link.isSellCta ? (
+              <SellCtaLink placement="footer" className={LINK_CLASS}>
+                {link.label}
+              </SellCtaLink>
+            ) : (
+              <Link href={link.href} className={LINK_CLASS}>
+                {link.label}
+              </Link>
+            )}
           </li>
         ))}
         {children}
