@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { isAdminDemoMode } from "@/lib/admin/demo";
+import { isAdminDemoCookie } from "@/lib/admin/constants";
 import {
   FIXTURE_AUDIT_LOG,
   FIXTURE_LISTINGS,
@@ -76,6 +77,29 @@ describe("isAdminDemoMode", () => {
       setCookie(ADMIN_DEMO_COOKIE, value);
       await expect(isAdminDemoMode()).resolves.toBe(false);
     }
+  });
+});
+
+// The client-side read, for the error boundary that has no server value to
+// pass: a toggle stuck on "off" there could only ever turn demo mode on.
+describe("isAdminDemoCookie", () => {
+  it("finds the opt-in value among other cookies", () => {
+    expect(
+      isAdminDemoCookie(`sb-token=abc; ${ADMIN_DEMO_COOKIE}=1; theme=light`),
+    ).toBe(true);
+  });
+
+  it("reads the same single value the server read accepts", () => {
+    for (const value of ["", "0", "true", "yes", "11"]) {
+      expect(isAdminDemoCookie(`${ADMIN_DEMO_COOKIE}=${value}`), value).toBe(
+        false,
+      );
+    }
+  });
+
+  it("is off for an empty cookie jar and for an unrelated one", () => {
+    expect(isAdminDemoCookie("")).toBe(false);
+    expect(isAdminDemoCookie("other=1")).toBe(false);
   });
 });
 

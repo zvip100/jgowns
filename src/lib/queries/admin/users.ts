@@ -7,6 +7,7 @@ import {
 } from "@/lib/admin/list";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
+import { adminUserIdSchema } from "@/lib/validations/admin/user-schema";
 
 import type { AdminListParams, AdminListResult } from "@/lib/admin/list";
 import type { AdminUser } from "@/lib/admin/types";
@@ -171,13 +172,25 @@ export async function getAdminUsers(
 export async function getAdminUser(id: string): Promise<AdminUser | null> {
   await requireAdmin();
 
+  // A malformed id is a bad URL, not a failure, and the Auth API answers it
+  // with a validation error rather than the not-found below.
+  if (!adminUserIdSchema.safeParse(id).success) return null;
+
   const service = createServiceClient();
   const { data, error } = await service.auth.admin.getUserById(id);
 
-  if (error || !data?.user) {
-    // A missing user is a 404, not a failure: the detail page calls notFound().
-    return null;
+  // Only a real not-found is a 404: the detail page calls notFound(). A
+  // timeout, a rejected service key, or a GoTrue outage has to reach the error
+  // boundary instead, or the page reports a live account as deleted.
+  if (error && error.status !== 404) {
+    console.error("[queries/admin/users] Failed to read a user", {
+      message: error.message,
+      status: error.status,
+    });
+    throw new Error("Failed to load user");
   }
+
+  if (error || !data?.user) return null;
 
   const counts = await fetchListingCounts([id]);
   return toAdminUser(data.user, counts.get(id) ?? emptyCounts());

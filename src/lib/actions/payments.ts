@@ -276,7 +276,7 @@ export async function confirmListingPayment(
     return { paid: false };
   }
 
-  const { data: activated, error } = await createServiceClient().rpc(
+  const { data: confirmed, error } = await createServiceClient().rpc(
     "record_listing_payment",
     { p_session_id: sessionId },
   );
@@ -298,9 +298,10 @@ export async function confirmListingPayment(
   revalidateTag(`listing:${listingId}`, "max");
 
   // The webhook and the success route both land here and both report paid, so
-  // only the RPC's report of the real pending_payment -> active transition can
-  // keep this to one event per listing (spec §5.3).
-  if (activated === true) {
+  // only the RPC's report of the fee's first landing can keep this to one event
+  // per listing (spec §5.3). A listing suspended mid-Checkout counts: it does
+  // not activate, but its fee was still charged.
+  if (confirmed === true) {
     await captureServerEvent(SERVER_EVENTS.paymentConfirmed, {
       listing_id: listingId,
       fee_cents: session.amount_total,

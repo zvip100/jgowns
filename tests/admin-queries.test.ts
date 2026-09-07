@@ -607,8 +607,29 @@ describe("getAdminUser", () => {
   });
 
   it("returns null for a missing account so the page can 404", async () => {
-    getUserById.mockResolvedValue({ data: null, error: { message: "not found" } });
+    getUserById.mockResolvedValue({
+      data: null,
+      error: { message: "not found", status: 404 },
+    });
+    await expect(getAdminUser(SELLER_ID)).resolves.toBeNull();
+  });
+
+  it("returns null for a malformed id without asking the auth API", async () => {
     await expect(getAdminUser("nope")).resolves.toBeNull();
+    expect(getUserById).not.toHaveBeenCalled();
+  });
+
+  // A timeout or a rejected service key rendered as "user not found" would
+  // report a live account as deleted.
+  it("throws on any other auth failure so the error boundary shows", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    getUserById.mockResolvedValue({
+      data: null,
+      error: { message: "service unavailable", status: 503 },
+    });
+
+    await expect(getAdminUser(SELLER_ID)).rejects.toThrow("Failed to load user");
+    error.mockRestore();
   });
 
   it("claim-checks first", async () => {

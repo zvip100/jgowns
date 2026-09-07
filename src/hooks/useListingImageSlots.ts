@@ -1,11 +1,14 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { unstable_rethrow } from 'next/navigation';
 import { optimizeListingPhoto } from '@/lib/actions/images';
 import { captureEvent } from '@/lib/analytics/client';
 import { SELLER_EVENTS } from '@/lib/analytics/events';
 import { generateBlurDataUrl, dataUrlToFile } from '@/lib/image-upload';
 import { MAX_LISTING_IMAGES, type ImageSlotState } from '@/lib/types';
+
+import type { OptimizeListingPhotoResult } from '@/lib/actions/images';
 
 type UseListingImageSlotsOptions = {
   initialUrls?: string[];
@@ -97,7 +100,21 @@ export function useListingImageSlots({
 
     const optimizeForm = new FormData();
     optimizeForm.set('image', file);
-    const result = await optimizeListingPhoto(optimizeForm);
+
+    // The action itself always returns, so a rejection is the request failing
+    // to complete (offline, a body the host refused, a 500). Folding it into
+    // the result shape keeps one terminal path: without it the attempt emits
+    // no outcome and the slot spins forever.
+    let result: OptimizeListingPhotoResult;
+    try {
+      result = await optimizeListingPhoto(optimizeForm);
+    } catch (e) {
+      unstable_rethrow(e);
+      result = {
+        error:
+          e instanceof Error && e.message ? e.message : 'The upload failed.',
+      };
+    }
 
     // Captured before the staleness guard below: the attempt genuinely finished,
     // whether or not its slot is still on screen to receive the result.

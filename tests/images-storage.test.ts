@@ -4,9 +4,11 @@ import {
   LISTING_IMAGE_BUCKET,
   downloadListingImage,
   listingImagePathFromUrl,
+  unreferencedListingImageUrls,
   uploadListingImage,
 } from "@/lib/images/storage";
 
+import type { createServiceClient } from "@/lib/supabase/service";
 import type { SupabaseServer } from "@/lib/actions/auth";
 
 const SUPABASE_URL = "https://test.supabase.co";
@@ -168,6 +170,63 @@ describe("downloadListingImage", () => {
     await expect(
       downloadListingImage(supabase, makeSupabaseUrl("empty.webp")),
     ).rejects.toThrow("could not be downloaded");
+  });
+});
+
+describe("unreferencedListingImageUrls", () => {
+  const overlaps = vi.fn();
+  const select = vi.fn(() => ({ overlaps }));
+  const serviceFrom = vi.fn(() => ({ select }));
+  /** Only `.from("listings")` is ever touched here. */
+  const service = { from: serviceFrom } as unknown as ReturnType<
+    typeof createServiceClient
+  >;
+
+  it("returns every url when no listing references any of them", async () => {
+    overlaps.mockResolvedValue({ data: [], error: null });
+
+    await expect(
+      unreferencedListingImageUrls(service, ["a.webp", "b.webp"]),
+    ).resolves.toEqual(["a.webp", "b.webp"]);
+    expect(serviceFrom).toHaveBeenCalledWith("listings");
+    expect(overlaps).toHaveBeenCalledWith("image_urls", ["a.webp", "b.webp"]);
+  });
+
+  // The whole point: image_urls is seller-writable, so one listing can name
+  // another's photo, and both callers delete with bucket-wide authority.
+  it("holds back a url a surviving listing still shows", async () => {
+    overlaps.mockResolvedValue({
+      data: [{ image_urls: ["b.webp", "unrelated.webp"] }],
+      error: null,
+    });
+
+    await expect(
+      unreferencedListingImageUrls(service, ["a.webp", "b.webp"]),
+    ).resolves.toEqual(["a.webp"]);
+  });
+
+  it("holds back everything when the check fails, rather than guessing", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    overlaps.mockResolvedValue({ data: null, error: { message: "read failed" } });
+
+    await expect(
+      unreferencedListingImageUrls(service, ["a.webp"]),
+    ).resolves.toEqual([]);
+    expect(error).toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it("tolerates a row with no image array", async () => {
+    overlaps.mockResolvedValue({ data: [{ image_urls: null }], error: null });
+
+    await expect(
+      unreferencedListingImageUrls(service, ["a.webp"]),
+    ).resolves.toEqual(["a.webp"]);
+  });
+
+  it("asks nothing of the database for an empty list", async () => {
+    await expect(unreferencedListingImageUrls(service, [])).resolves.toEqual([]);
+    expect(serviceFrom).not.toHaveBeenCalled();
   });
 });
 

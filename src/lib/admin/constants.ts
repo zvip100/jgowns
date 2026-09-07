@@ -31,6 +31,16 @@ export const ADMIN_METRICS_WEEKS = 12;
 export const ADMIN_DEMO_COOKIE = "jgowns_admin_demo";
 
 /**
+ * The same read as `isAdminDemoMode`, for the one surface with no server value
+ * to hand down: the error boundary renders above the page that would supply it.
+ */
+export function isAdminDemoCookie(cookie: string): boolean {
+  return cookie
+    .split(";")
+    .some((entry) => entry.trim() === `${ADMIN_DEMO_COOKIE}=1`);
+}
+
+/**
  * Placeholder for a null cell or fact. An en dash, not an em dash: the em dash
  * is banned in every user-facing surface (AGENTS).
  */

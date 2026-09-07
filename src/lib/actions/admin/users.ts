@@ -4,6 +4,7 @@ import { updateTag } from "next/cache";
 
 import { runAdminAction } from "@/lib/admin/guard";
 import { deleteListingImages } from "@/lib/actions/images";
+import { unreferencedListingImageUrls } from "@/lib/images/storage";
 import { createServiceClient } from "@/lib/supabase/service";
 import {
   BAN_DURATION,
@@ -265,8 +266,12 @@ export async function adminDeleteUser(
         : null,
     );
 
-    if (imageUrls.length > 0) {
-      const cleanup = await deleteListingImages(imageUrls);
+    // After the delete, so the account's own listings are already gone from
+    // the reference check and only somebody else's claim on an object counts.
+    const orphans = await unreferencedListingImageUrls(service, imageUrls);
+
+    if (orphans.length > 0) {
+      const cleanup = await deleteListingImages(orphans);
       if ("error" in cleanup) {
         // The account is already gone, so this cannot be retried by repeating
         // the action. Stray objects are a hygiene problem, not a failed delete.

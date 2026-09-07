@@ -1,6 +1,7 @@
 import "server-only";
 import { randomUUID } from "node:crypto";
 
+import type { createServiceClient } from "@/lib/supabase/service";
 import type { SupabaseServer } from "@/lib/actions/auth";
 
 /**
@@ -86,6 +87,42 @@ export async function downloadListingImage(
   }
 
   return Buffer.from(await data.arrayBuffer());
+}
+
+/**
+ * Of `imageUrls`, the ones no listing shows any more. `listings.image_urls` is
+ * written verbatim by `update_listing_with_variants`, which validates the
+ * array's contents nowhere, so a seller can point their own row at another
+ * listing's photo. Both privileged sweeps delete with authority that reaches
+ * the whole bucket (an admin's storage policy, or the service role), so each
+ * re-checks what it collected once the rows are gone and removes only what
+ * nothing points at.
+ */
+export async function unreferencedListingImageUrls(
+  service: ReturnType<typeof createServiceClient>,
+  imageUrls: string[],
+): Promise<string[]> {
+  if (imageUrls.length === 0) return [];
+
+  const { data, error } = await service
+    .from("listings")
+    .select("image_urls")
+    .overlaps("image_urls", imageUrls);
+
+  if (error) {
+    console.error("[images/storage] Failed to check image references", {
+      message: error.message,
+    });
+    // Provenance unknown, so nothing is swept: a stray object costs storage,
+    // deleting a referenced one breaks a listing that is still on the market.
+    return [];
+  }
+
+  const stillReferenced = new Set(
+    (data ?? []).flatMap((row) => (row.image_urls ?? []) as string[]),
+  );
+
+  return imageUrls.filter((url) => !stillReferenced.has(url));
 }
 
 export function listingImagePathFromUrl(url: string): string | null {

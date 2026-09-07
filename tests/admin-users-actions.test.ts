@@ -6,6 +6,7 @@ const {
   mockRpc,
   mockFrom,
   mockDeleteListingImages,
+  mockServiceFrom,
   mockGetUserById,
   mockUpdateUserById,
   mockDeleteUser,
@@ -16,6 +17,7 @@ const {
   mockRpc: vi.fn(),
   mockFrom: vi.fn(),
   mockDeleteListingImages: vi.fn(),
+  mockServiceFrom: vi.fn(),
   mockGetUserById: vi.fn(),
   mockUpdateUserById: vi.fn(),
   mockDeleteUser: vi.fn(),
@@ -49,6 +51,7 @@ vi.mock("@/lib/actions/images", () => ({
 }));
 vi.mock("@/lib/supabase/service", () => ({
   createServiceClient: () => ({
+    from: mockServiceFrom,
     auth: {
       admin: {
         getUserById: mockGetUserById,
@@ -80,6 +83,18 @@ function listingsStub(result: unknown) {
   chain.select = vi.fn(() => chain);
   chain.eq = vi.fn(() => {
     calls.push("read:listings");
+    return chain;
+  });
+  chain.then = (resolve: (value: unknown) => unknown) => resolve(result);
+  return chain;
+}
+
+/** The post-delete "is this object still referenced?" read. */
+function referenceStub(result: unknown) {
+  const chain: Record<string, unknown> = {};
+  chain.select = vi.fn(() => chain);
+  chain.overlaps = vi.fn(() => {
+    calls.push("read:references");
     return chain;
   });
   chain.then = (resolve: (value: unknown) => unknown) => resolve(result);
@@ -126,6 +141,9 @@ beforeEach(() => {
       ],
       error: null,
     }),
+  );
+  mockServiceFrom.mockImplementation(() =>
+    referenceStub({ data: [], error: null }),
   );
   mockDeleteListingImages.mockImplementation(async () => {
     calls.push("storage:delete");
@@ -341,6 +359,7 @@ describe("adminDeleteUser", () => {
       "read:listings",
       "auth:deleteUser",
       "rpc:admin_log_event",
+      "read:references",
       "storage:delete",
     ]);
   });
@@ -351,6 +370,38 @@ describe("adminDeleteUser", () => {
       IMAGE_A,
       IMAGE_B,
     ]);
+  });
+
+  // image_urls is seller-writable, so a listing can name an object another
+  // listing shows, and this sweep runs with an admin's bucket-wide rights.
+  it("keeps an object a surviving listing still shows", async () => {
+    mockServiceFrom.mockImplementation(() =>
+      referenceStub({ data: [{ image_urls: [IMAGE_B] }], error: null }),
+    );
+
+    await adminDeleteUser(USER_ID);
+    expect(mockDeleteListingImages).toHaveBeenCalledExactlyOnceWith([IMAGE_A]);
+  });
+
+  it("sweeps nothing when the reference check itself fails", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockServiceFrom.mockImplementation(() =>
+      referenceStub({ data: null, error: { message: "read failed" } }),
+    );
+
+    await expect(adminDeleteUser(USER_ID)).resolves.toEqual({});
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+    error.mockRestore();
+  });
+
+  it("skips the reference check for a seller who had no images", async () => {
+    mockFrom.mockImplementation(() =>
+      listingsStub({ data: [{ id: LISTING_A, image_urls: [] }], error: null }),
+    );
+
+    await expect(adminDeleteUser(USER_ID)).resolves.toEqual({});
+    expect(mockServiceFrom).not.toHaveBeenCalled();
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
   });
 
   it("invalidates one tag per collected listing plus the collection", async () => {

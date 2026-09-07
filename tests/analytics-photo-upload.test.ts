@@ -31,7 +31,21 @@ vi.mock("react", async () => {
       const value =
         typeof initial === "function" ? (initial as () => State)() : initial;
       hookState.slots = value as ImageSlotState[];
-      return [value, () => {}];
+      // Applied for real, and mirrored into the slots ref the hook reads back:
+      // a no-op setter leaves every attempt looking stale, so nothing past the
+      // staleness guard (the slot's own cleanup) would ever run.
+      return [
+        value,
+        (next: unknown) => {
+          hookState.slots =
+            typeof next === "function"
+              ? (next as (prev: ImageSlotState[]) => ImageSlotState[])(
+                  hookState.slots,
+                )
+              : (next as ImageSlotState[]);
+          if (hookState.refs[0]) hookState.refs[0].current = hookState.slots;
+        },
+      ];
     },
   };
 });
@@ -128,6 +142,34 @@ describe("photo upload events", () => {
 
     const names = mockCaptureEvent.mock.calls.map((call) => call[0]);
     expect(names).toEqual(["photo_upload_started", "photo_upload_succeeded"]);
+  });
+
+  // The action always returns, so this is the request itself failing. Without
+  // a terminal event the attempt vanishes and the slot spins forever.
+  it("terminates an attempt whose request never completed", async () => {
+    mockOptimizeListingPhoto.mockRejectedValue(new TypeError("Failed to fetch"));
+
+    const { onFileSelected } = mountHook();
+    await onFileSelected(0, makeFile(4096));
+
+    expect(mockCaptureEvent.mock.calls.map((call) => call[0])).toEqual([
+      "photo_upload_started",
+      "photo_upload_failed",
+    ]);
+    expect(mockCaptureEvent.mock.calls[1][1].reason).toBe("Failed to fetch");
+
+    const slot = hookState.slots[0];
+    expect(slot.optimizing).toBe(false);
+    expect(slot.optimizeError).toContain("Failed to fetch");
+  });
+
+  it("names a rejection that carried no message", async () => {
+    mockOptimizeListingPhoto.mockRejectedValue("boom");
+
+    const { onFileSelected } = mountHook();
+    await onFileSelected(0, makeFile(1024));
+
+    expect(mockCaptureEvent.mock.calls[1][1].reason).toBe("The upload failed.");
   });
 
   it("counts a retry as a new attempt", async () => {

@@ -703,7 +703,7 @@ as $$
 declare
   v_listing_id uuid;
   v_already_succeeded boolean;
-  v_activated boolean;
+  v_confirmed boolean;
 begin
   -- Service-role only, enforced HERE and not by the revoke below. Supabase's
   -- default privileges grant execute to anon/authenticated/service_role by
@@ -724,6 +724,16 @@ begin
     raise exception 'Listing payment not found' using errcode = 'P0002';
   end if;
 
+  -- Serialize with admin_restore_listing, which moves this same row between
+  -- 'suspended' and its previous_status. Without the lock a restore that
+  -- commits between the two updates below leaves a PAID listing sitting in
+  -- 'pending_payment' and reports no confirmation: the first update scans a
+  -- suspended row, skips it without locking, and the second then re-checks
+  -- after the restore committed and no longer matches either. Taking the lock
+  -- first makes whichever transaction arrives second re-read the row and land
+  -- on the branch that is actually true for it.
+  perform 1 from public.listings where id = v_listing_id for update;
+
   if not v_already_succeeded then
     update public.listing_payments
        set status = 'succeeded', paid_at = now()
@@ -735,9 +745,9 @@ begin
    where id = v_listing_id and status = 'pending_payment';
 
   -- Read `found` immediately: the suspended-listing update below overwrites it.
-  -- Callers need the FIRST pending_payment -> active transition, not every
-  -- idempotent replay, so payment_confirmed can be emitted exactly once.
-  v_activated := found;
+  -- Callers need the FIRST landing of the fee, not every idempotent replay, so
+  -- payment_confirmed can be emitted exactly once.
+  v_confirmed := found;
 
   -- A listing suspended while its Checkout was still open can have the fee land
   -- afterwards. The moderation state must hold, so status is not touched; what
@@ -752,7 +762,13 @@ begin
      and status = 'suspended'
      and previous_status = 'pending_payment';
 
-  return v_activated;
+  -- The same first landing, reached through moderation instead of activation.
+  -- Callers need one payment_confirmed per paid fee, and a suspended listing's
+  -- fee is still paid. Both updates re-check a predicate no replay can match,
+  -- and the two predicates are mutually exclusive, so exactly-once holds.
+  v_confirmed := v_confirmed or found;
+
+  return v_confirmed;
 end;
 $$;
 
