@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { parseBrowseFilters } from "@/lib/browse-filters";
 import { browseHref } from "@/lib/browse-url";
+import { HIDDEN_SCROLLBAR_CLASS } from "@/lib/styles";
 import type { PageSearchParams } from "@/lib/types";
 import { GOWN_CATEGORIES, type GownCategoryId } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -48,7 +49,7 @@ export default function BrowseCategoryNav({
       <div
         className={cn(
           isMobile &&
-          "flex gap-2 overflow-x-auto overscroll-x-contain pb-1 -mb-1 [-ms-overflow-style:none] [scrollbar-width:none] snap-x snap-mandatory scroll-px-4 touch-pan-x [&::-webkit-scrollbar]:hidden",
+          `flex gap-2 overflow-x-auto overscroll-x-contain pb-1 -mb-1 snap-x snap-mandatory scroll-px-4 touch-pan-x ${HIDDEN_SCROLLBAR_CLASS}`,
           !isMobile && "flex flex-nowrap items-center justify-end gap-2",
         )}
       >

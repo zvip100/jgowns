@@ -41,7 +41,22 @@ describe("AuthSubmitButton", () => {
 });
 
 describe("AuthAltLink", () => {
-  it("links to the bare path when next is the default", () => {
+  it("links to the bare path when no next was requested", () => {
+    const html = renderToStaticMarkup(
+      React.createElement(AuthAltLink, {
+        prompt: "New here?",
+        linkText: "Create an account",
+        to: "/register",
+        next: "",
+      }),
+    );
+
+    expect(html).toContain("New here?");
+    expect(html).toContain("Create an account");
+    expect(html).toContain('href="/register"');
+  });
+
+  it("carries an explicitly requested /dashboard across the cross-link", () => {
     const html = renderToStaticMarkup(
       React.createElement(AuthAltLink, {
         prompt: "New here?",
@@ -51,9 +66,7 @@ describe("AuthAltLink", () => {
       }),
     );
 
-    expect(html).toContain("New here?");
-    expect(html).toContain("Create an account");
-    expect(html).toContain('href="/register"');
+    expect(html).toContain('href="/register?next=%2Fdashboard"');
   });
 
   it("preserves a non-default next in the link href", () => {

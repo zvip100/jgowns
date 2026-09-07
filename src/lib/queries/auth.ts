@@ -1,8 +1,13 @@
 import { cache } from "react";
 
+import { isAdmin } from "@/lib/admin/is-admin";
 import { createClient } from "@/lib/supabase/server";
 
-export type SessionUser = { id: string; email: string | null };
+export type SessionUser = {
+  id: string;
+  email: string | null;
+  isAdmin: boolean;
+};
 
 /**
  * Current user from the session JWT, deduped per request. Verifies the token locally via
@@ -14,7 +19,11 @@ export const getCurrentUser = cache(async (): Promise<SessionUser | null> => {
   if (!data) return null;
 
   const { claims } = data;
-  return { id: claims.sub, email: claims.email ?? null };
+  return {
+    id: claims.sub,
+    email: claims.email ?? null,
+    isAdmin: isAdmin(claims),
+  };
 });
 
 export type SessionContact = { email: string | null; phone: string | null };

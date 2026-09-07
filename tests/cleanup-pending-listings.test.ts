@@ -35,16 +35,31 @@ function makeDeleteChain(result: { data?: unknown; error: unknown }) {
   return chain;
 }
 
+/** The post-delete "is this object still referenced?" read. */
+function makeReferenceChain(result: { data?: unknown; error: unknown }) {
+  const chain = {
+    select: vi.fn(),
+    overlaps: vi.fn().mockResolvedValue(result),
+  };
+  chain.select.mockReturnValue(chain);
+  return chain;
+}
+
 function setupSupabase(opts: {
   deleteResult?: { data?: unknown; error: unknown };
+  referenceResult?: { data?: unknown; error: unknown };
 } = {}) {
   const deleteChain = makeDeleteChain(opts.deleteResult ?? { data: [], error: null });
+  const referenceChain = makeReferenceChain(
+    opts.referenceResult ?? { data: [], error: null },
+  );
 
   mockFrom.mockReturnValue({
     delete: vi.fn().mockReturnValue(deleteChain),
+    select: referenceChain.select,
   });
 
-  return { deleteChain };
+  return { deleteChain, referenceChain };
 }
 
 beforeEach(() => {
@@ -124,6 +139,43 @@ describe("POST /api/cleanup/pending-listings", () => {
     expect(callOrder).toEqual(["db-delete", "image-delete"]);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ deleted: 2 });
+  });
+
+  // image_urls is written verbatim by update_listing_with_variants, so an
+  // unpaid listing can name a live one's photo, and this sweep deletes with the
+  // service role.
+  it("keeps an object a surviving listing still shows", async () => {
+    setupSupabase({
+      deleteResult: {
+        data: [{ id: "listing-1", image_urls: ["url-a", "victim-url"] }],
+        error: null,
+      },
+      referenceResult: { data: [{ image_urls: ["victim-url"] }], error: null },
+    });
+
+    const response = await POST(cleanupRequest(CLEANUP_SECRET));
+
+    expect(mockDeleteListingImages).toHaveBeenCalledWith(
+      ["url-a"],
+      expect.anything(),
+    );
+    expect(await response.json()).toEqual({ deleted: 1 });
+  });
+
+  it("sweeps nothing when the reference check itself fails", async () => {
+    setupSupabase({
+      deleteResult: {
+        data: [{ id: "listing-1", image_urls: ["url-a"] }],
+        error: null,
+      },
+      referenceResult: { data: null, error: { message: "read failed" } },
+    });
+
+    const response = await POST(cleanupRequest(CLEANUP_SECRET));
+
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ deleted: 1 });
   });
 
   it("returns 500 and skips image cleanup when the row delete fails", async () => {

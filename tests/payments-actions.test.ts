@@ -12,9 +12,11 @@ const {
   mockCheckoutSessionsRetrieve,
   mockCheckoutSessionsExpire,
   mockRpc,
+  mockCaptureServerEvent,
   mockServiceUpdate,
   mockServiceSessionEq,
   mockServiceStatusEq,
+  mockServiceListingsUpdate,
 } = vi.hoisted(() => {
   const mockUpdateTag = vi.fn();
   const mockRevalidateTag = vi.fn();
@@ -29,11 +31,17 @@ const {
   const mockCheckoutSessionsRetrieve = vi.fn();
   const mockCheckoutSessionsExpire = vi.fn();
   const mockRpc = vi.fn();
+  const mockCaptureServerEvent = vi.fn();
   const mockServiceUpdate = vi.fn();
   const mockServiceSessionEq = vi.fn();
   const mockServiceStatusEq = vi.fn();
+  // Free publication moved to the service client in migration 025: the
+  // listings_guard_status trigger refuses a seller-driven pending_payment ->
+  // active, which is the fee bypass.
+  const mockServiceListingsUpdate = vi.fn();
 
   return {
+    mockServiceListingsUpdate,
     mockUpdateTag,
     mockRevalidateTag,
     mockRedirect,
@@ -45,6 +53,7 @@ const {
     mockCheckoutSessionsRetrieve,
     mockCheckoutSessionsExpire,
     mockRpc,
+    mockCaptureServerEvent,
     mockServiceUpdate,
     mockServiceSessionEq,
     mockServiceStatusEq,
@@ -56,6 +65,10 @@ vi.mock("next/cache", () => ({
   revalidateTag: mockRevalidateTag,
 }));
 vi.mock("next/navigation", () => ({ redirect: mockRedirect }));
+vi.mock("@/lib/analytics/server", () => ({
+  captureServerError: vi.fn(),
+  captureServerEvent: mockCaptureServerEvent,
+}));
 vi.mock("@/lib/actions/auth", () => ({ getAuthClient: mockGetAuthClient }));
 vi.mock("@/lib/listing-fee", () => ({
   isListingFeeActive: mockIsListingFeeActive,
@@ -76,7 +89,11 @@ vi.mock("@/lib/stripe/client", () => ({
 vi.mock("@/lib/supabase/service", () => ({
   createServiceClient: () => ({
     rpc: mockRpc,
-    from: vi.fn().mockReturnValue({ update: mockServiceUpdate }),
+    from: vi.fn((table: string) =>
+      table === "listings"
+        ? { update: mockServiceListingsUpdate }
+        : { update: mockServiceUpdate },
+    ),
   }),
 }));
 
@@ -144,6 +161,10 @@ function makeCheckoutSupabase(opts: CheckoutSupabaseOpts = {}) {
   const paymentInsert = vi
     .fn()
     .mockResolvedValue(opts.paymentInsertResult ?? { error: null });
+
+  // The free-publish status write is made by the SERVICE client now, so that
+  // chain is what the assertions inspect; the seller client only reads here.
+  mockServiceListingsUpdate.mockReturnValue(updateChain);
 
   const from = vi.fn().mockImplementation((table: string) => {
     if (table === "listing_payments") {
@@ -228,6 +249,12 @@ describe("createListingCheckout", () => {
       await expect(createListingCheckout(LISTING_ID)).rejects.toThrow("NEXT_REDIRECT");
 
       expect(supabase._updateChain.eq).toHaveBeenCalledWith("status", "pending_payment");
+      // The write must come from the service client: the guard trigger refuses
+      // a seller-driven pending_payment -> active (that is the fee bypass), and
+      // the ownership predicates below stand in for the RLS this skips.
+      expect(mockServiceListingsUpdate).toHaveBeenCalledWith({ status: "active" });
+      expect(supabase._updateChain.eq).toHaveBeenCalledWith("user_id", USER_ID);
+      expect(supabase._updateChain.eq).toHaveBeenCalledWith("id", LISTING_ID);
       expect(mockUpdateTag).toHaveBeenCalledWith("listings");
       expect(mockUpdateTag).toHaveBeenCalledWith(`listing:${LISTING_ID}`);
       expect(mockRedirect).toHaveBeenCalledWith("/dashboard");
@@ -477,9 +504,10 @@ describe("createListingCheckout", () => {
 describe("confirmListingPayment", () => {
   beforeEach(() => {
     mockRevalidateTag.mockClear();
+    mockCaptureServerEvent.mockReset();
     mockCheckoutSessionsRetrieve.mockReset();
     mockRpc.mockReset();
-    mockRpc.mockResolvedValue({ error: null });
+    mockRpc.mockResolvedValue({ data: true, error: null });
   });
 
   it("rejects an invalid session id", async () => {
@@ -567,5 +595,149 @@ describe("confirmListingPayment", () => {
     expect(first).toEqual({ paid: true, listingId: LISTING_ID, userId: USER_ID });
     expect(second).toEqual({ paid: true, listingId: LISTING_ID, userId: USER_ID });
     expect(mockRpc).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("payment_confirmed", () => {
+  const PAID_SESSION = {
+    payment_status: "paid",
+    amount_total: 500,
+    metadata: { listing_id: LISTING_ID, user_id: USER_ID },
+  };
+
+  beforeEach(() => {
+    mockRevalidateTag.mockClear();
+    mockCaptureServerEvent.mockReset();
+    mockCheckoutSessionsRetrieve.mockReset();
+    mockRpc.mockReset();
+  });
+
+  it("fires once when the RPC reports the real activation", async () => {
+    mockCheckoutSessionsRetrieve.mockResolvedValue(PAID_SESSION);
+    mockRpc.mockResolvedValue({ data: true, error: null });
+
+    await confirmListingPayment("cs_test_1");
+
+    expect(mockCaptureServerEvent).toHaveBeenCalledTimes(1);
+    expect(mockCaptureServerEvent).toHaveBeenCalledWith("payment_confirmed", {
+      listing_id: LISTING_ID,
+      fee_cents: 500,
+    });
+  });
+
+  // The webhook and the Checkout-success route both call this and both report
+  // paid; only the RPC's transition report keeps it to one event per listing.
+  it("stays silent on a replay the RPC reports as already active", async () => {
+    mockCheckoutSessionsRetrieve.mockResolvedValue(PAID_SESSION);
+    mockRpc
+      .mockResolvedValueOnce({ data: true, error: null })
+      .mockResolvedValueOnce({ data: false, error: null });
+
+    await confirmListingPayment("cs_test_1");
+    await confirmListingPayment("cs_test_1");
+
+    expect(mockCaptureServerEvent).toHaveBeenCalledTimes(1);
+  });
+
+  it("stays silent when the RPC reports nothing (migration 037 not applied)", async () => {
+    mockCheckoutSessionsRetrieve.mockResolvedValue(PAID_SESSION);
+    mockRpc.mockResolvedValue({ data: null, error: null });
+
+    const result = await confirmListingPayment("cs_test_1");
+
+    expect(result).toEqual({ paid: true, listingId: LISTING_ID, userId: USER_ID });
+    expect(mockCaptureServerEvent).not.toHaveBeenCalled();
+  });
+
+  it("stays silent when the activation RPC fails", async () => {
+    mockCheckoutSessionsRetrieve.mockResolvedValue(PAID_SESSION);
+    mockRpc.mockResolvedValue({ data: null, error: { message: "P0002" } });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await confirmListingPayment("cs_test_1");
+
+    expect(mockCaptureServerEvent).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it("stays silent for a session Stripe reports as unpaid", async () => {
+    mockCheckoutSessionsRetrieve.mockResolvedValue({
+      payment_status: "unpaid",
+      metadata: { listing_id: LISTING_ID, user_id: USER_ID },
+    });
+
+    await confirmListingPayment("cs_test_1");
+
+    expect(mockCaptureServerEvent).not.toHaveBeenCalled();
+  });
+});
+
+describe("checkout_started", () => {
+  beforeEach(() => {
+    mockRedirect.mockClear();
+    mockRedirect.mockImplementation(() => {
+      throw new Error("NEXT_REDIRECT");
+    });
+    mockCaptureServerEvent.mockReset();
+    mockGetAuthClient.mockReset();
+    mockIsListingFeeActive.mockReset().mockReturnValue(true);
+    mockGetListingFeeCents.mockReset().mockReturnValue(500);
+    mockGetSessionContact.mockReset().mockResolvedValue({
+      email: "seller@example.com",
+      phone: null,
+    });
+    mockCheckoutSessionsRetrieve.mockReset();
+    mockCheckoutSessionsCreate.mockReset().mockResolvedValue({
+      id: "cs_test_123",
+      url: "https://checkout.stripe.com/pay/cs_test_123",
+    });
+  });
+
+  it("fires with the fee once the session and its payment row exist", async () => {
+    const supabase = makeCheckoutSupabase();
+    mockGetAuthClient.mockResolvedValue({ ok: true, user: { id: USER_ID }, supabase });
+
+    await expect(createListingCheckout(LISTING_ID)).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(mockCaptureServerEvent).toHaveBeenCalledTimes(1);
+    expect(mockCaptureServerEvent).toHaveBeenCalledWith("checkout_started", {
+      listing_id: LISTING_ID,
+      fee_cents: 500,
+    });
+  });
+
+  it("stays silent when Stripe refuses to create the session", async () => {
+    const supabase = makeCheckoutSupabase();
+    mockGetAuthClient.mockResolvedValue({ ok: true, user: { id: USER_ID }, supabase });
+    mockCheckoutSessionsCreate.mockRejectedValue(new Error("stripe down"));
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await createListingCheckout(LISTING_ID);
+
+    expect(mockCaptureServerEvent).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it("stays silent when the payment row cannot be written", async () => {
+    const supabase = makeCheckoutSupabase({
+      paymentInsertResult: { error: { message: "insert failed" } },
+    });
+    mockGetAuthClient.mockResolvedValue({ ok: true, user: { id: USER_ID }, supabase });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await createListingCheckout(LISTING_ID);
+
+    expect(mockCaptureServerEvent).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it("stays silent on the free-publish path, where no checkout exists", async () => {
+    mockIsListingFeeActive.mockReturnValue(false);
+    const supabase = makeCheckoutSupabase();
+    mockGetAuthClient.mockResolvedValue({ ok: true, user: { id: USER_ID }, supabase });
+
+    await expect(createListingCheckout(LISTING_ID)).rejects.toThrow("NEXT_REDIRECT");
+
+    expect(mockCaptureServerEvent).not.toHaveBeenCalled();
   });
 });

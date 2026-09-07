@@ -77,12 +77,15 @@ type UserWishlistRow = {
  * specific (AGENTS §2). Throws on a query error so a failure is distinguishable
  * from a legitimately empty wishlist.
  */
-export async function getUserWishlist(): Promise<WishlistItem[]> {
+export async function getUserWishlist(
+  currentUserId: string,
+): Promise<WishlistItem[]> {
   const supabase = await createClient();
 
   const { data, error } = await supabase
     .from("wishlist_items")
     .select(USER_WISHLIST_SELECT)
+    .eq("user_id", currentUserId)
     .order("created_at", { ascending: false })
     .order("listing_id", { ascending: true });
 

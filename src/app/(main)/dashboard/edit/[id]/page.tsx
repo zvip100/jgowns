@@ -7,6 +7,7 @@ import ListingForm from '@/components/ListingForm';
 import NoticePanel from '@/components/NoticePanel';
 import { getCurrentUser } from '@/lib/queries/auth';
 import { sortListingSizes } from '@/lib/listing-variants';
+import { sellerSuspensionMessage } from '@/lib/suspension';
 import { createClient } from '@/lib/supabase/server';
 import { isValidUUID } from '@/lib/utils';
 
@@ -48,6 +49,23 @@ export default async function EditListingPage({ params }: EditListingPageProps) 
         icon={Lock}
         title='Listing Sold'
         description='Reactivate this listing from your dashboard to edit it.'
+        href='/dashboard'
+        linkLabel='Back to dashboard'
+      />
+    );
+  }
+
+  // updateListing would reject the write anyway, but showing a seller a form
+  // that cannot save is the wrong shape.
+  if (listingWithSizes.status === 'suspended') {
+    return (
+      <NoticePanel
+        icon={Lock}
+        title='Suspended by moderation'
+        description={sellerSuspensionMessage(
+          listingWithSizes.suspension_slug,
+          listingWithSizes.suspension_reason,
+        )}
         href='/dashboard'
         linkLabel='Back to dashboard'
       />

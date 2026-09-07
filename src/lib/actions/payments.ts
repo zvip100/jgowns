@@ -3,6 +3,8 @@
 import { revalidateTag, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { SELLER_EVENTS, SERVER_EVENTS } from "@/lib/analytics/events";
+import { captureServerError, captureServerEvent } from "@/lib/analytics/server";
 import { getAuthClient } from "@/lib/actions/auth";
 import { getListingFeeCents, isListingFeeActive } from "@/lib/listing-fee";
 import { getSessionContact } from "@/lib/queries/auth";
@@ -67,7 +69,14 @@ export async function createListingCheckout(
     // The status=pending_payment predicate keeps this safe as an
     // independently-callable endpoint — it can only ever promote a pending
     // listing, never a sold/removed one.
-    const { data: updated, error } = await supabase
+    //
+    // Service role, not the seller's client: guard_listing_status_write()
+    // refuses a seller-driven pending_payment -> active, which is exactly the
+    // fee bypass. Whether the fee is off lives in env and cannot be expressed
+    // in the database, so the authority has to be this action. The user_id and
+    // status predicates below carry the ownership check that RLS would have,
+    // and ownership was already verified against `listing` above.
+    const { data: updated, error } = await createServiceClient()
       .from("listings")
       .update({ status: "active" })
       .eq("id", listingId)
@@ -105,7 +114,10 @@ export async function createListingCheckout(
         priorPayment.stripe_session_id,
       );
     } catch (e) {
-      console.error("Failed to retrieve prior Stripe Checkout session:", e);
+      await captureServerError(
+        { scope: "payments.createListingCheckout.retrievePriorSession" },
+        e,
+      );
       redirect("/dashboard/checkout/confirmed?outcome=processing");
     }
 
@@ -131,7 +143,10 @@ export async function createListingCheckout(
           priorPayment.stripe_session_id,
         );
       } catch (e) {
-        console.error("Failed to expire prior Stripe Checkout session:", e);
+        await captureServerError(
+          { scope: "payments.createListingCheckout.expirePriorSession" },
+          e,
+        );
         return CHECKOUT_UNAVAILABLE_ERROR;
       }
     }
@@ -179,7 +194,10 @@ export async function createListingCheckout(
     // The listing already committed before this ran (or already sat pending);
     // never delete the seller's work over a Checkout-creation failure. Leave
     // it pending with a working retry button.
-    console.error("Failed to create Stripe Checkout session:", e);
+    await captureServerError(
+      { scope: "payments.createListingCheckout.createSession" },
+      e,
+    );
     return CHECKOUT_UNAVAILABLE_ERROR;
   }
 
@@ -201,9 +219,23 @@ export async function createListingCheckout(
     });
 
   if (paymentError) {
-    console.error("Failed to record listing payment row:", paymentError.message);
+    // Reconciliation loses its record of this Checkout without the row.
+    await captureServerError(
+      {
+        scope: "payments.createListingCheckout.recordPaymentRow",
+        properties: { listing_id: listingId },
+      },
+      paymentError,
+    );
     return CHECKOUT_UNAVAILABLE_ERROR;
   }
+
+  // Server-side because the success path is a redirect: the browser leaves for
+  // Stripe and never runs code after this action returns (spec §5.2).
+  await captureServerEvent(SELLER_EVENTS.checkoutStarted, {
+    listing_id: listingId,
+    fee_cents: feeCents,
+  });
 
   redirect(session.url);
 }
@@ -231,7 +263,10 @@ export async function confirmListingPayment(
   try {
     session = await getStripe().checkout.sessions.retrieve(sessionId);
   } catch (e) {
-    console.error("Failed to retrieve Stripe Checkout session:", e);
+    await captureServerError(
+      { scope: "payments.confirmListingPayment.retrieveSession" },
+      e,
+    );
     return { paid: false, error: "Could not verify payment." };
   }
 
@@ -241,17 +276,37 @@ export async function confirmListingPayment(
     return { paid: false };
   }
 
-  const { error } = await createServiceClient().rpc("record_listing_payment", {
-    p_session_id: sessionId,
-  });
+  const { data: confirmed, error } = await createServiceClient().rpc(
+    "record_listing_payment",
+    { p_session_id: sessionId },
+  );
 
   if (error) {
-    console.error("Failed to record listing payment:", error.message);
+    // The seller has been charged and their listing is not live: the most
+    // expensive silent failure in the codebase.
+    await captureServerError(
+      {
+        scope: "payments.confirmListingPayment.recordPayment",
+        properties: { listing_id: listingId, session_id: sessionId },
+      },
+      error,
+    );
     return { paid: false, error: "Could not activate listing." };
   }
 
   revalidateTag("listings", "max");
   revalidateTag(`listing:${listingId}`, "max");
+
+  // The webhook and the success route both land here and both report paid, so
+  // only the RPC's report of the fee's first landing can keep this to one event
+  // per listing (spec §5.3). A listing suspended mid-Checkout counts: it does
+  // not activate, but its fee was still charged.
+  if (confirmed === true) {
+    await captureServerEvent(SERVER_EVENTS.paymentConfirmed, {
+      listing_id: listingId,
+      fee_cents: session.amount_total,
+    });
+  }
 
   return { paid: true, listingId, userId };
 }

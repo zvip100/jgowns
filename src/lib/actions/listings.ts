@@ -2,6 +2,7 @@
 
 import { revalidateTag, updateTag } from "next/cache";
 
+import { captureServerError } from "@/lib/analytics/server";
 import { getAuthClient } from "@/lib/actions/auth";
 import { getStripe } from "@/lib/stripe/client";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -12,6 +13,25 @@ import type Stripe from "stripe";
 const CHECKOUT_CANCEL_ERROR: ServerActionErrorResult = {
   error: "Couldn't cancel the open payment. Please try again.",
 };
+
+const GENERIC_RPC_ERROR = "Something went wrong. Please try again.";
+
+type PostgrestLikeError = { message: string; code?: string };
+
+/**
+ * Postgres codes carry the meaning; the raised text is written for a developer
+ * reading logs, so an unmapped code never reaches the seller's screen verbatim.
+ */
+function rpcError(
+  scope: string,
+  error: PostgrestLikeError,
+  codeMessages?: Record<string, string>,
+): ServerActionErrorResult {
+  const mapped = codeMessages && error.code ? codeMessages[error.code] : undefined;
+  if (mapped) return { error: mapped };
+  console.error(`[actions/listings] ${scope} RPC failed`, error);
+  return { error: GENERIC_RPC_ERROR };
+}
 
 export async function revalidateListings() {
   revalidateTag("listings", "max");
@@ -31,7 +51,9 @@ export async function markListingSold(
     p_listing_id: id,
   });
 
-  if (error) return { error: error.message };
+  if (error) {
+    return rpcError("markListingSold", error, { P0002: "Listing not found" });
+  }
 
   updateTag(`listing:${id}`);
   updateTag("listings");
@@ -50,7 +72,7 @@ export async function removeListing(
 
   const auth = await getAuthClient();
   if (!auth.ok) return { error: auth.error };
-  const { supabase, user } = auth;
+  const { supabase } = auth;
 
   const { data: pendingPayments, error: pendingError } = await supabase
     .from("listing_payments")
@@ -69,7 +91,10 @@ export async function removeListing(
       try {
         session = await stripe.checkout.sessions.retrieve(row.stripe_session_id);
       } catch (e) {
-        console.error("Failed to retrieve Checkout session on remove:", e);
+        await captureServerError(
+          { scope: "listings.removeListing.retrieveSession" },
+          e,
+        );
         return CHECKOUT_CANCEL_ERROR;
       }
 
@@ -84,7 +109,10 @@ export async function removeListing(
         try {
           await stripe.checkout.sessions.expire(row.stripe_session_id);
         } catch (e) {
-          console.error("Failed to expire Checkout session on remove:", e);
+          await captureServerError(
+            { scope: "listings.removeListing.expireSession" },
+            e,
+          );
           return CHECKOUT_CANCEL_ERROR;
         }
       }
@@ -99,15 +127,13 @@ export async function removeListing(
     }
   }
 
-  const { data: updated, error } = await supabase
-    .from("listings")
-    .update({ status: "removed" })
-    .eq("id", id)
-    .eq("user_id", user.id)
-    .select("id");
+  const { error } = await supabase.rpc("remove_listing", {
+    p_listing_id: id,
+  });
 
-  if (error) return { error: error.message };
-  if (!updated?.length) return { error: "Listing not found" };
+  if (error) {
+    return rpcError("removeListing", error, { P0002: "Listing not found" });
+  }
 
   updateTag(`listing:${id}`);
   updateTag("listings");
@@ -135,7 +161,9 @@ export async function markSizeSold(
     p_size_id: sizeId,
   });
 
-  if (error) return { error: error.message };
+  if (error) {
+    return rpcError("markSizeSold", error, { P0002: "Size not found" });
+  }
 
   updateTag(`listing:${listingId}`);
   updateTag("listings");
@@ -156,7 +184,9 @@ export async function reactivateListing(
     p_listing_id: id,
   });
 
-  if (error) return { error: error.message };
+  if (error) {
+    return rpcError("reactivateListing", error, { P0002: "Listing not found" });
+  }
 
   updateTag(`listing:${id}`);
   updateTag("listings");
@@ -177,30 +207,19 @@ export async function reactivateSize(
 
   const auth = await getAuthClient();
   if (!auth.ok) return { error: auth.error };
-  const { supabase, user } = auth;
+  const { supabase } = auth;
 
-  const { data: listing, error: listingError } = await supabase
-    .from("listings")
-    .select("status")
-    .eq("id", listingId)
-    .eq("user_id", user.id)
-    .maybeSingle();
+  const { error } = await supabase.rpc("reactivate_size", {
+    p_listing_id: listingId,
+    p_size_id: sizeId,
+  });
 
-  if (listingError) return { error: listingError.message };
-  if (!listing) return { error: "Listing not found" };
-  if (listing.status !== "active") {
-    return { error: "Reactivate the listing before changing its sizes" };
+  if (error) {
+    return rpcError("reactivateSize", error, {
+      P0002: "Size not found",
+      "55000": "Reactivate the listing before changing its sizes",
+    });
   }
-
-  const { data: updated, error } = await supabase
-    .from("listing_sizes")
-    .update({ status: "available" })
-    .eq("id", sizeId)
-    .eq("listing_id", listingId)
-    .select("id");
-
-  if (error) return { error: error.message };
-  if (!updated?.length) return { error: "Size not found" };
 
   updateTag(`listing:${listingId}`);
   updateTag("listings");

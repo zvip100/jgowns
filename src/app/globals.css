@@ -82,6 +82,19 @@
   background-image: var(--gold-gradient);
 }
 
+/* Stat clusters read as recessed data plates rather than floating cards: a
+   deeper ivory ground and an inset edge instead of surface-panel's drop shadow,
+   so a row of numbers never reads as the same material as the content cards
+   beside it. Same palette, no new hue. `@utility`, not `@layer utilities`, for
+   the same reason gold-gradient is: a new class in that layer does not emit. */
+@utility stat-surface {
+  background-image: linear-gradient(160deg,
+      rgba(244, 238, 228, 0.94) 0%,
+      rgba(237, 229, 216, 0.76) 100%);
+  border: 1px solid rgba(120, 93, 63, 0.2);
+  box-shadow: inset 0 1px 2px rgba(99, 72, 40, 0.07);
+}
+
 @layer base {
 
   *,

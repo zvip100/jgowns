@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 
+import { captureServerError } from "@/lib/analytics/server";
 import { getAuthClient } from "@/lib/actions/auth";
 import { getUserWishlist } from "@/lib/queries/wishlist";
 import { WISHLIST_MAX_ITEMS } from "@/lib/types";
@@ -138,9 +139,10 @@ export async function mergeWishlist(
   }
 
   try {
-    const merged = await getUserWishlist();
+    const merged = await getUserWishlist(user.id);
     return { success: true, items: merged };
-  } catch {
+  } catch (e) {
+    await captureServerError({ scope: "wishlist.mergeWishlist.reload" }, e);
     return { success: false, error: "Couldn't load your wishlist. Please try again." };
   }
 }

@@ -1,23 +1,20 @@
 'use client';
 
-import { Info, Plus } from 'lucide-react';
+import { Info } from 'lucide-react';
 
-import { ListingSizeRow } from '@/components/ListingSizeRow';
+import { SizeRowsList } from '@/components/SizeRowsList';
 import { FORM_HINT_CLASS } from '@/components/form/constants';
 import { FormInfoBanner } from '@/components/form/FormInfoBanner';
 import { FormSection } from '@/components/form/FormSection';
 import { InputGroupField } from '@/components/form/InputGroupField';
-import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { FieldDescription } from '@/components/ui/field';
 import { Label } from '@/components/ui/label';
 import { CHECKBOX_GOLD_CLASS } from '@/lib/styles';
 import { cn } from '@/lib/utils';
 
-import type {
-  ListingSizesController,
-  SizeRowError,
-} from '@/hooks/useListingFormSubmit';
+import type { ListingSizesController } from '@/hooks/useListingFormSubmit';
+import type { SizeRowError } from '@/lib/listing-form';
 import type { GownCategoryId } from '@/lib/types';
 
 type ListingSizesFieldProps = {
@@ -47,9 +44,6 @@ export function ListingSizesField({
   } = controller;
 
   const hasMultipleSizes = rows.length > 1;
-  const takenPairs = rows.flatMap((r) =>
-    r.size && r.size_group ? [{ sizeGroup: r.size_group, size: r.size }] : [],
-  );
 
   return (
     <FormSection legend="Sizes & pricing">
@@ -64,33 +58,15 @@ export function ListingSizesField({
           </span>
         </FormInfoBanner>
 
-        {rows.map((row, index) => (
-          <ListingSizeRow
-            key={row.key}
-            row={row}
-            index={index}
-            category={category}
-            disabledSizes={takenPairs.filter(
-              (p) => !(p.sizeGroup === row.size_group && p.size === row.size),
-            )}
-            canRemove={hasMultipleSizes}
-            showPrice={!sellOnlyAsSet}
-            error={sizeErrors[index]}
-            onChange={(patch) => updateRow(row.key, patch)}
-            onRemove={() => removeRow(row.key)}
-          />
-        ))}
-
-        <Button
-          type="button"
-          variant="outline"
-          onClick={addRow}
-          disabled={!category}
-          className="w-fit"
-        >
-          <Plus data-icon="inline-start" />
-          Add another size
-        </Button>
+        <SizeRowsList
+          rows={rows}
+          category={category}
+          showPrice={!sellOnlyAsSet}
+          sizeErrors={sizeErrors}
+          onUpdateRow={updateRow}
+          onAddRow={addRow}
+          onRemoveRow={removeRow}
+        />
 
         {hasMultipleSizes && (
           <div className="flex flex-col gap-4 rounded-xl border border-(--line) bg-(--bg-cream)/60 p-4">

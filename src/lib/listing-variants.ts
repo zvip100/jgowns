@@ -1,4 +1,4 @@
-import type { ListingSize, ListingWithSizes } from "@/lib/types";
+import type { ListingSize, ListingWithSizes, SellMode } from "@/lib/types";
 
 export function formatPrice(value: number): string {
   return `$${value.toLocaleString()}`;
@@ -49,6 +49,35 @@ export function listingPriceSummary(listing: ListingWithSizes): string {
   if (pool.length === 1) return formatPrice(min);
   if (min === max) return `${formatPrice(min)} each`;
   return `From ${formatPrice(min)}`;
+}
+
+/**
+ * A stored listing or one still being submitted: form input carries no variant
+ * status yet, and omits the per-size price for a set.
+ */
+export type PriceableListing = {
+  sell_mode: SellMode;
+  bundle_price?: number | null;
+  sizes: readonly { price?: number | null; status?: ListingSize["status"] }[];
+};
+
+/**
+ * The numeric twin of `listingPriceSummary`, and the only price analytics may
+ * send: the figure the buyer actually saw, so a contact click is attributed to
+ * the price that motivated it. Null when no price is knowable.
+ */
+export function listingPriceValue(listing: PriceableListing): number | null {
+  if (listing.sell_mode === "set_only" && listing.bundle_price != null) {
+    return listing.bundle_price;
+  }
+
+  const avail = listing.sizes.filter((s) => s.status !== "sold");
+  const pool = avail.length > 0 ? avail : listing.sizes;
+  const prices = pool
+    .map((s) => s.price)
+    .filter((price): price is number => typeof price === "number");
+
+  return prices.length > 0 ? Math.min(...prices) : null;
 }
 
 /** Secondary bundle note: `All for $1,150` (either) or `Complete set only` (set_only). */

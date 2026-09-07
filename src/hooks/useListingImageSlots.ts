@@ -1,9 +1,14 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { unstable_rethrow } from 'next/navigation';
 import { optimizeListingPhoto } from '@/lib/actions/images';
+import { captureEvent } from '@/lib/analytics/client';
+import { SELLER_EVENTS } from '@/lib/analytics/events';
 import { generateBlurDataUrl, dataUrlToFile } from '@/lib/image-upload';
 import { MAX_LISTING_IMAGES, type ImageSlotState } from '@/lib/types';
+
+import type { OptimizeListingPhotoResult } from '@/lib/actions/images';
 
 type UseListingImageSlotsOptions = {
   initialUrls?: string[];
@@ -71,6 +76,14 @@ export function useListingImageSlots({
   const onFileSelected = async (index: number, file: File) => {
     const slotId = slots[index].id;
 
+    // One attempt per selected photo, terminated exactly once below. Retrying a
+    // failed photo re-enters here and counts as a new attempt (spec §5.2).
+    captureEvent(SELLER_EVENTS.photoUploadStarted, {
+      file_count: 1,
+      total_size: file.size,
+    });
+    const startedAt = Date.now();
+
     const oldPreview = slots[index].preview;
     if (oldPreview?.startsWith('blob:')) URL.revokeObjectURL(oldPreview);
 
@@ -87,7 +100,36 @@ export function useListingImageSlots({
 
     const optimizeForm = new FormData();
     optimizeForm.set('image', file);
-    const result = await optimizeListingPhoto(optimizeForm);
+
+    // The action itself always returns, so a rejection is the request failing
+    // to complete (offline, a body the host refused, a 500). Folding it into
+    // the result shape keeps one terminal path: without it the attempt emits
+    // no outcome and the slot spins forever.
+    let result: OptimizeListingPhotoResult;
+    try {
+      result = await optimizeListingPhoto(optimizeForm);
+    } catch (e) {
+      unstable_rethrow(e);
+      result = {
+        error:
+          e instanceof Error && e.message ? e.message : 'The upload failed.',
+      };
+    }
+
+    // Captured before the staleness guard below: the attempt genuinely finished,
+    // whether or not its slot is still on screen to receive the result.
+    if ('dataUrl' in result) {
+      captureEvent(SELLER_EVENTS.photoUploadSucceeded, {
+        file_count: 1,
+        duration_ms: Date.now() - startedAt,
+      });
+    } else {
+      captureEvent(SELLER_EVENTS.photoUploadFailed, {
+        reason: result.error ? result.error.slice(0, 120) : 'unknown',
+        file_count: 1,
+        total_size: file.size,
+      });
+    }
 
     // The slot was removed, or a newer file replaced it, while optimizing.
     // (Its blob preview is already revoked by whichever action superseded it.)
@@ -101,7 +143,11 @@ export function useListingImageSlots({
         optimizedDataUrl: result.dataUrl,
         optimizeError: '',
         optimizing: false,
-        blurPromise: generateBlurDataUrl(result.dataUrl),
+        // The server already made one from the same buffer it optimized. Canvas
+        // stays the fallback below, for the raw file an optimize failure leaves.
+        blurPromise: result.blurDataUrl
+          ? Promise.resolve(result.blurDataUrl)
+          : generateBlurDataUrl(result.dataUrl),
       });
       return;
     }

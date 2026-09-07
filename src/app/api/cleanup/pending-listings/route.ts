@@ -1,7 +1,9 @@
 import { timingSafeEqual } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 
+import { captureServerError } from "@/lib/analytics/server";
 import { deleteListingImages } from "@/lib/actions/images";
+import { unreferencedListingImageUrls } from "@/lib/images/storage";
 import { createServiceClient } from "@/lib/supabase/service";
 
 const PENDING_LISTING_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
@@ -46,7 +48,11 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
     .select("id, image_urls");
 
   if (deleteError) {
-    console.error("Pending-listing cleanup: failed to delete stale rows:", deleteError.message);
+    // A sweep that silently stops sweeping is a slow leak of paid-for storage.
+    await captureServerError(
+      { scope: "cleanup.pendingListings.delete" },
+      deleteError,
+    );
     return NextResponse.json({ error: deleteError.message }, { status: 500 });
   }
 
@@ -57,9 +63,16 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 
   const imageUrls = deleted.flatMap((row) => (row.image_urls ?? []) as string[]);
 
-  const cleanup = await deleteListingImages(imageUrls, supabase);
-  if ("error" in cleanup) {
-    console.warn("Pending-listing cleanup: failed to delete storage images:", cleanup.error);
+  // After the delete, so the swept rows no longer count as references. An
+  // unpaid listing can name a live listing's photo, and this sweep removes
+  // objects with the service role, which RLS does not stand in front of.
+  const orphans = await unreferencedListingImageUrls(supabase, imageUrls);
+
+  if (orphans.length > 0) {
+    const cleanup = await deleteListingImages(orphans, supabase);
+    if ("error" in cleanup) {
+      console.warn("Pending-listing cleanup: failed to delete storage images:", cleanup.error);
+    }
   }
 
   console.log(`Pending-listing cleanup: deleted ${deletedCount} stale listing(s).`);

@@ -1,45 +1,39 @@
 import { Suspense } from 'react';
-import { TriangleAlert } from 'lucide-react';
 
-import { safePostAuthPath } from '@/lib/auth-redirect';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AUTH_SIGN_IN_ERROR_MESSAGES, safeNextPath } from '@/lib/auth-redirect';
 
+import AuthErrorBanner from './AuthErrorBanner';
 import GoogleAuthButton from './GoogleAuthButton';
 
 import type { ReactNode } from 'react';
 
 type AuthSearchParams = { next?: string; error?: string };
 
-const AUTH_ERROR_MESSAGES: Record<string, string> = {
-  auth: 'We could not sign you in. Please try again.',
-};
-
 type AuthScreenBodyProps = {
   searchParams: Promise<AuthSearchParams>;
   renderForm: (next: string) => ReactNode;
   hasGoogleAuth: boolean;
+  isRegistration: boolean;
 };
 
 async function AuthScreenBody({
   searchParams,
   renderForm,
   hasGoogleAuth,
+  isRegistration,
 }: AuthScreenBodyProps) {
   const { next, error } = await searchParams;
-  const redirectTo = safePostAuthPath(next);
-  const errorMessage = error ? AUTH_ERROR_MESSAGES[error] : undefined;
+  // Empty means "no destination requested", which is what lets an admin land on
+  // /admin by default while still honoring an explicit next=/dashboard.
+  const redirectTo = safeNextPath(next) ?? '';
+  const errorMessage = error ? AUTH_SIGN_IN_ERROR_MESSAGES[error] : undefined;
 
   return (
     <>
-      {errorMessage && (
-        <Alert variant="destructive">
-          <TriangleAlert />
-          <AlertDescription>{errorMessage}</AlertDescription>
-        </Alert>
-      )}
+      <AuthErrorBanner initialMessage={errorMessage} />
       {hasGoogleAuth && (
         <>
-          <GoogleAuthButton next={redirectTo} />
+          <GoogleAuthButton next={redirectTo} isRegistration={isRegistration} />
           <div className="flex items-center gap-3 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-[#9a8369]">
             <span className="h-px flex-1 bg-[#e0d4c2]" />
             or
@@ -58,6 +52,8 @@ type AuthScreenProps = {
   searchParams: Promise<AuthSearchParams>;
   renderForm: (next: string) => ReactNode;
   hasGoogleAuth?: boolean;
+  /** Set on the register screen, where the Google button starts a signup. */
+  isRegistration?: boolean;
 };
 
 export default function AuthScreen({
@@ -66,6 +62,7 @@ export default function AuthScreen({
   searchParams,
   renderForm,
   hasGoogleAuth = true,
+  isRegistration = false,
 }: AuthScreenProps) {
   return (
     <div className="mx-auto mt-12 max-w-md sm:mt-20">
@@ -80,6 +77,7 @@ export default function AuthScreen({
               searchParams={searchParams}
               renderForm={renderForm}
               hasGoogleAuth={hasGoogleAuth}
+              isRegistration={isRegistration}
             />
           </Suspense>
         </div>

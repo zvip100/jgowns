@@ -60,12 +60,10 @@ type PaymentsResult = {
 
 function makeSupabase(
   sizesResult: UpdateResult = { data: [{ id: SIZE_ID }], error: null },
-  rpcResult: { error: null | { message: string } } = { error: null },
+  rpcResult: { error: null | { message: string; code?: string } } = {
+    error: null,
+  },
   listingsResult: UpdateResult = { data: [{ id: LISTING_ID }], error: null },
-  listingStatusResult: {
-    data: { status: string } | null;
-    error: null | { message: string };
-  } = { data: { status: "active" }, error: null },
   paymentsResult: PaymentsResult = { data: [], error: null },
 ) {
   const sizesChain = {
@@ -74,13 +72,11 @@ function makeSupabase(
     select: vi.fn().mockResolvedValue(sizesResult),
   };
   // Thenable so removeListing's terminal `.select("id")` resolves the update
-  // result, while reactivateSize's `.select("status").eq().maybeSingle()`
-  // resolves the parent-status read.
+  // result off the same chain.
   const listingsChain = {
     update: vi.fn().mockReturnThis(),
     select: vi.fn().mockReturnThis(),
     eq: vi.fn().mockReturnThis(),
-    maybeSingle: vi.fn().mockResolvedValue(listingStatusResult),
     then: (resolve: (value: UpdateResult) => unknown) => resolve(listingsResult),
   };
   const paymentsChain = {
@@ -171,7 +167,7 @@ describe("markListingSold", () => {
 
   it("returns 'Listing not found' when no row matches", async () => {
     const supabase = makeSupabase(undefined, {
-      error: { message: "Listing not found" },
+      error: { message: "Listing not found", code: "P0002" },
     });
     mockGetAuthClient.mockResolvedValue({
       ok: true,
@@ -182,6 +178,23 @@ describe("markListingSold", () => {
     const result = await markListingSold(LISTING_ID);
     expect(result).toEqual({ error: "Listing not found" });
     expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("never leaks the raw database message for an unmapped error", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const supabase = makeSupabase(undefined, {
+      error: { message: "duplicate key value violates ...", code: "23505" },
+    });
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+
+    const result = await markListingSold(LISTING_ID);
+    expect(result).toEqual({ error: "Something went wrong. Please try again." });
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
   });
 });
 
@@ -198,28 +211,22 @@ describe("removeListing", () => {
 
     expect(result).toEqual({});
     expect(supabase.from).toHaveBeenCalledWith("listing_payments");
-    expect(supabase.from).toHaveBeenCalledWith("listings");
     expect(mockExpireSession).not.toHaveBeenCalled();
-    expect(supabase._listingsChain.update).toHaveBeenCalledWith({
-      status: "removed",
+    // The status write goes through the RPC, never a direct update: the
+    // listings_guard_status trigger refuses direct status writes (migration 025).
+    expect(supabase._rpc).toHaveBeenCalledWith("remove_listing", {
+      p_listing_id: LISTING_ID,
     });
-    expect(supabase._listingsChain.eq).toHaveBeenCalledWith("id", LISTING_ID);
-    expect(supabase._listingsChain.eq).toHaveBeenCalledWith(
-      "user_id",
-      "user-1",
-    );
+    expect(supabase._listingsChain.update).not.toHaveBeenCalled();
     expect(mockUpdateTag).toHaveBeenCalledWith(`listing:${LISTING_ID}`);
     expect(mockUpdateTag).toHaveBeenCalledWith("listings");
   });
 
   it("expires an open Checkout session before soft-removing", async () => {
-    const supabase = makeSupabase(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      { data: [{ stripe_session_id: SESSION_ID }], error: null },
-    );
+    const supabase = makeSupabase(undefined, undefined, undefined, {
+      data: [{ stripe_session_id: SESSION_ID }],
+      error: null,
+    });
     mockGetAuthClient.mockResolvedValue({
       ok: true,
       supabase,
@@ -240,20 +247,17 @@ describe("removeListing", () => {
     expect(serviceChain.update).toHaveBeenCalledWith({ status: "expired" });
     expect(serviceChain.eq).toHaveBeenCalledWith("stripe_session_id", SESSION_ID);
     expect(serviceChain.eq).toHaveBeenCalledWith("status", "pending");
-    expect(supabase._listingsChain.update).toHaveBeenCalledWith({
-      status: "removed",
+    expect(supabase._rpc).toHaveBeenCalledWith("remove_listing", {
+      p_listing_id: LISTING_ID,
     });
     expect(mockUpdateTag).toHaveBeenCalledWith(`listing:${LISTING_ID}`);
   });
 
   it("marks the payment expired without Stripe expire when the session is already closed", async () => {
-    const supabase = makeSupabase(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      { data: [{ stripe_session_id: SESSION_ID }], error: null },
-    );
+    const supabase = makeSupabase(undefined, undefined, undefined, {
+      data: [{ stripe_session_id: SESSION_ID }],
+      error: null,
+    });
     mockGetAuthClient.mockResolvedValue({
       ok: true,
       supabase,
@@ -269,19 +273,16 @@ describe("removeListing", () => {
 
     expect(result).toEqual({});
     expect(mockExpireSession).not.toHaveBeenCalled();
-    expect(supabase._listingsChain.update).toHaveBeenCalledWith({
-      status: "removed",
+    expect(supabase._rpc).toHaveBeenCalledWith("remove_listing", {
+      p_listing_id: LISTING_ID,
     });
   });
 
   it("refuses to remove when Checkout is already paid", async () => {
-    const supabase = makeSupabase(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      { data: [{ stripe_session_id: SESSION_ID }], error: null },
-    );
+    const supabase = makeSupabase(undefined, undefined, undefined, {
+      data: [{ stripe_session_id: SESSION_ID }],
+      error: null,
+    });
     mockGetAuthClient.mockResolvedValue({
       ok: true,
       supabase,
@@ -303,13 +304,10 @@ describe("removeListing", () => {
   });
 
   it("returns an error and skips soft-remove when Stripe expire fails", async () => {
-    const supabase = makeSupabase(
-      undefined,
-      undefined,
-      undefined,
-      undefined,
-      { data: [{ stripe_session_id: SESSION_ID }], error: null },
-    );
+    const supabase = makeSupabase(undefined, undefined, undefined, {
+      data: [{ stripe_session_id: SESSION_ID }],
+      error: null,
+    });
     mockGetAuthClient.mockResolvedValue({
       ok: true,
       supabase,
@@ -346,10 +344,11 @@ describe("removeListing", () => {
     expect(mockUpdateTag).not.toHaveBeenCalled();
   });
 
-  it("returns 'Listing not found' when no owner row matches", async () => {
-    const supabase = makeSupabase(undefined, undefined, {
-      data: [],
-      error: null,
+  it("returns 'Listing not found' when the RPC raises P0002", async () => {
+    // remove_listing raises P0002 when no row matches the owner + not-already-
+    // removed predicates; the action maps that code to the user-facing message.
+    const supabase = makeSupabase(undefined, {
+      error: { code: "P0002", message: "Listing not found" },
     });
     mockGetAuthClient.mockResolvedValue({
       ok: true,
@@ -360,6 +359,27 @@ describe("removeListing", () => {
     const result = await removeListing(LISTING_ID);
     expect(result).toEqual({ error: "Listing not found" });
     expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("never leaks a non-P0002 RPC error's raw database message", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const supabase = makeSupabase(undefined, {
+      error: {
+        code: "42501",
+        message: "Listing status cannot be changed directly; use the listing actions",
+      },
+    });
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+
+    const result = await removeListing(LISTING_ID);
+    expect(result).toEqual({ error: "Something went wrong. Please try again." });
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
   });
 });
 
@@ -395,7 +415,7 @@ describe("markSizeSold", () => {
 
   it("returns 'Size not found' when the RPC reports no matching row", async () => {
     const supabase = makeSupabase(undefined, {
-      error: { message: "Size not found" },
+      error: { message: "Size not found", code: "P0002" },
     });
     mockGetAuthClient.mockResolvedValue({
       ok: true,
@@ -406,6 +426,23 @@ describe("markSizeSold", () => {
     const result = await markSizeSold(LISTING_ID, SIZE_ID);
     expect(result).toEqual({ error: "Size not found" });
     expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("never leaks the raw database message for an unmapped error", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const supabase = makeSupabase(undefined, {
+      error: { message: "duplicate key value violates ...", code: "23505" },
+    });
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+
+    const result = await markSizeSold(LISTING_ID, SIZE_ID);
+    expect(result).toEqual({ error: "Something went wrong. Please try again." });
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
   });
 });
 
@@ -446,7 +483,7 @@ describe("reactivateListing", () => {
 
   it("returns 'Listing not found' when no row matches", async () => {
     const supabase = makeSupabase(undefined, {
-      error: { message: "Listing not found" },
+      error: { message: "Listing not found", code: "P0002" },
     });
     mockGetAuthClient.mockResolvedValue({
       ok: true,
@@ -458,10 +495,27 @@ describe("reactivateListing", () => {
     expect(result).toEqual({ error: "Listing not found" });
     expect(mockUpdateTag).not.toHaveBeenCalled();
   });
+
+  it("never leaks the raw database message for an unmapped error", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const supabase = makeSupabase(undefined, {
+      error: { message: "duplicate key value violates ...", code: "23505" },
+    });
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+
+    const result = await reactivateListing(LISTING_ID);
+    expect(result).toEqual({ error: "Something went wrong. Please try again." });
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
+  });
 });
 
 describe("reactivateSize", () => {
-  it("marks the single size available and invalidates tags", async () => {
+  it("goes through the RPC and invalidates both tags", async () => {
     const supabase = makeSupabase();
     mockGetAuthClient.mockResolvedValue({
       ok: true,
@@ -472,18 +526,13 @@ describe("reactivateSize", () => {
     const result = await reactivateSize(LISTING_ID, SIZE_ID);
 
     expect(result).toEqual({});
-    expect(supabase._listingsChain.select).toHaveBeenCalledWith("status");
-    expect(supabase._listingsChain.eq).toHaveBeenCalledWith("id", LISTING_ID);
-    expect(supabase._listingsChain.eq).toHaveBeenCalledWith("user_id", "user-1");
-    expect(supabase._listingsChain.maybeSingle).toHaveBeenCalled();
-    expect(supabase._sizesChain.update).toHaveBeenCalledWith({
-      status: "available",
+    // The active-parent precondition is a predicate on the RPC's own UPDATE,
+    // not a read before it, so no separate parent lookup happens here.
+    expect(supabase._rpc).toHaveBeenCalledWith("reactivate_size", {
+      p_listing_id: LISTING_ID,
+      p_size_id: SIZE_ID,
     });
-    expect(supabase._sizesChain.eq).toHaveBeenCalledWith("id", SIZE_ID);
-    expect(supabase._sizesChain.eq).toHaveBeenCalledWith(
-      "listing_id",
-      LISTING_ID,
-    );
+    expect(supabase.from).not.toHaveBeenCalled();
     expect(mockUpdateTag).toHaveBeenCalledWith(`listing:${LISTING_ID}`);
     expect(mockUpdateTag).toHaveBeenCalledWith("listings");
   });
@@ -508,8 +557,10 @@ describe("reactivateSize", () => {
     expect(mockUpdateTag).not.toHaveBeenCalled();
   });
 
-  it("returns 'Size not found' when the size row does not match", async () => {
-    const supabase = makeSupabase({ data: [], error: null });
+  it("returns 'Size not found' when the RPC matched no row", async () => {
+    const supabase = makeSupabase(undefined, {
+      error: { message: "Size not found", code: "P0002" },
+    });
     mockGetAuthClient.mockResolvedValue({
       ok: true,
       supabase,
@@ -521,27 +572,9 @@ describe("reactivateSize", () => {
     expect(mockUpdateTag).not.toHaveBeenCalled();
   });
 
-  it("returns 'Listing not found' when the parent listing is missing or not owned", async () => {
-    const supabase = makeSupabase(undefined, undefined, undefined, {
-      data: null,
-      error: null,
-    });
-    mockGetAuthClient.mockResolvedValue({
-      ok: true,
-      supabase,
-      user: { id: "user-1" },
-    });
-
-    const result = await reactivateSize(LISTING_ID, SIZE_ID);
-    expect(result).toEqual({ error: "Listing not found" });
-    expect(supabase._sizesChain.update).not.toHaveBeenCalled();
-    expect(mockUpdateTag).not.toHaveBeenCalled();
-  });
-
-  it("refuses to reactivate a size while the parent listing is not active", async () => {
-    const supabase = makeSupabase(undefined, undefined, undefined, {
-      data: { status: "sold" },
-      error: null,
+  it("names the parent status when the RPC refused on a non-active listing", async () => {
+    const supabase = makeSupabase(undefined, {
+      error: { message: "Listing is not active", code: "55000" },
     });
     mockGetAuthClient.mockResolvedValue({
       ok: true,
@@ -553,7 +586,23 @@ describe("reactivateSize", () => {
     expect(result).toEqual({
       error: "Reactivate the listing before changing its sizes",
     });
-    expect(supabase._sizesChain.update).not.toHaveBeenCalled();
     expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("never leaks the raw database message for an unmapped error", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const supabase = makeSupabase(undefined, {
+      error: { message: "duplicate key value violates ...", code: "23505" },
+    });
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+
+    const result = await reactivateSize(LISTING_ID, SIZE_ID);
+    expect(result).toEqual({ error: "Something went wrong. Please try again." });
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
   });
 });

@@ -45,6 +45,12 @@ type ServerPayload = {
   items: WishlistItem[] | null;
 };
 
+/**
+ * What a toggle actually did, so a caller captures the real outcome rather than
+ * assuming: an add is rejected once the cap is hit.
+ */
+export type WishlistToggleOutcome = 'added' | 'removed' | 'rejected';
+
 type WishlistContextValue = {
   items: WishlistItem[];
   count: number;
@@ -55,8 +61,8 @@ type WishlistContextValue = {
     listingId: string,
     snapshot: WishlistSnapshot,
     status: WishlistItemStatus,
-  ) => void;
-  removeItem: (listingId: string) => void;
+  ) => WishlistToggleOutcome;
+  removeItem: (listingId: string) => boolean;
   syncFromServer: (payload: ServerPayload) => void;
   isOpen: boolean;
   open: () => void;
@@ -221,7 +227,6 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
   useEffect(() => {
     if (!isHydrated || !serverPayload) return;
     if (lastSyncedAuthRef.current === serverPayload.isAuthenticated) return;
-    lastSyncedAuthRef.current = serverPayload.isAuthenticated;
 
     setIsAuthenticated(serverPayload.isAuthenticated);
     authedRef.current = serverPayload.isAuthenticated;
@@ -235,9 +240,26 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
       serverItems: serverPayload.items,
     });
 
-    // Signed out (or server unavailable): keep the mirror exactly as-is. Never
-    // clear it, and never touch ownerId (edits made while signed out inherit it).
-    if (plan.type === 'keep-local') return;
+    if (plan.type === 'keep-local') {
+      if (!serverPayload.isAuthenticated) {
+        // Sign-out is a completed auth transition. Keep the mirror and its owner
+        // so signed-out edits still belong to the account they came from.
+        lastSyncedAuthRef.current = false;
+        return;
+      }
+
+      // The account is known but its wishlist read failed. Keep this auth state
+      // retryable, and let the first signed-in account claim only a guest cache.
+      lastSyncedAuthRef.current = null;
+      const userId = serverPayload.userId;
+      if (userId !== null && ownerIdRef.current === null) {
+        ownerIdRef.current = userId;
+        persist(itemsRef.current, userId);
+      }
+      return;
+    }
+
+    lastSyncedAuthRef.current = serverPayload.isAuthenticated;
 
     const userId = serverPayload.userId;
 
@@ -294,7 +316,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
       listingId: string,
       snapshot: WishlistSnapshot,
       status: WishlistItemStatus,
-    ): void => {
+    ): WishlistToggleOutcome => {
       const existing = itemsRef.current.find(
         (item) => item.listingId === listingId,
       );
@@ -307,7 +329,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
         if (authedRef.current) {
           mirrorWrite('Remove', () => removeFromWishlist(listingId), toastId);
         }
-        return;
+        return 'removed';
       }
 
       const result = addWishlistItem(itemsRef.current, {
@@ -321,7 +343,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
         // Add rejected (wishlist full) — surface the reason rather than the
         // silent no-op the local state now is.
         toast.error(result.error);
-        return;
+        return 'rejected';
       }
 
       setItems(sortWishlistItems(result.items));
@@ -329,12 +351,13 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
       if (authedRef.current) {
         mirrorWrite('Add', () => addToWishlist(listingId, snapshot), toastId);
       }
+      return 'added';
     },
     [mirrorWrite],
   );
 
   const removeItem = useCallback(
-    (listingId: string) => {
+    (listingId: string): boolean => {
       const removed = itemsRef.current.find(
         (item) => item.listingId === listingId,
       );
@@ -346,6 +369,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
           mirrorWrite('Remove', () => removeFromWishlist(listingId), toastId);
         }
       }
+      return removed !== undefined;
     },
     [mirrorWrite],
   );

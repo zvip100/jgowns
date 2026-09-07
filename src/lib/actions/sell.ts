@@ -1,58 +1,33 @@
 "use server";
 
-import { randomUUID } from "node:crypto";
 import { updateTag } from "next/cache";
 import { redirect } from "next/navigation";
-import { z } from "zod";
 
-import { sizeOptionIndex } from "@/lib/gown-sizes";
 import { isListingFeeActive } from "@/lib/listing-fee";
+import { listingPriceValue } from "@/lib/listing-variants";
 import {
+  listingFormActionError,
+  listingRowPayload,
+  rawListingFieldsFromFormData,
+  strOrUndefined,
+  variantRowsPayload,
+} from "@/lib/listing-form";
+import {
+  MAX_BLUR_DATA_URL_LENGTH,
   MAX_LISTING_IMAGES,
-  SIZE_GROUPS,
-  type Listing,
   type ServerActionErrorResult,
 } from "@/lib/types";
 import { imageSlotFormKeys } from "@/lib/utils";
-import { getAuthClient, type SupabaseServer } from "@/lib/actions/auth";
+import { SELLER_EVENTS } from "@/lib/analytics/events";
+import { captureServerError, captureServerEvent } from "@/lib/analytics/server";
+import { getAuthClient } from "@/lib/actions/auth";
 import { createListingCheckout } from "@/lib/actions/payments";
 import { deleteListingImages } from "@/lib/actions/images";
-import {
-  listingInputSchema,
-  type ParsedListing,
-} from "@/lib/validations/listing-schema";
+import { uploadListingImage } from "@/lib/images/storage";
+import { listingInputSchema } from "@/lib/validations/listing-schema";
 
 /** One-shot flag consumed by DashboardFlashToast, mirroring the edit flow. */
 const CHECKOUT_UNAVAILABLE_REDIRECT = "/dashboard?toast=checkout-unavailable";
-
-type VariantRow = {
-  size: string;
-  size_group: (typeof SIZE_GROUPS)[number];
-  price: number;
-  sort_order: number;
-};
-
-/**
- * Submitted sizes in canonical category order, with sort_order assigned.
- * Set-only variants mirror the one bundle price so the variant-level browse
- * price filter can treat the set as a single-priced item; every other mode
- * keeps its own per-size price.
- */
-function variantRowsPayload(parsed: ParsedListing): VariantRow[] {
-  const setPrice = parsed.sell_mode === "set_only" ? parsed.bundle_price : null;
-  return [...parsed.sizes]
-    .sort(
-      (a, b) =>
-        sizeOptionIndex(parsed.category, a.size_group, a.size) -
-        sizeOptionIndex(parsed.category, b.size_group, b.size),
-    )
-    .map((entry, i) => ({
-      size: entry.size,
-      size_group: entry.size_group,
-      price: setPrice ?? entry.price ?? 0,
-      sort_order: i,
-    }));
-}
 
 type ImageSlot = {
   file: File | null;
@@ -60,93 +35,11 @@ type ImageSlot = {
   blur: string;
 };
 
-function strOrUndefined(value: FormDataEntryValue | null): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-}
-
 function fileOrNull(value: FormDataEntryValue | null): File | null {
   if (!value) return null;
   if (typeof value === "string") return null;
   return value;
 }
-
-function zodListingFormErrorMessage(e: z.ZodError): string {
-  if (e.issues.some((issue) => issue.path[0] === "contact_phone")) {
-    return "Leave phone blank, or enter a valid phone number.";
-  }
-  if (
-    e.issues.some(
-      (issue) => issue.path[0] === "contact_email" && issue.code !== "custom",
-    )
-  ) {
-    return "Enter a valid email address, or clear the field.";
-  }
-  const custom = e.issues.find((issue) => issue.code === "custom");
-  if (custom?.message) return custom.message;
-  return "Please fill in all required fields.";
-}
-
-/** JSON-encoded form field; invalid JSON is passed through so zod rejects it. */
-function parseJsonFormValue(value: FormDataEntryValue | null): unknown {
-  if (typeof value !== "string") return undefined;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return value;
-  }
-}
-
-function rawListingFieldsFromFormData(formData: FormData) {
-  return {
-    title: formData.get("title"),
-    description: strOrUndefined(formData.get("description")),
-    color: strOrUndefined(formData.get("color")),
-    location: formData.get("location"),
-    condition: formData.get("condition"),
-    category: formData.get("category"),
-    sizes: parseJsonFormValue(formData.get("sizes")),
-    sell_mode: strOrUndefined(formData.get("sell_mode")),
-    bundle_price: strOrUndefined(formData.get("bundle_price")),
-    contact_email: strOrUndefined(formData.get("contact_email")),
-    contact_phone: strOrUndefined(formData.get("contact_phone")),
-    contact_methods: parseJsonFormValue(formData.get("contact_methods")),
-  };
-}
-
-function listingRowPayload(
-  parsed: ParsedListing,
-  image_urls: string[],
-  image_blur_data_urls: string[],
-  status: Listing["status"],
-) {
-  return {
-    title: parsed.title,
-    description: parsed.description ?? null,
-    color: parsed.color ?? null,
-    location: parsed.location,
-    condition: parsed.condition,
-    category: parsed.category,
-    sell_mode: parsed.sell_mode,
-    bundle_price: parsed.bundle_price ?? null,
-    image_urls,
-    image_blur_data_urls,
-    contact_email: parsed.contact_email ?? null,
-    contact_phone: parsed.contact_phone ?? null,
-    contact_methods: parsed.contact_methods,
-    status,
-  };
-}
-
-function catchSellActionError(e: unknown): { error: string } {
-  if (e instanceof z.ZodError) {
-    return { error: zodListingFormErrorMessage(e) };
-  }
-  return { error: e instanceof Error ? e.message : "Something went wrong." };
-}
-
-const MAX_BLUR_DATA_URL_LENGTH = 4096;
 
 /** Blur strings are client-generated tiny data URLs; reject anything else. */
 function sanitizeBlur(value: FormDataEntryValue | null): string {
@@ -180,38 +73,6 @@ function collectImageSlots(
   return slots;
 }
 
-const UPLOAD_EXT_BY_MIME: Record<string, string> = {
-  "image/jpeg": "jpg",
-  "image/png": "png",
-  "image/webp": "webp",
-  "image/gif": "gif",
-  "image/heic": "heic",
-  "image/heif": "heif",
-};
-
-async function uploadListingImage({
-  supabase,
-  file,
-}: {
-  supabase: SupabaseServer;
-  file: File;
-}): Promise<string> {
-  const ext = UPLOAD_EXT_BY_MIME[file.type] ?? "jpg";
-  const path = `${randomUUID()}-${Date.now()}.${ext}`;
-
-  const { error: uploadError } = await supabase.storage
-    .from("gown-images")
-    .upload(path, file);
-
-  if (uploadError) throw new Error(uploadError.message);
-
-  const { data: urlData } = supabase.storage
-    .from("gown-images")
-    .getPublicUrl(path);
-
-  return urlData.publicUrl;
-}
-
 export async function createListing(
   formData: FormData,
 ): Promise<ServerActionErrorResult> {
@@ -241,7 +102,9 @@ export async function createListing(
     );
 
     const uploadResults = await Promise.allSettled(
-      files.map((file) => uploadListingImage({ supabase, file })),
+      files.map((file) =>
+        uploadListingImage({ supabase, body: file, contentType: file.type }),
+      ),
     );
     for (const result of uploadResults) {
       if (result.status === "fulfilled") uploadedUrls.push(result.value);
@@ -291,9 +154,19 @@ export async function createListing(
     // nothing to invalidate yet in the fee-active branch (see §6.1 instead).
     if (!feeActive) updateTag("listings");
     shouldRedirect = true;
+
+    // Server-side because success ends in a redirect, to Stripe or the
+    // dashboard: nothing after this action runs in the seller's tab (spec §5.2).
+    await captureServerEvent(SELLER_EVENTS.listingSubmitted, {
+      category: parsed.category ?? null,
+      price: listingPriceValue(parsed),
+      sell_mode: parsed.sell_mode,
+      photo_count: uploadedUrls.length,
+    });
   } catch (e) {
     if (uploadedUrls.length > 0) await deleteListingImages(uploadedUrls);
-    return catchSellActionError(e);
+    await captureServerError({ scope: "sell.createListing" }, e);
+    return listingFormActionError(e);
   }
 
   // Runs after the try/catch on purpose: the listing + variants are already
@@ -364,7 +237,11 @@ export async function updateListing(
     const uploadResults = await Promise.allSettled(
       slots.map((slot) =>
         slot.file
-          ? uploadListingImage({ supabase, file: slot.file })
+          ? uploadListingImage({
+              supabase,
+              body: slot.file,
+              contentType: slot.file.type,
+            })
           : Promise.resolve(null),
       ),
     );
@@ -441,7 +318,8 @@ export async function updateListing(
   } catch (e) {
     if (newlyUploadedUrls.length > 0)
       await deleteListingImages(newlyUploadedUrls);
-    return catchSellActionError(e);
+    await captureServerError({ scope: "sell.updateListing" }, e);
+    return listingFormActionError(e);
   }
 
   if (shouldRedirect) {

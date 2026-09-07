@@ -2,10 +2,15 @@ import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 
 import {
+  listingContactProperties,
+  listingViewProperties,
+} from "@/lib/analytics/events";
+import {
   formatPrice,
   isListingSoldOut,
   listingBundleNote,
   listingPriceSummary,
+  listingPriceValue,
   sortListingSizes,
 } from "@/lib/listing-variants";
 import { GOWN_CATEGORIES } from "@/lib/types";
@@ -13,6 +18,7 @@ import { cn } from "@/lib/utils";
 
 import { ContactPanel } from "./ContactPanel";
 import { ImageViewer } from "./ImageViewer";
+import { ListingViewTracker } from "./ListingViewTracker";
 import { WishlistButton } from "./WishlistButton";
 
 import type { ListingWithSizes } from "@/lib/types";
@@ -45,6 +51,10 @@ export function ListingDetail({
 
   return (
     <div className='mx-auto max-w-5xl'>
+      <ListingViewTracker
+        properties={listingViewProperties(listing)}
+        isSold={sold}
+      />
       <Link
         href={backHref}
         prefetch={true}
@@ -57,6 +67,7 @@ export function ListingDetail({
       <div className='grid grid-cols-1 gap-8 md:grid-cols-2 md:gap-12'>
         <div className='md:sticky md:top-[calc(var(--navbar-h)+1.5rem)] md:self-start'>
           <ImageViewer
+            listingId={listing.id}
             imageUrls={listing.image_urls}
             blurDataUrls={listing.image_blur_data_urls}
             title={listing.title}
@@ -77,6 +88,8 @@ export function ListingDetail({
             <WishlistButton
               listingId={listing.id}
               title={listing.title}
+              category={listing.category}
+              price={listingPriceValue(listing)}
               priceLabel={listingPriceSummary(listing)}
               image={listing.image_urls[0] ?? null}
               blurDataUrl={listing.image_blur_data_urls[0] ?? null}
@@ -232,6 +245,7 @@ export function ListingDetail({
             contactEmail={listing.contact_email}
             contactPhone={listing.contact_phone}
             contactMethods={listing.contact_methods}
+            contactProperties={listingContactProperties(listing)}
             sold={sold}
           />
         </div>

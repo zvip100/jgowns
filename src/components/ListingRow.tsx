@@ -1,9 +1,12 @@
 import Image from 'next/image';
 import Link from 'next/link';
-import { Eye, Pencil } from 'lucide-react';
+import { Eye, Lock, Pencil } from 'lucide-react';
 
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { FormInfoBanner } from '@/components/form/FormInfoBanner';
+import { LISTING_STATUS_TONE, PILL_TONE_CLASS } from '@/lib/styles';
+import { sellerSuspensionMessage } from '@/lib/suspension';
 import CompletePaymentButton from '@/components/CompletePaymentButton';
 import MarkSizeSoldButton from '@/components/MarkSizeSoldButton';
 import MarkSoldButton from '@/components/MarkSoldButton';
@@ -14,18 +17,12 @@ import { sortListingSizes } from '@/lib/listing-variants';
 import { blurProps } from '@/lib/utils';
 import { GOWN_CATEGORIES, type Listing, type ListingWithSizes } from '@/lib/types';
 
-const statusStyles: Record<Listing['status'], string> = {
-  active: 'bg-[#e8f4ec] text-[#2d7a4f]',
-  sold: 'bg-(--sold) text-white',
-  removed: 'bg-[#fef4e0] text-[#8a6a30]',
-  pending_payment: 'bg-(--accent)/15 text-(--accent-deep)',
-};
-
 const statusLabels: Record<Listing['status'], string> = {
   active: 'active',
   sold: 'sold',
   removed: 'removed',
   pending_payment: 'Payment required',
+  suspended: 'Suspended',
 };
 
 type ListingRowProps = {
@@ -43,10 +40,12 @@ export default function ListingRow({
     listing.status === 'active' && !isSetOnly && sizes.length > 1;
   const category = GOWN_CATEGORIES.find((c) => c.id === listing.category)?.label;
   const isPendingPayment = listing.status === 'pending_payment';
+  const isSuspended = listing.status === 'suspended';
   const browseHref = `/browse/${listing.id}?from=dash`;
   const editHref = `/dashboard/edit/${listing.id}`;
-  // Pending listings 404 on the public detail page; send sellers to edit instead.
-  const primaryHref = isPendingPayment ? editHref : browseHref;
+  // Pending and suspended listings both 404 on the public detail page, so the
+  // thumbnail and title go to the edit page, which explains the state instead.
+  const primaryHref = isPendingPayment || isSuspended ? editHref : browseHref;
 
   return (
     <article className="surface-panel hairline group flex flex-col gap-3 rounded-2xl p-3 transition hover:-translate-y-0.5 hover:shadow-[0_22px_44px_rgba(99,72,40,0.14)] sm:p-4 lg:flex-row lg:items-center lg:gap-5">
@@ -79,7 +78,10 @@ export default function ListingRow({
                 {listing.title}
               </Link>
             </h3>
-            <Badge variant="secondary" className={statusStyles[listing.status]}>
+            <Badge
+              variant="secondary"
+              className={PILL_TONE_CLASS[LISTING_STATUS_TONE[listing.status]]}
+            >
               {statusLabels[listing.status]}
             </Badge>
           </div>
@@ -125,11 +127,21 @@ export default function ListingRow({
               </span>
             </p>
           )}
+          {isSuspended && (
+            <FormInfoBanner icon={Lock} className="mt-2 items-start">
+              <span className="font-semibold">Suspended by moderation.</span>{' '}
+              {sellerSuspensionMessage(
+                listing.suspension_slug,
+                listing.suspension_reason,
+              )}
+            </FormInfoBanner>
+          )}
         </div>
       </div>
 
       <div className="flex shrink-0 items-center justify-end gap-1 border-t border-(--line) pt-2 lg:border-t-0 lg:pt-0">
-        {!isPendingPayment && (
+        {/* A suspended listing 404s on the public page, like a pending one. */}
+        {!isPendingPayment && !isSuspended && (
           <Button asChild variant="ghost" size="sm">
             <Link href={browseHref} aria-label="View listing">
               <Eye data-icon="inline-start" />
@@ -161,7 +173,9 @@ export default function ListingRow({
           status={listing.status}
           hasMultipleSizes={sizes.length > 1}
         />
-        <RemoveListingButton id={listing.id} />
+        {/* `remove_listing` refuses a suspended row, so the control would only
+            ever fail. Mark sold and Reactivate gate themselves on status. */}
+        {!isSuspended && <RemoveListingButton id={listing.id} />}
       </div>
     </article>
   );

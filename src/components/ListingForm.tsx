@@ -2,8 +2,6 @@
 
 import { Mail, Phone } from 'lucide-react';
 import {
-  CONTACT_METHODS,
-  CONTACT_METHOD_LABELS,
   GOWN_CATEGORIES,
   GOWN_COLORS,
   GOWN_CONDITIONS,
@@ -13,7 +11,7 @@ import {
 } from '@/lib/types';
 import { ListingPhotoField } from '@/components/ListingPhotoField';
 import { ListingSizesField } from '@/components/ListingSizesField';
-import { FORM_LABEL_CLASS } from '@/components/form/constants';
+import { ContactMethodsField } from '@/components/form/ContactMethodsField';
 import { FormFieldGrid } from '@/components/form/FormFieldGrid';
 import { FormSection } from '@/components/form/FormSection';
 import { InputGroupField } from '@/components/form/InputGroupField';
@@ -25,11 +23,9 @@ import { TextInputField } from '@/components/form/TextInputField';
 import { TextareaField } from '@/components/form/TextareaField';
 import { useListingFormSubmit } from '@/hooks/useListingFormSubmit';
 import { useListingImageSlots } from '@/hooks/useListingImageSlots';
-import { CHECKBOX_GOLD_CLASS, PRIMARY_CTA_CLASS } from '@/lib/styles';
+import { PRIMARY_CTA_CLASS } from '@/lib/styles';
 import { Button } from '@/components/ui/button';
-import { Checkbox } from '@/components/ui/checkbox';
 import { FieldError, FieldGroup } from '@/components/ui/field';
-import { Label } from '@/components/ui/label';
 
 type ListingFormProps = {
   initial?: Partial<ListingFormData>;
@@ -56,6 +52,7 @@ export default function ListingForm({
 
   const {
     form,
+    markDraftStarted,
     setField,
     setCategory,
     setContactPhone,
@@ -156,7 +153,10 @@ export default function ListingForm({
 
         <ListingPhotoField
           slots={slots}
-          onFileSelected={onFileSelected}
+          onFileSelected={(index, file) => {
+            markDraftStarted();
+            return onFileSelected(index, file);
+          }}
           onClear={onClear}
         />
 
@@ -190,28 +190,11 @@ export default function ListingForm({
                 onClear={() => setContactPhone('')}
                 leading={<Phone />}
               />
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
-                <span className={FORM_LABEL_CLASS}>Buyers can</span>
-                {CONTACT_METHODS.map((method) => (
-                  <div key={method} className="flex items-center gap-2">
-                    <Checkbox
-                      id={`contact-method-${method}`}
-                      checked={contactMethods.includes(method)}
-                      disabled={!hasPhone}
-                      className={CHECKBOX_GOLD_CLASS}
-                      onCheckedChange={(checked) =>
-                        toggleContactMethod(method, checked === true)
-                      }
-                    />
-                    <Label
-                      htmlFor={`contact-method-${method}`}
-                      className="font-normal"
-                    >
-                      {CONTACT_METHOD_LABELS[method]}
-                    </Label>
-                  </div>
-                ))}
-              </div>
+              <ContactMethodsField
+                value={contactMethods}
+                onToggle={toggleContactMethod}
+                disabled={!hasPhone}
+              />
             </div>
           </FormFieldGrid>
         </FormSection>

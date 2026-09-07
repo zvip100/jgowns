@@ -6,6 +6,7 @@ import {
   isListingSoldOut,
   listingBundleNote,
   listingPriceSummary,
+  listingPriceValue,
   listingSizeSummary,
   sortListingSizes,
 } from "@/lib/listing-variants";
@@ -51,6 +52,9 @@ function makeListing(
     contact_methods: [],
     status: "active",
     created_at: "2026-01-01T00:00:00Z",
+    suspension_slug: null,
+    suspension_reason: null,
+    previous_status: null,
     sizes,
     ...overrides,
   };
@@ -246,5 +250,90 @@ describe("isListingSoldOut", () => {
 
   it("is not sold out with no variants", () => {
     expect(isListingSoldOut(makeListing([]))).toBe(false);
+  });
+});
+
+describe("listingPriceValue", () => {
+  it("uses the bundle price for a set-only listing", () => {
+    const listing = makeListing(
+      [makeSize({ price: 400 }), makeSize({ price: 500 })],
+      { sell_mode: "set_only", bundle_price: 700 },
+    );
+    expect(listingPriceValue(listing)).toBe(700);
+  });
+
+  it("falls through to the lowest size when set_only has no bundle price", () => {
+    const listing = makeListing(
+      [makeSize({ price: 500 }), makeSize({ price: 400 })],
+      { sell_mode: "set_only", bundle_price: null },
+    );
+    expect(listingPriceValue(listing)).toBe(400);
+  });
+
+  it("uses the lowest available price, ignoring sold variants", () => {
+    const listing = makeListing([
+      makeSize({ price: 300, status: "sold" }),
+      makeSize({ price: 450 }),
+      makeSize({ price: 400 }),
+    ]);
+    expect(listingPriceValue(listing)).toBe(400);
+  });
+
+  it("falls back to every variant once none are available", () => {
+    const listing = makeListing([
+      makeSize({ price: 450, status: "sold" }),
+      makeSize({ price: 400, status: "sold" }),
+    ]);
+    expect(listingPriceValue(listing)).toBe(400);
+  });
+
+  it("is null when a listing has no variants", () => {
+    expect(listingPriceValue(makeListing([]))).toBeNull();
+  });
+
+  // Submitted form input: variants carry no status yet, and a set omits them.
+  it("reads submitted input whose variants have no status", () => {
+    expect(
+      listingPriceValue({
+        sell_mode: "individual",
+        sizes: [{ price: 500 }, { price: 400 }],
+      }),
+    ).toBe(400);
+  });
+
+  it("reads the bundle price off submitted set-only input with unpriced sizes", () => {
+    expect(
+      listingPriceValue({
+        sell_mode: "set_only",
+        bundle_price: 700,
+        sizes: [{}, {}],
+      }),
+    ).toBe(700);
+  });
+
+  it("is null when submitted sizes carry no price at all", () => {
+    expect(
+      listingPriceValue({ sell_mode: "individual", sizes: [{}, {}] }),
+    ).toBeNull();
+  });
+
+  // The captured number must be the one the buyer saw, so the two helpers can
+  // never disagree about what a listing costs.
+  it("agrees with the label listingPriceSummary renders", () => {
+    const setOnly = makeListing(
+      [makeSize({ price: 400 }), makeSize({ price: 500 })],
+      { sell_mode: "set_only", bundle_price: 700 },
+    );
+    const mixed = makeListing([
+      makeSize({ price: 500 }),
+      makeSize({ price: 400 }),
+    ]);
+
+    expect(listingPriceSummary(setOnly)).toContain(
+      formatPrice(listingPriceValue(setOnly) as number),
+    );
+    expect(listingPriceSummary(mixed)).toContain(
+      formatPrice(listingPriceValue(mixed) as number),
+    );
   });
 });

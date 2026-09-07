@@ -1,5 +1,6 @@
 "use server";
 
+import { captureServerError } from "@/lib/analytics/server";
 import { createClient } from "@/lib/supabase/server";
 import { contactSchema } from "@/lib/validations/contact-schema";
 
@@ -18,7 +19,12 @@ async function sendContactNotification(
 ): Promise<void> {
   const endpoint = process.env.FORMSPREE_CONTACT_ENDPOINT;
   if (!endpoint) {
-    console.error("FORMSPREE_CONTACT_ENDPOINT is not set; skipping email.");
+    // A distinct kind, so this groups as a config alarm rather than an
+    // exception: nothing else notices it, and the action still reports success.
+    await captureServerError(
+      { scope: "contact.notify.config", kind: "config" },
+      new Error("FORMSPREE_CONTACT_ENDPOINT is not set; skipping email."),
+    );
     return;
   }
 
@@ -36,7 +42,7 @@ async function sendContactNotification(
       console.error("Formspree notification failed with status:", response.status);
     }
   } catch (error) {
-    console.error("Formspree notification error:", error);
+    await captureServerError({ scope: "contact.notify" }, error);
   } finally {
     clearTimeout(timeoutId);
   }
@@ -81,7 +87,7 @@ export async function submitContactMessage(
   });
 
   if (error) {
-    console.error("Failed to store contact message:", error);
+    await captureServerError({ scope: "contact.store" }, error);
     return {
       success: false,
       error: "We couldn't send your message. Please try again in a moment.",

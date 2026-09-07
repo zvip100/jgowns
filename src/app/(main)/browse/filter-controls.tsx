@@ -6,7 +6,11 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { FILTER_COUNT_BADGE_CLASS } from "@/lib/styles";
+import {
+  FILTER_COUNT_BADGE_CLASS,
+  FILTER_PILL_CHECK_CLASS,
+  FILTER_PILL_CLASS,
+} from "@/lib/styles";
 
 import type { ReactNode } from "react";
 import type { SizeOption } from "@/lib/gown-sizes";
@@ -29,19 +33,6 @@ const idleBadgeClass =
 
 const triggerRowClass =
   "flex flex-1 items-center justify-between gap-3 pr-2 min-w-0";
-
-/* A pill must never change width when toggled, or a wrapped row reflows.
-   Two reservations keep it fixed: idle padding holds the check's footprint
-   (0.78em icon + 0.34em gap) symmetrically and trades it back when the check
-   appears, and the label stacks an invisible semibold twin so the box always
-   measures its bold width. Both transitions share duration-200 so the width
-   also holds steady mid-animation; font-weight is left untransitioned on
-   purpose so it snaps instead of drifting the metrics. */
-const pillClass =
-  "group inline-flex min-w-[2.4rem] items-center justify-center rounded-full border border-[#e0cfb6] bg-white/45 px-[calc(0.75rem+0.56em)] py-1.5 text-[0.72rem] font-medium text-[#6a5544] outline-none transition-[background-color,border-color,color,padding] duration-200 hover:bg-white/80 hover:text-[#3f3023] focus-visible:ring-2 focus-visible:ring-(--focus-ring) data-[active=true]:border-[#cbab84] data-[active=true]:bg-[rgba(179,133,76,0.14)] data-[active=true]:px-3 data-[active=true]:font-semibold data-[active=true]:text-[#875f2f]";
-
-const pillCheckClass =
-  "h-[0.78em] w-0 shrink-0 overflow-hidden opacity-0 transition-[width,opacity,margin] duration-200 group-data-[active=true]:mr-[0.34em] group-data-[active=true]:w-[0.78em] group-data-[active=true]:opacity-100";
 
 const pillRowClass = "flex flex-wrap gap-1.5";
 
@@ -73,9 +64,9 @@ export function FilterPill({ active, onClick, children }: FilterPillProps) {
       onClick={onClick}
       data-active={active}
       aria-pressed={active}
-      className={pillClass}
+      className={FILTER_PILL_CLASS}
     >
-      <Check className={pillCheckClass} strokeWidth={3} aria-hidden="true" />
+      <Check className={FILTER_PILL_CHECK_CLASS} strokeWidth={3} aria-hidden="true" />
       <span className="grid">
         <span className="col-start-1 row-start-1">{children}</span>
         <span

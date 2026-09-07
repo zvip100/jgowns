@@ -7,6 +7,8 @@ import { Heart, X } from 'lucide-react';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { captureEvent } from '@/lib/analytics/client';
+import { BUYER_EVENTS } from '@/lib/analytics/events';
 import { LEGAL_LINK_CLASS } from '@/lib/styles';
 import {
   Empty,
@@ -115,6 +117,17 @@ export function WishlistSheet() {
     useWishlist();
   const [signInHref, setSignInHref] = useState('/login');
 
+  // The drawer holds a display snapshot, not the listing, so category and price
+  // are unknown here. `listing_id` still joins the event back to the gown.
+  function handleRemove(listingId: string) {
+    if (!removeItem(listingId)) return;
+    captureEvent(BUYER_EVENTS.wishlistRemoved, {
+      listing_id: listingId,
+      category: null,
+      price: null,
+    });
+  }
+
   // Build the sign-in link from window (not useSearchParams) so this layout-root
   // client component never forces the (main) tree into client-side rendering.
   // Folds `wishlist=open` into `next` so the drawer auto-reopens after login.
@@ -187,7 +200,7 @@ export function WishlistSheet() {
                 <WishlistRow
                   key={item.listingId}
                   item={item}
-                  onRemove={removeItem}
+                  onRemove={handleRemove}
                   onNavigate={close}
                 />
               ))}
