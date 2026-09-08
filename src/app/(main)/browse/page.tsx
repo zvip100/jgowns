@@ -29,7 +29,6 @@ export default async function BrowsePage({
   searchParams,
 }: BrowsePageProps) {
   const { minBound, maxBound } = await fetchPriceBounds();
-  const resolvedSearchParams = await searchParams;
 
   return (
     <div className='-mt-4 lg:-mt-10'>
@@ -37,16 +36,14 @@ export default async function BrowsePage({
         minBound={minBound}
         maxBound={maxBound}
         categoryNavMobile={
-          <BrowseCategoryNav
-            variant='mobile'
-            searchParams={resolvedSearchParams}
-          />
+          <Suspense fallback={null}>
+            <BrowseCategoryNav variant='mobile' searchParams={searchParams} />
+          </Suspense>
         }
         categoryNavDesktop={
-          <BrowseCategoryNav
-            variant='desktop'
-            searchParams={resolvedSearchParams}
-          />
+          <Suspense fallback={null}>
+            <BrowseCategoryNav variant='desktop' searchParams={searchParams} />
+          </Suspense>
         }
         listings={
           <Suspense fallback={<ListingsSkeleton />}>

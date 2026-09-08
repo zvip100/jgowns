@@ -140,7 +140,7 @@ All imports appear at the top of the file. No code, declarations, or exports bet
 
 ## 8. Next.js Version & Skills
 
-This project runs the **latest Next.js**. Do not rely on training data for Next.js APIs, conventions, or behavior; it may be outdated. Before writing any Next.js code: check `node_modules/next/dist/docs/` for the current API and conventions, use the `next-best-practices` skill (Vercel), always load all available skills relevant to the task, and heed any deprecation notices found in those sources.
+This project runs the **latest Next.js** (16.3.4). Do not rely on training data for Next.js APIs, conventions, or behavior; it may be outdated. Before writing any Next.js code: check `node_modules/next/dist/docs/` for the current API and conventions, use the `next-best-practices` skill (Vercel), always load all available skills relevant to the task, and heed any deprecation notices found in those sources.
 
 ## 9. Code Quality
 

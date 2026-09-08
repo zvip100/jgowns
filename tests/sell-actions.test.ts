@@ -146,7 +146,9 @@ type UpdateCapture = {
 function makeUpdateSupabase(
   existingImageUrls: string[],
   updateCapture: UpdateCapture,
-  updateResult: { error: null | { message: string } } = { error: null },
+  updateResult: { error: null | { message: string; code?: string } } = {
+    error: null,
+  },
   existingStatus: string = "active",
 ) {
   const maybeSingle = vi.fn().mockResolvedValue({
@@ -229,7 +231,6 @@ describe("createListing", () => {
     expect(Array.isArray(payload.image_urls)).toBe(true);
     expect((payload.image_urls as string[]).length).toBe(1);
     expect((payload.image_blur_data_urls as string[])[0]).toBe("data:image/jpeg;base64,abc");
-    expect(mockUpdateTag).toHaveBeenCalledWith("listings");
   });
 
   it("inserts with image_urls length 3 when 3 image slots provided", async () => {
@@ -321,7 +322,9 @@ describe("createListing", () => {
     expect(mockUpdateTag).not.toHaveBeenCalled();
   });
 
-  it("calls updateTag('listings') after a successful insert", async () => {
+  // The row lands unpaid and invisible to browse, so there is nothing to
+  // invalidate here; createListingCheckout invalidates when it activates.
+  it("invalidates nothing of its own after a successful insert", async () => {
     const capture = { payload: {} as unknown };
     mockGetAuthClient.mockResolvedValue({
       ok: true,
@@ -335,7 +338,8 @@ describe("createListing", () => {
 
     try { await createListing(fd); } catch { /* redirect */ }
 
-    expect(mockUpdateTag).toHaveBeenCalledWith("listings");
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+    expect(mockCreateListingCheckout).toHaveBeenCalledWith(CREATED_LISTING_ID);
   });
 
   it("cleans up the first uploaded URL when the second upload throws", async () => {
@@ -620,7 +624,6 @@ describe("createListing", () => {
     const payload = capture.payload as Record<string, unknown>;
     expect(payload.contact_email).toBeNull();
     expect(payload.contact_phone).toBe("5551234567");
-    expect(mockUpdateTag).toHaveBeenCalledWith("listings");
   });
 
   it("rejects when neither an email nor a phone is provided", async () => {
@@ -707,7 +710,11 @@ describe("createListing", () => {
     expect(mockUpdateTag).not.toHaveBeenCalled();
   });
 
-  it("free mode (fee inactive): inserts status 'active', calls updateTag, and never touches checkout", async () => {
+  // The fee bypass this closes: the seller's own client used to write 'active'
+  // directly whenever the fee was off, and the RLS insert policy took any
+  // status at all, so one hand-made request published for free. Publication is
+  // now the checkout action's decision in BOTH modes.
+  it("free mode (fee inactive): still inserts 'pending_payment' and delegates the publish", async () => {
     const capture = { payload: {} as unknown };
     mockGetAuthClient.mockResolvedValue({
       ok: true,
@@ -723,10 +730,9 @@ describe("createListing", () => {
     try { await createListing(fd); } catch { /* redirect */ }
 
     const payload = capture.payload as Record<string, unknown>;
-    expect(payload.status).toBe("active");
-    expect(mockUpdateTag).toHaveBeenCalledWith("listings");
-    expect(mockCreateListingCheckout).not.toHaveBeenCalled();
-    expect(mockRedirect).toHaveBeenCalledWith("/dashboard");
+    expect(payload.status).toBe("pending_payment");
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+    expect(mockCreateListingCheckout).toHaveBeenCalledWith(CREATED_LISTING_ID);
   });
 
   it("fee active: inserts status 'pending_payment', skips updateTag, and delegates to createListingCheckout", async () => {
@@ -871,6 +877,77 @@ describe("updateListing", () => {
 
     expect(result).toHaveProperty("error");
     expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  // Mirrors the admin photo path's asymmetry. A structured rejection proves the
+  // transaction rolled back, so the replacement is the orphan; a bare transport
+  // failure may be hiding an edit that committed, and deleting there strands
+  // the listing on a photo that no longer exists.
+  it("drops the replacement when the RPC rejects with a Postgres code", async () => {
+    const capture = { payload: {} as unknown };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeUpdateSupabase([OLD_URL_0], capture, {
+        error: { message: "not authorized", code: "42501" },
+      }),
+    });
+
+    const fd = baseFormData();
+    fd.set("image_file_0", makeFile("a.webp"));
+    fd.set("blur_0", makeBlur("blur0"));
+
+    const result = await updateListing(LISTING_ID, fd);
+
+    expect(result).toEqual({ error: "not authorized" });
+    expect(mockDeleteListingImages).toHaveBeenCalledWith([
+      makeSupabaseUrl("new-1.webp"),
+    ]);
+  });
+
+  it("keeps the replacement when the RPC fails with no code to prove a rollback", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const capture = { payload: {} as unknown };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeUpdateSupabase([OLD_URL_0], capture, {
+        error: { message: "fetch failed", code: "" },
+      }),
+    });
+
+    const fd = baseFormData();
+    fd.set("image_file_0", makeFile("a.webp"));
+    fd.set("blur_0", makeBlur("blur0"));
+
+    const result = await updateListing(LISTING_ID, fd);
+
+    expect(result).toEqual({ error: "fetch failed" });
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  // Everything after the RPC runs against a committed row, so a failure there
+  // must not roll the replacement back out from under it.
+  it("keeps the replacement when post-commit cleanup throws", async () => {
+    const capture = { payload: {} as unknown };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeUpdateSupabase([OLD_URL_0], capture),
+    });
+    mockDeleteListingImages.mockRejectedValueOnce(new Error("storage down"));
+
+    const fd = baseFormData();
+    fd.set("image_file_0", makeFile("a.webp"));
+    fd.set("blur_0", makeBlur("blur0"));
+
+    const result = await updateListing(LISTING_ID, fd);
+
+    expect(result).toHaveProperty("error");
+    // Once, for the orphaned OLD_URL_0 — never a second time for the new upload.
+    expect(mockDeleteListingImages).toHaveBeenCalledExactlyOnceWith([OLD_URL_0]);
   });
 
   it("cleans up the first new upload when a second upload throws mid-loop", async () => {

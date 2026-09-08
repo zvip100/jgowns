@@ -25,7 +25,10 @@ create table listings (
   contact_email text,
   contact_phone text,
   contact_methods text[] not null default '{}',
-  status text default 'active' check (status in ('active', 'sold', 'removed', 'pending_payment', 'suspended')),
+  -- Unpaid by default (migration 039). A listing nobody has confirmed a fee for
+  -- must not be live, so an omitted status lands on the safe side; the seller
+  -- INSERT policy below refuses a status they state outright.
+  status text default 'pending_payment' check (status in ('active', 'sold', 'removed', 'pending_payment', 'suspended')),
   created_at timestamp with time zone default now(),
   -- Lifecycle timestamps behind the admin metrics. sold_at is stamped and
   -- cleared by the status RPCs below; suspended_at is written by
@@ -251,7 +254,18 @@ alter table listings enable row level security;
 
 create policy "Public can view active listings" on listings for select using (status in ('active', 'sold'));
 create policy "Sellers can view own listings" on listings for select using (auth.uid() = user_id);
-create policy "Sellers can insert listings" on listings for insert with check (auth.uid() = user_id);
+-- Sellers create UNPAID listings only (migration 039). Migration 025 closed the
+-- same fee bypass through the UPDATE door, but its guard is a BEFORE UPDATE
+-- trigger and never sees an insert, so a seller could publish for free by
+-- posting status 'active' directly. Publication stays a server decision:
+-- createListingCheckout owns both doors out of pending_payment, Stripe's
+-- confirmed payment or the service-role free publish when the fee is off.
+create policy "Sellers can insert listings" on listings
+  for insert to authenticated
+  with check (
+    (select auth.uid()) = user_id
+    and status = 'pending_payment'
+  );
 create policy "Sellers can update own listings" on listings for update using (auth.uid() = user_id);
 create policy "Sellers can delete own listings" on listings for delete using (auth.uid() = user_id);
 -- Admin reads are purely additive to the seller/public policies above, and are

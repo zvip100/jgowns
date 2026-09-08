@@ -92,6 +92,10 @@ describe("POST /api/stripe/webhook", () => {
     const response = await POST(webhookRequest("{}", "sig_ok"));
 
     expect(mockConfirmListingPayment).not.toHaveBeenCalled();
+    // Nor retired: the payment may still be settling, and async_payment_failed
+    // is what says otherwise. createListingCheckout and removeListing now read
+    // the same state the same way, so this half of the contract is pinned.
+    expect(mockUpdate).not.toHaveBeenCalled();
     expect(response.status).toBe(200);
   });
 

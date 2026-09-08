@@ -6,6 +6,7 @@ const {
   mockRevalidateTag,
   mockRetrieveSession,
   mockExpireSession,
+  mockRetrieveIntent,
   mockServiceFrom,
 } = vi.hoisted(() => ({
   mockGetAuthClient: vi.fn(),
@@ -13,6 +14,7 @@ const {
   mockRevalidateTag: vi.fn(),
   mockRetrieveSession: vi.fn(),
   mockExpireSession: vi.fn(),
+  mockRetrieveIntent: vi.fn(),
   mockServiceFrom: vi.fn(),
 }));
 
@@ -29,6 +31,7 @@ vi.mock("@/lib/stripe/client", () => ({
         expire: mockExpireSession,
       },
     },
+    paymentIntents: { retrieve: mockRetrieveIntent },
   }),
 }));
 vi.mock("@/lib/supabase/service", () => ({
@@ -301,6 +304,66 @@ describe("removeListing", () => {
     expect(mockExpireSession).not.toHaveBeenCalled();
     expect(supabase._listingsChain.update).not.toHaveBeenCalled();
     expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  // complete + unpaid is not a failed payment on its own: a delayed method sits
+  // there while it settles. Removing then takes the listing down while the fee
+  // can still land, and activation only flips pending_payment to active.
+  it("refuses to remove while an asynchronous payment is still settling", async () => {
+    const supabase = makeSupabase(undefined, undefined, undefined, {
+      data: [{ stripe_session_id: SESSION_ID }],
+      error: null,
+    });
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+    mockRetrieveSession.mockResolvedValue({
+      payment_status: "unpaid",
+      status: "complete",
+      payment_intent: "pi_settling",
+    });
+    mockRetrieveIntent.mockResolvedValue({ status: "processing" });
+
+    const result = await removeListing(LISTING_ID);
+
+    expect(result).toEqual({
+      error: "Payment is completing. Refresh and try again.",
+    });
+    expect(mockRetrieveIntent).toHaveBeenCalledWith("pi_settling");
+    expect(mockExpireSession).not.toHaveBeenCalled();
+    expect(supabase._rpc).not.toHaveBeenCalled();
+    expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  // The other half: a genuinely declined payment must still let the removal
+  // through, or a seller whose card failed can never take the listing down.
+  it("removes when the intent shows the payment terminally failed", async () => {
+    const supabase = makeSupabase(undefined, undefined, undefined, {
+      data: [{ stripe_session_id: SESSION_ID }],
+      error: null,
+    });
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+    mockRetrieveSession.mockResolvedValue({
+      payment_status: "unpaid",
+      status: "complete",
+      payment_intent: "pi_declined",
+    });
+    mockRetrieveIntent.mockResolvedValue({ status: "requires_payment_method" });
+    mockServiceExpireUpdate();
+
+    const result = await removeListing(LISTING_ID);
+
+    expect(result).toEqual({});
+    expect(mockExpireSession).not.toHaveBeenCalled();
+    expect(supabase._rpc).toHaveBeenCalledWith("remove_listing", {
+      p_listing_id: LISTING_ID,
+    });
   });
 
   it("returns an error and skips soft-remove when Stripe expire fails", async () => {

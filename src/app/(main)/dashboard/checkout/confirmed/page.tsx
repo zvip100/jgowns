@@ -39,7 +39,7 @@ export default async function CheckoutConfirmedPage({
       <NoticePanel
         icon={Clock}
         title='Confirming your payment'
-        description="This may take a moment. Check your dashboard shortly."
+        description='Your listing goes live as soon as the payment clears. Check your dashboard for the latest status.'
         href='/dashboard'
         linkLabel='Back to dashboard'
       />

@@ -2,17 +2,10 @@
 
 import { revalidateTag, updateTag } from "next/cache";
 
-import { captureServerError } from "@/lib/analytics/server";
 import { getAuthClient } from "@/lib/actions/auth";
-import { getStripe } from "@/lib/stripe/client";
-import { createServiceClient } from "@/lib/supabase/service";
+import { retireOpenListingCheckout } from "@/lib/stripe/checkout";
 
 import type { ServerActionErrorResult } from "@/lib/types";
-import type Stripe from "stripe";
-
-const CHECKOUT_CANCEL_ERROR: ServerActionErrorResult = {
-  error: "Couldn't cancel the open payment. Please try again.",
-};
 
 const GENERIC_RPC_ERROR = "Something went wrong. Please try again.";
 
@@ -74,58 +67,8 @@ export async function removeListing(
   if (!auth.ok) return { error: auth.error };
   const { supabase } = auth;
 
-  const { data: pendingPayments, error: pendingError } = await supabase
-    .from("listing_payments")
-    .select("stripe_session_id")
-    .eq("listing_id", id)
-    .eq("status", "pending");
-
-  if (pendingError) return { error: pendingError.message };
-
-  if (pendingPayments?.length) {
-    const stripe = getStripe();
-    const service = createServiceClient();
-
-    for (const row of pendingPayments) {
-      let session: Stripe.Checkout.Session;
-      try {
-        session = await stripe.checkout.sessions.retrieve(row.stripe_session_id);
-      } catch (e) {
-        await captureServerError(
-          { scope: "listings.removeListing.retrieveSession" },
-          e,
-        );
-        return CHECKOUT_CANCEL_ERROR;
-      }
-
-      // Paid but not yet activated: don't expire or soft-remove; let confirm/webhook finish.
-      if (session.payment_status === "paid") {
-        return {
-          error: "Payment is completing. Refresh and try again.",
-        };
-      }
-
-      if (session.status === "open") {
-        try {
-          await stripe.checkout.sessions.expire(row.stripe_session_id);
-        } catch (e) {
-          await captureServerError(
-            { scope: "listings.removeListing.expireSession" },
-            e,
-          );
-          return CHECKOUT_CANCEL_ERROR;
-        }
-      }
-
-      const { error: expireError } = await service
-        .from("listing_payments")
-        .update({ status: "expired" })
-        .eq("stripe_session_id", row.stripe_session_id)
-        .eq("status", "pending");
-
-      if (expireError) return { error: expireError.message };
-    }
-  }
+  const retired = await retireOpenListingCheckout(supabase, id);
+  if ("error" in retired) return { error: retired.error };
 
   const { error } = await supabase.rpc("remove_listing", {
     p_listing_id: id,

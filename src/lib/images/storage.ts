@@ -93,13 +93,13 @@ export async function downloadListingImage(
  * Of `imageUrls`, the ones no listing shows any more. `listings.image_urls` is
  * written verbatim by `update_listing_with_variants`, which validates the
  * array's contents nowhere, so a seller can point their own row at another
- * listing's photo. Both privileged sweeps delete with authority that reaches
- * the whole bucket (an admin's storage policy, or the service role), so each
- * re-checks what it collected once the rows are gone and removes only what
- * nothing points at.
+ * listing's photo. Every privileged delete path (the two sweeps and admin photo
+ * moderation) removes with authority that reaches the whole bucket (an admin's
+ * storage policy, or the service role), so each re-checks what it collected
+ * once its own rows are gone and removes only what nothing points at.
  */
 export async function unreferencedListingImageUrls(
-  service: ReturnType<typeof createServiceClient>,
+  service: ReturnType<typeof createServiceClient> | SupabaseServer,
   imageUrls: string[],
 ): Promise<string[]> {
   if (imageUrls.length === 0) return [];
@@ -125,15 +125,56 @@ export async function unreferencedListingImageUrls(
   return imageUrls.filter((url) => !stillReferenced.has(url));
 }
 
-export function listingImagePathFromUrl(url: string): string | null {
+/** Read per call, not at module load: vitest sets the env after import. */
+function listingImageOrigin(): string | null {
+  const configured = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  if (!configured) return null;
   try {
-    const u = new URL(url);
-    const marker = `/storage/v1/object/public/${LISTING_IMAGE_BUCKET}/`;
-    const idx = u.pathname.indexOf(marker);
-    if (idx === -1) return null;
-    const tail = u.pathname.slice(idx + marker.length);
-    return tail ? decodeURIComponent(tail) : null;
+    return new URL(configured).origin;
   } catch {
     return null;
   }
+}
+
+/**
+ * The bucket path of a canonical public URL, or null for anything else.
+ *
+ * Strict on purpose. The reference check above compares whole URL strings while
+ * both privileged sweeps delete by the path this returns, so any alias
+ * resolving to the same object (a foreign origin, a query string, a re-escaped
+ * segment) would pass that check as a different photo and then delete a live
+ * listing's file. Accepting only the exact form `getPublicUrl` produces keeps
+ * the two views of an object in agreement.
+ */
+export function listingImagePathFromUrl(url: string): string | null {
+  const projectOrigin = listingImageOrigin();
+  if (!projectOrigin) return null;
+
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+
+  if (parsed.origin !== projectOrigin || parsed.search || parsed.hash) {
+    return null;
+  }
+
+  const marker = `/storage/v1/object/public/${LISTING_IMAGE_BUCKET}/`;
+  if (!parsed.pathname.startsWith(marker)) return null;
+
+  const tail = parsed.pathname.slice(marker.length);
+  if (!tail) return null;
+
+  let path: string;
+  try {
+    path = decodeURIComponent(tail);
+  } catch {
+    return null;
+  }
+
+  return path.split("/").map(encodeURIComponent).join("/") === tail
+    ? path
+    : null;
 }

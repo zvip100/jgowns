@@ -11,12 +11,14 @@ const {
   mockCheckoutSessionsCreate,
   mockCheckoutSessionsRetrieve,
   mockCheckoutSessionsExpire,
+  mockPaymentIntentsRetrieve,
   mockRpc,
   mockCaptureServerEvent,
   mockServiceUpdate,
   mockServiceSessionEq,
   mockServiceStatusEq,
   mockServiceListingsUpdate,
+  mockServicePaymentSelect,
 } = vi.hoisted(() => {
   const mockUpdateTag = vi.fn();
   const mockRevalidateTag = vi.fn();
@@ -30,6 +32,9 @@ const {
   const mockCheckoutSessionsCreate = vi.fn();
   const mockCheckoutSessionsRetrieve = vi.fn();
   const mockCheckoutSessionsExpire = vi.fn();
+  // isCheckoutSettling runs for real here (only the Stripe client is mocked),
+  // so a complete/unpaid prior session reaches this.
+  const mockPaymentIntentsRetrieve = vi.fn();
   const mockRpc = vi.fn();
   const mockCaptureServerEvent = vi.fn();
   const mockServiceUpdate = vi.fn();
@@ -39,9 +44,13 @@ const {
   // listings_guard_status trigger refuses a seller-driven pending_payment ->
   // active, which is the fee bypass.
   const mockServiceListingsUpdate = vi.fn();
+  // The payment row confirmListingPayment checks a paid session against before
+  // handing the session id to the activation RPC.
+  const mockServicePaymentSelect = vi.fn();
 
   return {
     mockServiceListingsUpdate,
+    mockServicePaymentSelect,
     mockUpdateTag,
     mockRevalidateTag,
     mockRedirect,
@@ -52,6 +61,7 @@ const {
     mockCheckoutSessionsCreate,
     mockCheckoutSessionsRetrieve,
     mockCheckoutSessionsExpire,
+    mockPaymentIntentsRetrieve,
     mockRpc,
     mockCaptureServerEvent,
     mockServiceUpdate,
@@ -84,6 +94,7 @@ vi.mock("@/lib/stripe/client", () => ({
         expire: mockCheckoutSessionsExpire,
       },
     },
+    paymentIntents: { retrieve: mockPaymentIntentsRetrieve },
   }),
 }));
 vi.mock("@/lib/supabase/service", () => ({
@@ -92,7 +103,7 @@ vi.mock("@/lib/supabase/service", () => ({
     from: vi.fn((table: string) =>
       table === "listings"
         ? { update: mockServiceListingsUpdate }
-        : { update: mockServiceUpdate },
+        : { update: mockServiceUpdate, select: mockServicePaymentSelect },
     ),
   }),
 }));
@@ -106,6 +117,42 @@ const USER_ID = "user-123";
 const CHECKOUT_UNAVAILABLE_ERROR = {
   error: "Your listing is saved. Please retry payment.",
 };
+
+const FEE_CENTS = 500;
+
+/** A session Stripe reports as settled, and the row it must agree with. */
+const PAID_SESSION = {
+  payment_status: "paid",
+  amount_total: FEE_CENTS,
+  currency: "usd",
+  metadata: { listing_id: LISTING_ID, user_id: USER_ID },
+};
+
+const PAYMENT_ROW = {
+  listing_id: LISTING_ID,
+  user_id: USER_ID,
+  amount_cents: FEE_CENTS,
+  currency: "usd",
+};
+
+function makePaymentRowChain(result: { data: unknown; error: unknown }) {
+  const chain = {
+    eq: vi.fn(),
+    maybeSingle: vi.fn().mockResolvedValue(result),
+  };
+  chain.eq.mockReturnValue(chain);
+  return chain;
+}
+
+/** The mapping check passes by default; the tests that care override it. */
+function servicePaymentRow(result: { data: unknown; error: unknown }): void {
+  mockServicePaymentSelect.mockReturnValue(makePaymentRowChain(result));
+}
+
+beforeEach(() => {
+  mockServicePaymentSelect.mockReset();
+  servicePaymentRow({ data: PAYMENT_ROW, error: null });
+});
 
 function makeSelectChain(result: { data: unknown; error: unknown }) {
   const chain = {
@@ -202,6 +249,7 @@ describe("createListingCheckout", () => {
     });
     mockCheckoutSessionsExpire.mockReset();
     mockCheckoutSessionsExpire.mockResolvedValue({ id: "cs_prior", status: "expired" });
+    mockPaymentIntentsRetrieve.mockReset();
     mockServiceStatusEq.mockReset().mockResolvedValue({ error: null });
     mockServiceSessionEq.mockReset().mockReturnValue({ eq: mockServiceStatusEq });
     mockServiceUpdate.mockReset().mockReturnValue({ eq: mockServiceSessionEq });
@@ -374,9 +422,8 @@ describe("createListingCheckout", () => {
         });
         mockGetAuthClient.mockResolvedValue({ ok: true, user: { id: USER_ID }, supabase });
         mockCheckoutSessionsRetrieve.mockResolvedValue({
-          payment_status: "paid",
+          ...PAID_SESSION,
           status: "complete",
-          metadata: { listing_id: LISTING_ID, user_id: USER_ID },
         });
 
         await expect(createListingCheckout(LISTING_ID)).rejects.toThrow("NEXT_REDIRECT");
@@ -390,6 +437,153 @@ describe("createListingCheckout", () => {
         expect(mockCheckoutSessionsCreate).not.toHaveBeenCalled();
         expect(supabase._paymentInsert).not.toHaveBeenCalled();
         expect(mockServiceUpdate).not.toHaveBeenCalled();
+      });
+
+      // complete + unpaid is ambiguous on its own: an asynchronous payment sits
+      // there while it settles AND after it fails. Only the PaymentIntent tells
+      // the two apart, and reading it as failure is how a seller pays twice.
+      describe("complete-but-unpaid prior session", () => {
+        function priorComplete(paymentIntent: unknown = "pi_prior") {
+          const supabase = makeCheckoutSupabase({
+            priorPaymentResult: {
+              data: { stripe_session_id: "cs_prior" },
+              error: null,
+            },
+          });
+          mockGetAuthClient.mockResolvedValue({
+            ok: true,
+            user: { id: USER_ID },
+            supabase,
+          });
+          mockCheckoutSessionsRetrieve.mockResolvedValue({
+            payment_status: "unpaid",
+            status: "complete",
+            payment_intent: paymentIntent,
+          });
+          return supabase;
+        }
+
+        function expectHeldBack(supabase: { _paymentInsert: unknown }): void {
+          expect(mockRedirect).toHaveBeenCalledWith(
+            "/dashboard/checkout/confirmed?outcome=processing",
+          );
+          expect(mockCheckoutSessionsCreate).not.toHaveBeenCalled();
+          expect(mockCheckoutSessionsExpire).not.toHaveBeenCalled();
+          expect(supabase._paymentInsert).not.toHaveBeenCalled();
+          expect(mockServiceUpdate).not.toHaveBeenCalled();
+        }
+
+        it("holds back a payment the intent reports as processing", async () => {
+          const supabase = priorComplete();
+          mockPaymentIntentsRetrieve.mockResolvedValue({ status: "processing" });
+
+          await expect(createListingCheckout(LISTING_ID)).rejects.toThrow(
+            "NEXT_REDIRECT",
+          );
+
+          expect(mockPaymentIntentsRetrieve).toHaveBeenCalledWith("pi_prior");
+          expectHeldBack(supabase);
+        });
+
+        it("holds back a payment still awaiting a customer action", async () => {
+          const supabase = priorComplete();
+          mockPaymentIntentsRetrieve.mockResolvedValue({
+            status: "requires_action",
+          });
+
+          await expect(createListingCheckout(LISTING_ID)).rejects.toThrow(
+            "NEXT_REDIRECT",
+          );
+
+          expectHeldBack(supabase);
+        });
+
+        it("reads an expanded payment_intent object by its id", async () => {
+          priorComplete({ id: "pi_expanded", status: "processing" });
+          mockPaymentIntentsRetrieve.mockResolvedValue({ status: "processing" });
+
+          await expect(createListingCheckout(LISTING_ID)).rejects.toThrow(
+            "NEXT_REDIRECT",
+          );
+
+          expect(mockPaymentIntentsRetrieve).toHaveBeenCalledWith("pi_expanded");
+        });
+
+        // Fail closed: charging twice is worse than a wait the async_payment_failed
+        // and checkout.session.expired webhooks both clear on their own.
+        it("holds back when the intent cannot be read at all", async () => {
+          const supabase = priorComplete();
+          mockPaymentIntentsRetrieve.mockRejectedValue(new Error("stripe down"));
+          const consoleError = vi
+            .spyOn(console, "error")
+            .mockImplementation(() => {});
+
+          await expect(createListingCheckout(LISTING_ID)).rejects.toThrow(
+            "NEXT_REDIRECT",
+          );
+
+          expectHeldBack(supabase);
+          consoleError.mockRestore();
+        });
+
+        it("holds back when the session carries no intent", async () => {
+          const supabase = priorComplete(null);
+
+          await expect(createListingCheckout(LISTING_ID)).rejects.toThrow(
+            "NEXT_REDIRECT",
+          );
+
+          expect(mockPaymentIntentsRetrieve).not.toHaveBeenCalled();
+          expectHeldBack(supabase);
+        });
+
+        // The other half: a declined payment must still retire and mint fresh,
+        // or a seller whose card failed can never pay for the listing.
+        it("retires and mints fresh once the intent reports a terminal failure", async () => {
+          for (const status of ["requires_payment_method", "canceled"]) {
+            vi.clearAllMocks();
+            mockCheckoutSessionsCreate.mockResolvedValue({
+              id: "cs_test_123",
+              url: "https://checkout.stripe.com/pay/cs_test_123",
+            });
+            mockServiceStatusEq.mockResolvedValue({ error: null });
+            mockServiceSessionEq.mockReturnValue({ eq: mockServiceStatusEq });
+            mockServiceUpdate.mockReturnValue({ eq: mockServiceSessionEq });
+            mockRedirect.mockImplementation(() => {
+              throw new Error("NEXT_REDIRECT");
+            });
+            const supabase = priorComplete();
+            mockPaymentIntentsRetrieve.mockResolvedValue({ status });
+
+            await expect(createListingCheckout(LISTING_ID)).rejects.toThrow(
+              "NEXT_REDIRECT",
+            );
+
+            expect(mockServiceUpdate).toHaveBeenCalledWith({ status: "expired" });
+            expect(mockCheckoutSessionsCreate).toHaveBeenCalled();
+            expect(supabase._paymentInsert).toHaveBeenCalled();
+          }
+        });
+      });
+
+      // No extra Stripe call on the paths that already decide for themselves.
+      it("does not read the intent for an open or expired prior session", async () => {
+        const supabase = makeCheckoutSupabase({
+          priorPaymentResult: { data: { stripe_session_id: "cs_prior" }, error: null },
+        });
+        mockGetAuthClient.mockResolvedValue({ ok: true, user: { id: USER_ID }, supabase });
+        mockCheckoutSessionsRetrieve.mockResolvedValue({
+          payment_status: "unpaid",
+          status: "open",
+          url: "https://checkout.stripe.com/pay/cs_prior",
+        });
+
+        await expect(createListingCheckout(LISTING_ID)).rejects.toThrow("NEXT_REDIRECT");
+
+        expect(mockPaymentIntentsRetrieve).not.toHaveBeenCalled();
+        expect(mockRedirect).toHaveBeenCalledWith(
+          "https://checkout.stripe.com/pay/cs_prior",
+        );
       });
 
       it("sends the seller to the processing page when the prior session's state can't be verified", async () => {
@@ -497,6 +691,21 @@ describe("createListingCheckout", () => {
         expect(mockCheckoutSessionsCreate).not.toHaveBeenCalled();
         consoleError.mockRestore();
       });
+
+      // A failed lookup is not an absence: reading it as one mints a second
+      // payable session beside the open one this guard exists to find.
+      it("fails closed when the prior-payment lookup itself errors", async () => {
+        const supabase = makeCheckoutSupabase({
+          priorPaymentResult: { data: null, error: { message: "db down" } },
+        });
+        mockGetAuthClient.mockResolvedValue({ ok: true, user: { id: USER_ID }, supabase });
+
+        const result = await createListingCheckout(LISTING_ID);
+
+        expect(result).toEqual(CHECKOUT_UNAVAILABLE_ERROR);
+        expect(mockCheckoutSessionsCreate).not.toHaveBeenCalled();
+        expect(supabase._paymentInsert).not.toHaveBeenCalled();
+      });
     });
   });
 });
@@ -535,9 +744,48 @@ describe("confirmListingPayment", () => {
 
     const result = await confirmListingPayment("cs_test_1");
 
-    expect(result).toEqual({ paid: false });
+    // Abandoned, not settling: no PaymentIntent lookup, and nothing that would
+    // let the caller show a "still coming" message.
+    expect(result).toEqual({ paid: false, processing: false });
+    expect(mockPaymentIntentsRetrieve).not.toHaveBeenCalled();
     expect(mockRpc).not.toHaveBeenCalled();
     expect(mockRevalidateTag).not.toHaveBeenCalled();
+  });
+
+  // The seller finished Checkout with a delayed method: they HAVE paid, the
+  // funds just have not settled. Without this the success route falls through
+  // to "we couldn't confirm your payment" for a payment that is on its way.
+  it("reports a settling payment as processing rather than a bare unpaid result", async () => {
+    mockCheckoutSessionsRetrieve.mockResolvedValue({
+      payment_status: "unpaid",
+      status: "complete",
+      payment_intent: "pi_settling",
+      metadata: { listing_id: LISTING_ID, user_id: USER_ID },
+    });
+    mockPaymentIntentsRetrieve.mockResolvedValue({ status: "processing" });
+
+    const result = await confirmListingPayment("cs_test_1");
+
+    expect(result).toEqual({ paid: false, processing: true });
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockRevalidateTag).not.toHaveBeenCalled();
+  });
+
+  it("reports a terminally failed asynchronous payment as not processing", async () => {
+    mockCheckoutSessionsRetrieve.mockResolvedValue({
+      payment_status: "unpaid",
+      status: "complete",
+      payment_intent: "pi_declined",
+      metadata: { listing_id: LISTING_ID, user_id: USER_ID },
+    });
+    mockPaymentIntentsRetrieve.mockResolvedValue({
+      status: "requires_payment_method",
+    });
+
+    await expect(confirmListingPayment("cs_test_1")).resolves.toEqual({
+      paid: false,
+      processing: false,
+    });
   });
 
   it("does not activate a paid session missing listing/user metadata", async () => {
@@ -548,15 +796,13 @@ describe("confirmListingPayment", () => {
 
     const result = await confirmListingPayment("cs_test_1");
 
-    expect(result).toEqual({ paid: false });
+    // Paid, so nothing is settling; the missing metadata is the blocker.
+    expect(result).toEqual({ paid: false, processing: false });
     expect(mockRpc).not.toHaveBeenCalled();
   });
 
   it("activates a paid session and invalidates both tags", async () => {
-    mockCheckoutSessionsRetrieve.mockResolvedValue({
-      payment_status: "paid",
-      metadata: { listing_id: LISTING_ID, user_id: USER_ID },
-    });
+    mockCheckoutSessionsRetrieve.mockResolvedValue(PAID_SESSION);
 
     const result = await confirmListingPayment("cs_test_1");
 
@@ -569,10 +815,7 @@ describe("confirmListingPayment", () => {
   });
 
   it("returns an error and skips invalidation when the activation RPC fails", async () => {
-    mockCheckoutSessionsRetrieve.mockResolvedValue({
-      payment_status: "paid",
-      metadata: { listing_id: LISTING_ID, user_id: USER_ID },
-    });
+    mockCheckoutSessionsRetrieve.mockResolvedValue(PAID_SESSION);
     mockRpc.mockResolvedValue({ error: { message: "P0002" } });
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
 
@@ -583,11 +826,66 @@ describe("confirmListingPayment", () => {
     consoleError.mockRestore();
   });
 
-  it("is idempotent: a second confirmation of an already-succeeded session is still a harmless success", async () => {
-    mockCheckoutSessionsRetrieve.mockResolvedValue({
-      payment_status: "paid",
-      metadata: { listing_id: LISTING_ID, user_id: USER_ID },
+  // `listing_payments` takes seller-written inserts, so the row is the one part
+  // of the activation the seller controls: pay for listing A, delete A (which
+  // cascades the row and frees the unique session id), then point that spent
+  // session at pending listing B. The RPC would publish B for free.
+  it("refuses a payment row that names a different listing than the session", async () => {
+    mockCheckoutSessionsRetrieve.mockResolvedValue(PAID_SESSION);
+    servicePaymentRow({
+      data: { ...PAYMENT_ROW, listing_id: "22222222-2222-2222-2222-222222222222" },
+      error: null,
     });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await confirmListingPayment("cs_test_1");
+
+    expect(result).toEqual({ paid: false, error: "Could not activate listing." });
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockRevalidateTag).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it("refuses a payment row whose owner or amount disagrees with the session", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    mockCheckoutSessionsRetrieve.mockResolvedValue(PAID_SESSION);
+
+    servicePaymentRow({ data: { ...PAYMENT_ROW, user_id: "user-999" }, error: null });
+    await expect(confirmListingPayment("cs_test_1")).resolves.toEqual({
+      paid: false,
+      error: "Could not activate listing.",
+    });
+
+    servicePaymentRow({ data: { ...PAYMENT_ROW, amount_cents: 1 }, error: null });
+    await expect(confirmListingPayment("cs_test_1")).resolves.toEqual({
+      paid: false,
+      error: "Could not activate listing.",
+    });
+
+    servicePaymentRow({ data: { ...PAYMENT_ROW, currency: "eur" }, error: null });
+    await expect(confirmListingPayment("cs_test_1")).resolves.toEqual({
+      paid: false,
+      error: "Could not activate listing.",
+    });
+
+    expect(mockRpc).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it("refuses a paid session with no payment row behind it", async () => {
+    mockCheckoutSessionsRetrieve.mockResolvedValue(PAID_SESSION);
+    servicePaymentRow({ data: null, error: null });
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const result = await confirmListingPayment("cs_test_1");
+
+    expect(result).toEqual({ paid: false, error: "Could not activate listing." });
+    expect(mockRpc).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it("is idempotent: a second confirmation of an already-succeeded session is still a harmless success", async () => {
+    mockCheckoutSessionsRetrieve.mockResolvedValue(PAID_SESSION);
 
     const first = await confirmListingPayment("cs_test_1");
     const second = await confirmListingPayment("cs_test_1");
@@ -599,12 +897,6 @@ describe("confirmListingPayment", () => {
 });
 
 describe("payment_confirmed", () => {
-  const PAID_SESSION = {
-    payment_status: "paid",
-    amount_total: 500,
-    metadata: { listing_id: LISTING_ID, user_id: USER_ID },
-  };
-
   beforeEach(() => {
     mockRevalidateTag.mockClear();
     mockCaptureServerEvent.mockReset();
