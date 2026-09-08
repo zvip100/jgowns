@@ -44,10 +44,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
     return NextResponse.redirect(confirmedUrl({ outcome: "processing" }));
   }
 
-  // An error means the charge may have succeeded but we couldn't verify or
-  // activate it on this request; the webhook will finish the job. Tell the
-  // buyer to wait, not re-pay. Only a clean unpaid result is a true no-op.
-  if (!result.paid && result.error) {
+  // Two ways to arrive here having paid: the charge may have succeeded while we
+  // failed to verify or activate it on this request, or it is a delayed payment
+  // method still settling. Both mean wait, not re-pay, and the webhook
+  // (async_payment_succeeded) finishes the job either way. Only a clean unpaid
+  // result with neither flag is a true no-op.
+  if (!result.paid && (result.error || result.processing)) {
     return NextResponse.redirect(confirmedUrl({ outcome: "processing" }));
   }
 

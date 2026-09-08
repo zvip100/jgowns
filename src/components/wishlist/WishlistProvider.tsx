@@ -17,7 +17,11 @@ import {
   type WishlistActionResult,
 } from '@/lib/actions/wishlist';
 import { toast } from '@/lib/toast';
-import { WISHLIST_STORAGE_KEY, WISHLIST_STORAGE_VERSION } from '@/lib/types';
+import {
+  WISHLIST_MAX_ITEMS,
+  WISHLIST_STORAGE_KEY,
+  WISHLIST_STORAGE_VERSION,
+} from '@/lib/types';
 import {
   addWishlistItem,
   applyWishlistStatusRefresh,
@@ -44,6 +48,16 @@ type ServerPayload = {
   userId: string | null;
   items: WishlistItem[] | null;
 };
+
+/**
+ * The reconcile guard's key: signed-out is one identity, and each account is its
+ * own, so an A-to-B switch with no signed-out payload in between still counts as
+ * a transition.
+ */
+function wishlistSyncIdentity(payload: ServerPayload): string {
+  if (!payload.isAuthenticated) return 'signed-out';
+  return payload.userId ?? 'signed-in:unknown';
+}
 
 /**
  * What a toggle actually did, so a caller captures the real outcome rather than
@@ -131,7 +145,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
   const ownerIdRef = useRef<string | null>(null);
   const authedRef = useRef(false);
   const currentUserIdRef = useRef<string | null>(null);
-  const lastSyncedAuthRef = useRef<boolean | null>(null);
+  const lastSyncedIdentityRef = useRef<string | null>(null);
   const lastRefreshedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -220,13 +234,20 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
   }, []);
 
   // Reconcile local storage with the server payload after both are available,
-  // and again whenever the auth state flips (sign-in/out via soft navigation, so
-  // the provider stays mounted and never remounts). Re-running only on an auth
-  // change avoids redundant merges on plain page-to-page navigation. Ordering
-  // matters: local hydration must land first so a merge sees the local items.
+  // and again whenever the authenticated IDENTITY changes (sign-in/out via soft
+  // navigation, so the provider stays mounted and never remounts). Keyed by
+  // identity rather than by the authenticated boolean: another tab can swap the
+  // shared session from account A to account B, and this tab then refreshes its
+  // server payload without ever observing a signed-out state in between. On a
+  // boolean the guard would return here, leaving A's items on screen, A in
+  // currentUserIdRef, and every following write authenticating as B. Re-running
+  // only on an identity change still avoids redundant merges on plain
+  // page-to-page navigation. Ordering matters: local hydration must land first
+  // so a merge sees the local items.
   useEffect(() => {
     if (!isHydrated || !serverPayload) return;
-    if (lastSyncedAuthRef.current === serverPayload.isAuthenticated) return;
+    const identity = wishlistSyncIdentity(serverPayload);
+    if (lastSyncedIdentityRef.current === identity) return;
 
     setIsAuthenticated(serverPayload.isAuthenticated);
     authedRef.current = serverPayload.isAuthenticated;
@@ -244,13 +265,13 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
       if (!serverPayload.isAuthenticated) {
         // Sign-out is a completed auth transition. Keep the mirror and its owner
         // so signed-out edits still belong to the account they came from.
-        lastSyncedAuthRef.current = false;
+        lastSyncedIdentityRef.current = identity;
         return;
       }
 
-      // The account is known but its wishlist read failed. Keep this auth state
+      // The account is known but its wishlist read failed. Keep this identity
       // retryable, and let the first signed-in account claim only a guest cache.
-      lastSyncedAuthRef.current = null;
+      lastSyncedIdentityRef.current = null;
       const userId = serverPayload.userId;
       if (userId !== null && ownerIdRef.current === null) {
         ownerIdRef.current = userId;
@@ -259,7 +280,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
       return;
     }
 
-    lastSyncedAuthRef.current = serverPayload.isAuthenticated;
+    lastSyncedIdentityRef.current = identity;
 
     const userId = serverPayload.userId;
 
@@ -387,27 +408,34 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
 
     lastRefreshedAtRef.current = now;
 
-    // Scope the response to exactly the ids requested, so a response that
-    // resolves after the item list changed (e.g. a user switch swapped in a
-    // different account's items) can't wrongly mark the new items unavailable.
-    const requestedIds = new Set(ids);
-    const params = new URLSearchParams({ ids: ids.join(',') });
-    fetch(`/api/wishlist/status?${params.toString()}`)
-      .then((res) => {
-        if (!res.ok) throw new Error(`Status ${res.status}`);
-        return res.json() as Promise<WishlistStatusResponse>;
-      })
-      .then((data) => {
-        const statusById = new Map<string, WishlistStatusEntry>(
-          data.items.map((entry) => [entry.id, entry]),
-        );
-        setItems((current) =>
-          applyWishlistStatusRefresh(current, statusById, requestedIds),
-        );
-      })
-      .catch((error) => {
-        console.error('[wishlist] Failed to refresh status', error);
-      });
+    // WISHLIST_MAX_ITEMS is a per-device / per-batch bound, not an account
+    // total: a merged account list legitimately runs past it, and the status
+    // endpoint rejects a request carrying more ids than that. Ask a batch at a
+    // time, and scope each response to exactly the ids that batch requested, so
+    // a response that resolves after the item list changed (e.g. a user switch
+    // swapped in a different account's items) can't wrongly mark the new items
+    // unavailable.
+    for (let start = 0; start < ids.length; start += WISHLIST_MAX_ITEMS) {
+      const batch = ids.slice(start, start + WISHLIST_MAX_ITEMS);
+      const requestedIds = new Set(batch);
+      const params = new URLSearchParams({ ids: batch.join(',') });
+      fetch(`/api/wishlist/status?${params.toString()}`)
+        .then((res) => {
+          if (!res.ok) throw new Error(`Status ${res.status}`);
+          return res.json() as Promise<WishlistStatusResponse>;
+        })
+        .then((data) => {
+          const statusById = new Map<string, WishlistStatusEntry>(
+            data.items.map((entry) => [entry.id, entry]),
+          );
+          setItems((current) =>
+            applyWishlistStatusRefresh(current, statusById, requestedIds),
+          );
+        })
+        .catch((error) => {
+          console.error('[wishlist] Failed to refresh status', error);
+        });
+    }
   }, []);
 
   useEffect(() => {

@@ -8,7 +8,7 @@ import { GOWN_CATEGORIES, type GownCategoryId } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 type BrowseCategoryNavProps = {
-  searchParams: PageSearchParams;
+  searchParams: Promise<PageSearchParams>;
   className?: string;
   variant?: "mobile" | "desktop";
 };
@@ -36,12 +36,13 @@ function categoryFromParams(resolved: PageSearchParams): string {
   return parseBrowseFilters(resolved).category ?? "";
 }
 
-export default function BrowseCategoryNav({
+export default async function BrowseCategoryNav({
   searchParams,
   className,
   variant = "desktop",
 }: BrowseCategoryNavProps) {
-  const current = categoryFromParams(searchParams);
+  const resolved = await searchParams;
+  const current = categoryFromParams(resolved);
   const isMobile = variant === "mobile";
 
   return (
@@ -54,7 +55,7 @@ export default function BrowseCategoryNav({
         )}
       >
         <Link
-          href={hrefForCategory(searchParams, null)}
+          href={hrefForCategory(resolved, null)}
           scroll={false}
           aria-current={!current ? "page" : undefined}
           className={cn(chipBase, !current ? chipActive : chipIdle)}
@@ -67,7 +68,7 @@ export default function BrowseCategoryNav({
           return (
             <Link
               key={cat.id}
-              href={hrefForCategory(searchParams, cat.id)}
+              href={hrefForCategory(resolved, cat.id)}
               scroll={false}
               aria-current={active ? "page" : undefined}
               className={cn(chipBase, active ? chipActive : chipIdle)}

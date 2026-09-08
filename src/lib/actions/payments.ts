@@ -9,6 +9,7 @@ import { getAuthClient } from "@/lib/actions/auth";
 import { getListingFeeCents, isListingFeeActive } from "@/lib/listing-fee";
 import { getSessionContact } from "@/lib/queries/auth";
 import { SITE_URL } from "@/lib/site";
+import { isCheckoutSettling } from "@/lib/stripe/checkout";
 import { getStripe } from "@/lib/stripe/client";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -98,7 +99,7 @@ export async function createListingCheckout(
   //  - still open    -> resume that session URL (do not mint a second payable one).
   //  - state unknown -> don't risk a second charge; send them to wait it out.
   //  - expired / complete-unpaid -> retire the DB row, then mint fresh below.
-  const { data: priorPayment } = await supabase
+  const { data: priorPayment, error: priorPaymentError } = await supabase
     .from("listing_payments")
     .select("stripe_session_id")
     .eq("listing_id", listingId)
@@ -106,6 +107,20 @@ export async function createListingCheckout(
     .order("created_at", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  // Fail closed: a failed lookup is not an absence. Treating it as one mints a
+  // second payable session beside the open one this listing may already have,
+  // which is the double charge the whole block above exists to prevent.
+  if (priorPaymentError) {
+    await captureServerError(
+      {
+        scope: "payments.createListingCheckout.priorPaymentLookup",
+        properties: { listing_id: listingId },
+      },
+      priorPaymentError,
+    );
+    return CHECKOUT_UNAVAILABLE_ERROR;
+  }
 
   if (priorPayment) {
     let priorSession: Stripe.Checkout.Session;
@@ -128,6 +143,14 @@ export async function createListingCheckout(
           `/dashboard/checkout/confirmed?outcome=paid&listing=${listingId}`,
         );
       }
+      redirect("/dashboard/checkout/confirmed?outcome=processing");
+    }
+
+    // Complete but unpaid can be an asynchronous payment still settling rather
+    // than a failed one. Falling through to retire the row and mint a fresh
+    // session is how a seller pays the publishing fee twice. Cheap on the
+    // common paths: an open session returns false without an API call.
+    if (await isCheckoutSettling(priorSession)) {
       redirect("/dashboard/checkout/confirmed?outcome=processing");
     }
 
@@ -242,7 +265,12 @@ export async function createListingCheckout(
 
 export type ConfirmListingPaymentResult =
   | { paid: true; listingId: string; userId: string }
-  | { paid: false; error?: string };
+  /**
+   * `processing` separates "the funds are on their way" from "nothing was
+   * paid". Both are unpaid right now, and only the first must never be told to
+   * the seller as a failure.
+   */
+  | { paid: false; error?: string; processing?: boolean };
 
 /**
  * Shared idempotent confirmation core, called from both the webhook route
@@ -273,10 +301,58 @@ export async function confirmListingPayment(
   const listingId = session.metadata?.listing_id;
   const userId = session.metadata?.user_id;
   if (session.payment_status !== "paid" || !listingId || !userId) {
-    return { paid: false };
+    // A delayed payment method lands here having been PAID: Checkout completed,
+    // the funds just have not settled. Reporting a bare unpaid result sends the
+    // seller "we couldn't confirm your payment" for a payment that is on its
+    // way. Costs no extra Stripe call unless the session is complete + unpaid.
+    return { paid: false, processing: await isCheckoutSettling(session) };
   }
 
-  const { data: confirmed, error } = await createServiceClient().rpc(
+  const service = createServiceClient();
+
+  // record_listing_payment resolves WHICH listing a paid session publishes from
+  // the payment row alone, and `listing_payments` takes seller-written inserts,
+  // so that mapping is checked against the session Stripe just confirmed rather
+  // than trusted. Without this a seller can re-point a spent session at a
+  // different pending listing (delete the paid one, which cascades its row and
+  // the unique session id away, then insert that session id against a new
+  // listing) and publish the new one for free. The fee is one fixed line item
+  // with no tax and no promotion codes, which is what makes amount_total an
+  // exact comparison.
+  const { data: payment, error: paymentError } = await service
+    .from("listing_payments")
+    .select("listing_id, user_id, amount_cents, currency")
+    .eq("stripe_session_id", sessionId)
+    .maybeSingle();
+
+  if (paymentError || !payment) {
+    await captureServerError(
+      {
+        scope: "payments.confirmListingPayment.readPaymentRow",
+        properties: { listing_id: listingId, session_id: sessionId },
+      },
+      paymentError ?? new Error("No payment row for a paid Checkout session"),
+    );
+    return { paid: false, error: "Could not activate listing." };
+  }
+
+  if (
+    payment.listing_id !== listingId ||
+    payment.user_id !== userId ||
+    payment.amount_cents !== session.amount_total ||
+    payment.currency !== session.currency
+  ) {
+    await captureServerError(
+      {
+        scope: "payments.confirmListingPayment.sessionMismatch",
+        properties: { listing_id: listingId, session_id: sessionId },
+      },
+      new Error("Payment row does not match its Checkout session"),
+    );
+    return { paid: false, error: "Could not activate listing." };
+  }
+
+  const { data: confirmed, error } = await service.rpc(
     "record_listing_payment",
     { p_session_id: sessionId },
   );

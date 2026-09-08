@@ -3,7 +3,6 @@
 import { updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 
-import { isListingFeeActive } from "@/lib/listing-fee";
 import { listingPriceValue } from "@/lib/listing-variants";
 import {
   listingFormActionError,
@@ -80,7 +79,6 @@ export async function createListing(
   if (!auth.ok) return { error: auth.error };
   const { supabase, user } = auth;
 
-  const feeActive = isListingFeeActive();
   let shouldRedirect = false;
   let createdListingId: string | null = null;
   const uploadedUrls: string[] = [];
@@ -116,12 +114,15 @@ export async function createListing(
 
     const image_blur_data_urls = slots.map((s) => s.blur);
 
+    // Always unpaid, whether or not the fee is switched on: the seller's own
+    // client can no longer write any other status (migration 039), and
+    // createListingCheckout owns both doors out of pending_payment.
     const payload = {
       ...listingRowPayload(
         parsed,
         uploadedUrls,
         image_blur_data_urls,
-        feeActive ? "pending_payment" : "active",
+        "pending_payment",
       ),
       user_id: user.id,
     };
@@ -150,9 +151,9 @@ export async function createListing(
     }
 
     createdListingId = created.id as string;
-    // A pending listing is invisible to browse until it activates, so there's
-    // nothing to invalidate yet in the fee-active branch (see §6.1 instead).
-    if (!feeActive) updateTag("listings");
+    // Nothing to invalidate yet either way: the row is pending_payment, so it
+    // is invisible to browse until createListingCheckout activates it, and that
+    // action invalidates both tags itself.
     shouldRedirect = true;
 
     // Server-side because success ends in a redirect, to Stripe or the
@@ -173,16 +174,17 @@ export async function createListing(
   // committed by this point, so a Checkout-creation failure must never delete
   // the seller's work.
   if (shouldRedirect && createdListingId) {
-    if (feeActive) {
-      const checkout = await createListingCheckout(createdListingId);
-      // Only reachable when checkout failed; success redirects to Stripe. The
-      // listing is committed, so leave the populated form behind rather than
-      // returning the error into it and inviting a duplicate submission. The
-      // flag carries the reason across the redirect (DashboardFlashToast).
-      if (checkout?.error) redirect(CHECKOUT_UNAVAILABLE_REDIRECT);
-      return checkout;
-    }
-    redirect("/dashboard");
+    // One door out of pending_payment for both modes: Stripe when the fee is
+    // on, the service-role publish when it is off. A seller's own client cannot
+    // make that transition at all now, so this action must not try.
+    const checkout = await createListingCheckout(createdListingId);
+    // Only reachable when it failed; success redirects, to Stripe or to the
+    // dashboard. The listing is committed, so leave the populated form behind
+    // rather than returning the error into it and inviting a duplicate
+    // submission. The flag carries the reason across the redirect
+    // (DashboardFlashToast).
+    if (checkout?.error) redirect(CHECKOUT_UNAVAILABLE_REDIRECT);
+    return checkout;
   }
   return {};
 }
@@ -218,6 +220,7 @@ export async function updateListing(
   const oldImageUrls: string[] = existing.image_urls ?? [];
 
   let shouldRedirect = false;
+  let hasCommitted = false;
   const newlyUploadedUrls: string[] = [];
 
   try {
@@ -288,7 +291,12 @@ export async function updateListing(
     );
 
     if (dbError) {
-      if (newlyUploadedUrls.length > 0) {
+      // Same asymmetry the admin photo path already applies: a structured
+      // rejection (`code` present) is a Postgres error PostgREST relayed, so the
+      // transaction rolled back and the replacement is the orphan. A bare
+      // transport failure may be hiding an edit that DID commit, where deleting
+      // would strand the listing on a missing object.
+      if (newlyUploadedUrls.length > 0 && dbError.code) {
         const cleanup = await deleteListingImages(newlyUploadedUrls);
         if ("error" in cleanup) {
           console.warn(
@@ -300,9 +308,18 @@ export async function updateListing(
             },
           );
         }
+      } else if (newlyUploadedUrls.length > 0) {
+        console.warn("Listing update outcome unknown; keeping the replacements", {
+          listingId: id,
+          replacementImageUrls: newlyUploadedUrls,
+        });
       }
       return { error: dbError.message };
     }
+
+    // Past this point the replacements are referenced by a committed row, so
+    // nothing below may roll them back.
+    hasCommitted = true;
 
     // The listing row and its variants are now committed atomically; it's safe
     // to drop the images this edit orphaned and refresh caches.
@@ -316,8 +333,9 @@ export async function updateListing(
 
     shouldRedirect = true;
   } catch (e) {
-    if (newlyUploadedUrls.length > 0)
+    if (!hasCommitted && newlyUploadedUrls.length > 0) {
       await deleteListingImages(newlyUploadedUrls);
+    }
     await captureServerError({ scope: "sell.updateListing" }, e);
     return listingFormActionError(e);
   }

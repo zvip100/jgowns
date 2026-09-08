@@ -12,6 +12,7 @@ import type { createServiceClient } from "@/lib/supabase/service";
 import type { SupabaseServer } from "@/lib/actions/auth";
 
 const SUPABASE_URL = "https://test.supabase.co";
+process.env.NEXT_PUBLIC_SUPABASE_URL = SUPABASE_URL;
 
 function makeSupabaseUrl(path: string): string {
   return `${SUPABASE_URL}/storage/v1/object/public/${LISTING_IMAGE_BUCKET}/${path}`;
@@ -245,6 +246,57 @@ describe("listingImagePathFromUrl", () => {
 
   it("returns null for a URL from another host's bucket layout", () => {
     expect(listingImagePathFromUrl("https://cloudinary.com/photo.jpg")).toBeNull();
+  });
+
+  // Every alias below resolves to the same object as a live listing's canonical
+  // URL while comparing unequal as a string, so accepting one would let the
+  // reference check clear it as a different photo and delete the real file.
+  it("returns null for a foreign host mimicking the bucket layout", () => {
+    expect(
+      listingImagePathFromUrl(
+        `https://example.invalid/storage/v1/object/public/${LISTING_IMAGE_BUCKET}/victim.webp`,
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null when a query string aliases the same object", () => {
+    expect(
+      listingImagePathFromUrl(`${makeSupabaseUrl("victim.webp")}?v=2`),
+    ).toBeNull();
+  });
+
+  it("returns null for a re-escaped path that resolves to the same object", () => {
+    expect(listingImagePathFromUrl(makeSupabaseUrl("victim%2Ewebp"))).toBeNull();
+  });
+
+  /**
+   * Every one of these parses to the project's own origin, so an origin
+   * comparison alone lets them through as a different photo of the same object.
+   */
+  it.each([
+    ["an uppercased host", "HTTPS://TEST.SUPABASE.CO"],
+    ["an explicit default port", "https://test.supabase.co:443"],
+    ["embedded credentials", "https://user:pass@test.supabase.co"],
+  ])("returns null for %s aliasing the same object", (_label, origin) => {
+    expect(
+      listingImagePathFromUrl(
+        `${origin}/storage/v1/object/public/${LISTING_IMAGE_BUCKET}/victim.webp`,
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null when a fragment aliases the same object", () => {
+    expect(
+      listingImagePathFromUrl(`${makeSupabaseUrl("victim.webp")}#x`),
+    ).toBeNull();
+  });
+
+  it("returns null when the marker is not where a public URL puts it", () => {
+    expect(
+      listingImagePathFromUrl(
+        `${SUPABASE_URL}/decoy/storage/v1/object/public/${LISTING_IMAGE_BUCKET}/victim.webp`,
+      ),
+    ).toBeNull();
   });
 
   it("returns null when the marker is present but the path is empty", () => {

@@ -52,3 +52,6 @@ docs
 .playwright-mcp
 .mcp.json
 .impeccable
+
+# Launch/reset tooling (destructive, local-only)
+/scripts

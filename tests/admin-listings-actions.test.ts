@@ -10,6 +10,8 @@ const {
   mockBlurPlaceholderDataUrl,
   mockDownloadListingImage,
   mockUploadListingImage,
+  mockUnreferencedListingImageUrls,
+  mockRetireOpenListingCheckout,
   calls,
 } = vi.hoisted(() => ({
   mockGetAdminActionClient: vi.fn(),
@@ -21,6 +23,8 @@ const {
   mockBlurPlaceholderDataUrl: vi.fn(),
   mockDownloadListingImage: vi.fn(),
   mockUploadListingImage: vi.fn(),
+  mockUnreferencedListingImageUrls: vi.fn(),
+  mockRetireOpenListingCheckout: vi.fn(),
   calls: [] as string[],
 }));
 
@@ -56,6 +60,10 @@ vi.mock("@/lib/images/pipeline", () => ({
 vi.mock("@/lib/images/storage", () => ({
   downloadListingImage: mockDownloadListingImage,
   uploadListingImage: mockUploadListingImage,
+  unreferencedListingImageUrls: mockUnreferencedListingImageUrls,
+}));
+vi.mock("@/lib/stripe/checkout", () => ({
+  retireOpenListingCheckout: mockRetireOpenListingCheckout,
 }));
 
 import {
@@ -175,6 +183,15 @@ beforeEach(() => {
     return { webp: Buffer.from("reprocessed"), facesDetected: 1, visionOk: true };
   });
   mockBlurPlaceholderDataUrl.mockResolvedValue("data:image/jpeg;base64,tiny");
+  // Default: nobody else shows the photo, so the cross-listing gate lets the
+  // object through and the tests below observe the delete they are about.
+  mockUnreferencedListingImageUrls.mockImplementation(
+    async (_client: unknown, urls: string[]) => {
+      calls.push("storage:references");
+      return urls;
+    },
+  );
+  mockRetireOpenListingCheckout.mockResolvedValue({ ok: true });
   mockUploadListingImage.mockImplementation(async () => {
     calls.push("storage:upload");
     return NEW_IMAGE_URL;
@@ -376,6 +393,29 @@ describe("adminRemoveListing", () => {
       error: "Invalid listing id",
     });
     expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockRetireOpenListingCheckout).not.toHaveBeenCalled();
+  });
+
+  // The seller's own Remove already does this; an admin door that skipped it
+  // would leave a payable Checkout on a listing activation can no longer reach.
+  it("retires an open Checkout before the removal commits", async () => {
+    await adminRemoveListing(LISTING_ID);
+    expect(mockRetireOpenListingCheckout).toHaveBeenCalledExactlyOnceWith(
+      SUPABASE,
+      LISTING_ID,
+    );
+  });
+
+  it("does not remove while a Checkout is still settling", async () => {
+    mockRetireOpenListingCheckout.mockResolvedValue({
+      error: "Payment is completing. Refresh and try again.",
+    });
+
+    await expect(adminRemoveListing(LISTING_ID)).resolves.toEqual({
+      error: "Payment is completing. Refresh and try again.",
+    });
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockUpdateTag).not.toHaveBeenCalled();
   });
 });
 
@@ -562,6 +602,7 @@ describe("adminRemoveListingImage", () => {
     ).resolves.toEqual({});
     expect(calls).toEqual([
       "rpc:admin_remove_listing_image",
+      "storage:references",
       "storage:delete",
     ]);
   });
@@ -589,6 +630,25 @@ describe("adminRemoveListingImage", () => {
     await expect(
       adminRemoveListingImage(LISTING_ID, IMAGE_URL),
     ).resolves.toEqual({});
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+    expect(mockUpdateTag).toHaveBeenCalledTimes(2);
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  // Two owners, one object: a seller can name another listing's photo in their
+  // own image array, and this delete carries the admin's bucket-wide policy.
+  it("keeps the object when another listing still shows it", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    mockUnreferencedListingImageUrls.mockResolvedValue([]);
+
+    await expect(
+      adminRemoveListingImage(LISTING_ID, IMAGE_URL),
+    ).resolves.toEqual({});
+    expect(mockUnreferencedListingImageUrls).toHaveBeenCalledExactlyOnceWith(
+      SUPABASE,
+      [IMAGE_URL],
+    );
     expect(mockDeleteListingImages).not.toHaveBeenCalled();
     expect(mockUpdateTag).toHaveBeenCalledTimes(2);
     expect(warn).toHaveBeenCalled();
@@ -666,6 +726,7 @@ describe("adminReprocessListingImage", () => {
       "pipeline",
       "storage:upload",
       "rpc:admin_replace_listing_image",
+      "storage:references",
       "storage:delete",
     ]);
     expect(mockDeleteListingImages).toHaveBeenCalledExactlyOnceWith(
@@ -930,6 +991,7 @@ describe("adminReplaceListingImage", () => {
       "pipeline",
       "storage:upload",
       "rpc:admin_replace_listing_image",
+      "storage:references",
       "storage:delete",
     ]);
     expect(mockUpdateTag).toHaveBeenCalledTimes(2);

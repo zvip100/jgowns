@@ -10,6 +10,7 @@ import {
 } from "@/lib/images/pipeline";
 import {
   downloadListingImage,
+  unreferencedListingImageUrls,
   uploadListingImage,
 } from "@/lib/images/storage";
 import {
@@ -18,6 +19,7 @@ import {
   variantRowsPayload,
   zodListingFormErrorMessage,
 } from "@/lib/listing-form";
+import { retireOpenListingCheckout } from "@/lib/stripe/checkout";
 import { MAX_LISTING_IMAGES } from "@/lib/types";
 import { listingInputSchema } from "@/lib/validations/listing-schema";
 import {
@@ -147,6 +149,12 @@ export async function adminRemoveListing(
   return runAdminAction("adminRemoveListing", async ({ supabase }) => {
     const id = adminListingIdSchema.safeParse(listingId);
     if (!id.success) return { error: "Invalid listing id" };
+
+    // Same retirement the seller's own Remove performs. Skipping it here leaves
+    // a payable Checkout on a removed listing: the fee is collected and
+    // confirmation can no longer publish anything.
+    const retired = await retireOpenListingCheckout(supabase, id.data);
+    if ("error" in retired) return { error: retired.error };
 
     const { error } = await supabase.rpc("remove_listing", {
       p_listing_id: id.data,
@@ -452,6 +460,19 @@ async function deleteDereferencedObject(
     console.warn(
       "[actions/admin/listings] Photo may still be referenced after the write; keeping the object",
       { listingId, imageUrl, hadCommittedArray: Boolean(committedUrls) },
+    );
+    return;
+  }
+
+  // The committed array only speaks for THIS listing. `listings.image_urls` is
+  // seller-writable, so another seller can name this photo in their own row,
+  // and the delete below carries the admin's bucket-wide storage policy: the
+  // same reference check the two sweeps run has to gate this one object too.
+  const [unreferenced] = await unreferencedListingImageUrls(supabase, [imageUrl]);
+  if (!unreferenced) {
+    console.warn(
+      "[actions/admin/listings] Another listing still shows this photo; keeping the object",
+      { listingId, imageUrl },
     );
     return;
   }

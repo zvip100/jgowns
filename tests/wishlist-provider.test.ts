@@ -95,6 +95,7 @@ import { WishlistProvider } from "@/components/wishlist/WishlistProvider";
 const USER_ID = "99999999-9999-9999-9999-999999999999";
 const OTHER_USER_ID = "88888888-8888-8888-8888-888888888888";
 const LISTING_ID = "11111111-1111-1111-1111-111111111111";
+const OTHER_LISTING_ID = "22222222-2222-2222-2222-222222222222";
 
 const ITEM: WishlistItem = {
   listingId: LISTING_ID,
@@ -111,7 +112,7 @@ const ITEM: WishlistItem = {
 function runReconcile(
   payload: ServerPayload,
   items: WishlistItem[],
-  overrides: { ownerId?: string | null; lastSyncedAuth?: boolean | null } = {},
+  overrides: { ownerId?: string | null; lastSyncedIdentity?: string | null } = {},
 ): void {
   hookState.effects = [];
   hookState.refCallCount = 0;
@@ -130,8 +131,8 @@ function runReconcile(
   if ("ownerId" in overrides) {
     hookState.refs[1].current = overrides.ownerId;
   }
-  if ("lastSyncedAuth" in overrides) {
-    hookState.refs[4].current = overrides.lastSyncedAuth;
+  if ("lastSyncedIdentity" in overrides) {
+    hookState.refs[4].current = overrides.lastSyncedIdentity;
   }
 
   hookState.effects[0]?.run();
@@ -149,6 +150,7 @@ function setterValues(index: number): unknown[] {
 }
 
 beforeEach(() => {
+  vi.unstubAllGlobals();
   hookState.refs = [];
   mockAddToWishlist.mockReset();
   mockMergeWishlist.mockReset();
@@ -164,7 +166,7 @@ describe("WishlistProvider server reconciliation", () => {
     runReconcile(
       { isAuthenticated: true, userId: USER_ID, items: null },
       [ITEM],
-      { ownerId: null, lastSyncedAuth: false },
+      { ownerId: null, lastSyncedIdentity: "signed-out" },
     );
 
     expect(hookState.refs[1]?.current).toBe(USER_ID);
@@ -181,7 +183,7 @@ describe("WishlistProvider server reconciliation", () => {
     runReconcile(
       { isAuthenticated: true, userId: USER_ID, items: null },
       [],
-      { ownerId: null, lastSyncedAuth: false },
+      { ownerId: null, lastSyncedIdentity: "signed-out" },
     );
 
     const successfulPayload: ServerPayload = {
@@ -191,22 +193,45 @@ describe("WishlistProvider server reconciliation", () => {
     };
     runReconcile(successfulPayload, []);
 
-    expect(hookState.refs[4]?.current).toBe(true);
+    expect(hookState.refs[4]?.current).toBe(USER_ID);
     expect(setterValues(0)).toContainEqual([ITEM]);
+  });
+
+  // Another tab swaps the shared session, and this tab's next payload goes
+  // straight from one account to the other with no signed-out state between.
+  // On a boolean guard the effect returned here, leaving A's items on screen
+  // and A in the current-user ref while every write authenticated as B.
+  it("reconciles a switch straight from one account to another", () => {
+    const otherItem: WishlistItem = { ...ITEM, listingId: OTHER_LISTING_ID };
+
+    runReconcile({ isAuthenticated: true, userId: USER_ID, items: [ITEM] }, [], {
+      ownerId: null,
+      lastSyncedIdentity: "signed-out",
+    });
+
+    runReconcile(
+      { isAuthenticated: true, userId: OTHER_USER_ID, items: [otherItem] },
+      [],
+    );
+
+    expect(hookState.refs[3]?.current).toBe(OTHER_USER_ID);
+    expect(hookState.refs[1]?.current).toBe(OTHER_USER_ID);
+    expect(hookState.refs[4]?.current).toBe(OTHER_USER_ID);
+    expect(setterValues(0)).toContainEqual([otherItem]);
   });
 
   it("still processes sign-out after an authenticated read failure", () => {
     runReconcile(
       { isAuthenticated: true, userId: USER_ID, items: null },
       [],
-      { ownerId: null, lastSyncedAuth: false },
+      { ownerId: null, lastSyncedIdentity: "signed-out" },
     );
 
     runReconcile({ isAuthenticated: false, userId: null, items: null }, []);
 
     expect(hookState.refs[2]?.current).toBe(false);
     expect(hookState.refs[3]?.current).toBeNull();
-    expect(hookState.refs[4]?.current).toBe(false);
+    expect(hookState.refs[4]?.current).toBe("signed-out");
     expect(setterValues(2)).toContain(false);
   });
 
@@ -214,12 +239,82 @@ describe("WishlistProvider server reconciliation", () => {
     runReconcile(
       { isAuthenticated: true, userId: USER_ID, items: null },
       [ITEM],
-      { ownerId: OTHER_USER_ID, lastSyncedAuth: false },
+      { ownerId: OTHER_USER_ID, lastSyncedIdentity: "signed-out" },
     );
 
     expect(hookState.refs[1]?.current).toBe(OTHER_USER_ID);
     expect(hookState.refs[4]?.current).toBeNull();
     expect(mockSetItem).not.toHaveBeenCalled();
+  });
+});
+
+/**
+ * The 50-item cap is per device and per batch, not an account total: the
+ * sign-in union merge can leave an account holding more. The status endpoint
+ * rejects a request carrying more ids than the cap, so a merged list past it
+ * used to get HTTP 400 on every refresh and never saw a sold gown go stale.
+ */
+describe("WishlistProvider status refresh", () => {
+  function runRefresh(items: WishlistItem[]): void {
+    hookState.effects = [];
+    hookState.refCallCount = 0;
+    hookState.setterCalls = [];
+    hookState.stateCallCount = 0;
+    hookState.stateValues = new Map<number, unknown>([
+      [0, items],
+      [1, true],
+      [2, false],
+      [3, true],
+      [4, null],
+    ]);
+
+    WishlistProvider({ children: null });
+    hookState.refs[0].current = items;
+
+    const refresh = hookState.effects.find(
+      (effect) =>
+        effect.dependencies?.length === 2 && effect.dependencies[0] === true,
+    );
+    expect(refresh).toBeDefined();
+    refresh?.run();
+  }
+
+  function requestedIds(call: unknown[]): string[] {
+    const url = new URL(String(call[0]), "https://jgowns.test");
+    return (url.searchParams.get("ids") ?? "").split(",");
+  }
+
+  it("splits a merged list past the cap into requests the endpoint accepts", () => {
+    const items = Array.from({ length: WISHLIST_MAX_ITEMS + 10 }, (_, i) => ({
+      ...ITEM,
+      listingId: `listing-${i}`,
+    }));
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ items: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    runRefresh(items);
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(requestedIds(fetchMock.mock.calls[0])).toHaveLength(
+      WISHLIST_MAX_ITEMS,
+    );
+    expect(requestedIds(fetchMock.mock.calls[1])).toHaveLength(10);
+  });
+
+  it("asks once for a list that fits in a single request", () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ items: [] }),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    runRefresh([ITEM]);
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(requestedIds(fetchMock.mock.calls[0])).toEqual([LISTING_ID]);
   });
 });
 

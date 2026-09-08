@@ -5,7 +5,7 @@ import {
 import type { PageSearchParams } from "@/lib/types";
 import { firstParam } from "@/lib/utils";
 
-export const BROWSE_PAGE_SIZE = 12;
+export const BROWSE_PAGE_SIZE = 24;
 
 const MAX_PAGE = 10_000;
 
@@ -25,7 +25,10 @@ export function formatBrowsePage(page: number): string | undefined {
   return String(page);
 }
 
-export function totalPagesFromCount(totalCount: number, pageSize: number): number {
+export function totalPagesFromCount(
+  totalCount: number,
+  pageSize: number,
+): number {
   if (totalCount <= 0) return 0;
   return Math.ceil(totalCount / pageSize);
 }
