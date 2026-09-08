@@ -1,11 +1,12 @@
 import "server-only";
 
+import Stripe from "stripe";
+
 import { captureServerError } from "@/lib/analytics/server";
 import { getStripe } from "@/lib/stripe/client";
 import { createServiceClient } from "@/lib/supabase/service";
 
 import type { SupabaseServer } from "@/lib/actions/auth";
-import type Stripe from "stripe";
 
 const CHECKOUT_CANCEL_ERROR =
   "Couldn't cancel the open payment. Please try again.";
@@ -66,6 +67,32 @@ export async function isCheckoutSettling(
 }
 
 /**
+ * A session id Stripe has no record of can never be paid, and `listing_payments`
+ * takes seller-written inserts: without telling this definitive 404 apart from a
+ * transient outage, one forged row makes every retirement below fail and leaves
+ * the listing permanently un-removable, the admin's take-down included.
+ */
+function isMissingSessionError(e: unknown): boolean {
+  return (
+    e instanceof Stripe.errors.StripeInvalidRequestError &&
+    e.code === "resource_missing"
+  );
+}
+
+async function expirePaymentRow(
+  service: ReturnType<typeof createServiceClient>,
+  sessionId: string,
+): Promise<string | null> {
+  const { error } = await service
+    .from("listing_payments")
+    .update({ status: "expired" })
+    .eq("stripe_session_id", sessionId)
+    .eq("status", "pending");
+
+  return error ? error.message : null;
+}
+
+/**
  * Closes every still-pending Checkout for a listing before it is retired.
  * Without this a removal leaves a payable session behind: the seller finishes
  * paying, the fee is collected, and confirmation can no longer publish anything
@@ -99,11 +126,17 @@ export async function retireOpenListingCheckout(
     try {
       session = await stripe.checkout.sessions.retrieve(row.stripe_session_id);
     } catch (e) {
-      await captureServerError(
-        { scope: "stripe.retireOpenListingCheckout.retrieveSession" },
-        e,
-      );
-      return { error: CHECKOUT_CANCEL_ERROR };
+      if (!isMissingSessionError(e)) {
+        await captureServerError(
+          { scope: "stripe.retireOpenListingCheckout.retrieveSession" },
+          e,
+        );
+        return { error: CHECKOUT_CANCEL_ERROR };
+      }
+
+      const forgedError = await expirePaymentRow(service, row.stripe_session_id);
+      if (forgedError) return { error: forgedError };
+      continue;
     }
 
     // Money already in, or still on its way: don't expire or retire either one.
@@ -125,13 +158,8 @@ export async function retireOpenListingCheckout(
       }
     }
 
-    const { error: expireError } = await service
-      .from("listing_payments")
-      .update({ status: "expired" })
-      .eq("stripe_session_id", row.stripe_session_id)
-      .eq("status", "pending");
-
-    if (expireError) return { error: expireError.message };
+    const expireError = await expirePaymentRow(service, row.stripe_session_id);
+    if (expireError) return { error: expireError };
   }
 
   return { ok: true };

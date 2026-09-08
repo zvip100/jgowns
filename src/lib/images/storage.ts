@@ -157,7 +157,13 @@ export function listingImagePathFromUrl(url: string): string | null {
     return null;
   }
 
-  if (parsed.origin !== projectOrigin || parsed.search || parsed.hash) {
+  // Exact canonical form only. URL parsing folds an uppercase host, an explicit
+  // :443, and embedded credentials into a matching origin, so those strings pass
+  // an origin comparison while missing the whole-string reference check above.
+  if (
+    parsed.origin !== projectOrigin ||
+    `${parsed.origin}${parsed.pathname}` !== url
+  ) {
     return null;
   }
 

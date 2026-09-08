@@ -150,6 +150,7 @@ function setterValues(index: number): unknown[] {
 }
 
 beforeEach(() => {
+  vi.unstubAllGlobals();
   hookState.refs = [];
   mockAddToWishlist.mockReset();
   mockMergeWishlist.mockReset();

@@ -1,3 +1,4 @@
+import Stripe from "stripe";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
@@ -389,6 +390,58 @@ describe("removeListing", () => {
     });
     expect(supabase._listingsChain.update).not.toHaveBeenCalled();
     expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  /**
+   * `listing_payments` takes seller-written inserts, so a forged session id must
+   * not be able to veto removal: Stripe's definitive 404 retires the row.
+   */
+  it("retires a payment row Stripe has no record of and still removes", async () => {
+    const supabase = makeSupabase(undefined, undefined, undefined, {
+      data: [{ stripe_session_id: "cs_test_forged" }],
+      error: null,
+    });
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+    mockRetrieveSession.mockRejectedValue(
+      new Stripe.errors.StripeInvalidRequestError({
+        message: "No such checkout.session: 'cs_test_forged'",
+        code: "resource_missing",
+      }),
+    );
+    const serviceChain = mockServiceExpireUpdate();
+
+    const result = await removeListing(LISTING_ID);
+
+    expect(result).toEqual({});
+    expect(serviceChain.update).toHaveBeenCalledWith({ status: "expired" });
+    expect(mockExpireSession).not.toHaveBeenCalled();
+    expect(supabase._rpc).toHaveBeenCalledWith("remove_listing", {
+      p_listing_id: LISTING_ID,
+    });
+  });
+
+  it("blocks removal when the session lookup fails for any other reason", async () => {
+    const supabase = makeSupabase(undefined, undefined, undefined, {
+      data: [{ stripe_session_id: SESSION_ID }],
+      error: null,
+    });
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+    mockRetrieveSession.mockRejectedValue(new Error("stripe down"));
+
+    const result = await removeListing(LISTING_ID);
+
+    expect(result).toEqual({
+      error: "Couldn't cancel the open payment. Please try again.",
+    });
+    expect(supabase._listingsChain.update).not.toHaveBeenCalled();
   });
 
   it("returns an error for a blank id without touching the database", async () => {

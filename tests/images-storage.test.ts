@@ -269,6 +269,28 @@ describe("listingImagePathFromUrl", () => {
     expect(listingImagePathFromUrl(makeSupabaseUrl("victim%2Ewebp"))).toBeNull();
   });
 
+  /**
+   * Every one of these parses to the project's own origin, so an origin
+   * comparison alone lets them through as a different photo of the same object.
+   */
+  it.each([
+    ["an uppercased host", "HTTPS://TEST.SUPABASE.CO"],
+    ["an explicit default port", "https://test.supabase.co:443"],
+    ["embedded credentials", "https://user:pass@test.supabase.co"],
+  ])("returns null for %s aliasing the same object", (_label, origin) => {
+    expect(
+      listingImagePathFromUrl(
+        `${origin}/storage/v1/object/public/${LISTING_IMAGE_BUCKET}/victim.webp`,
+      ),
+    ).toBeNull();
+  });
+
+  it("returns null when a fragment aliases the same object", () => {
+    expect(
+      listingImagePathFromUrl(`${makeSupabaseUrl("victim.webp")}#x`),
+    ).toBeNull();
+  });
+
   it("returns null when the marker is not where a public URL puts it", () => {
     expect(
       listingImagePathFromUrl(
