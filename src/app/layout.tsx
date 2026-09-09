@@ -22,12 +22,12 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
     default: "The ultimate marketplace for modest gowns.",
-    template: "%s | Jgowns",
+    template: "%s | JGowns",
   },
   description:
     "Buy and sell pre-loved modest wedding gowns. Browse bridal, women's, mother-of-the-bride, girls', and maternity gowns from trusted sellers.",
   openGraph: {
-    siteName: "Jgowns",
+    siteName: "JGowns",
     locale: "en_US",
     type: "website",
   },
