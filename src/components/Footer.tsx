@@ -123,7 +123,7 @@ export default async function Footer() {
         </div>
 
         <div className="mt-12 flex flex-col gap-3 border-t border-(--line) pt-6 text-sm text-[#7f6c5b] sm:flex-row sm:items-center sm:justify-between">
-          <p>© {year} Jgowns</p>
+          <p>© {year} JGowns</p>
           <div className="flex items-center gap-5">
             <Link href="/terms" className={LINK_CLASS}>
               Terms of Use

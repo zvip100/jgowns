@@ -5,7 +5,7 @@ import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
   title: 'Sign In',
-  description: 'Sign in to your Jgowns account to manage your listings.',
+  description: 'Sign in to your JGowns account to manage your listings.',
   robots: { index: false },
 };
 

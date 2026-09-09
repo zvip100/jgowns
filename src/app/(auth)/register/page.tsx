@@ -6,7 +6,7 @@ import type { Metadata } from 'next';
 export const metadata: Metadata = {
   title: 'Create Account',
   description:
-    'Create a free Jgowns account to list and sell your modest gowns.',
+    'Create a free JGowns account to list and sell your modest gowns.',
 };
 
 type RegisterPageProps = {

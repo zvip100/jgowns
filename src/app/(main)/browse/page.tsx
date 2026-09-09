@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   description:
     "Shop pre-loved modest gowns. Filter by size, category, price, and location to find your perfect match.",
   openGraph: {
-    title: "Browse Modest Gowns | Jgowns",
+    title: "Browse Modest Gowns | JGowns",
     description:
       "Shop pre-loved modest gowns. Filter by size, category, price, and location to find your perfect match.",
     type: "website",
