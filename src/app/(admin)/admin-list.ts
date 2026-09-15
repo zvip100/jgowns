@@ -4,6 +4,7 @@ import {
   OFF_MARKET_STATUSES,
   endOfDayMs,
   segmentCutoffMs,
+  startOfDayMs,
 } from "@/lib/admin/list";
 
 import type { AdminListParams } from "@/lib/admin/list";
@@ -49,7 +50,7 @@ export function filterByDateRange<T>(
 ): T[] {
   if (!from && !to) return items;
 
-  const fromMs = from ? new Date(from).getTime() : -Infinity;
+  const fromMs = from ? startOfDayMs(from) : -Infinity;
   const toMs = to ? endOfDayMs(to) : Infinity;
 
   return items.filter((item) => {

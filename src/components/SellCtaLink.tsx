@@ -23,7 +23,7 @@ type SellCtaLinkProps = {
 };
 
 /**
- * A client leaf shared by all four CTAs, so the capture lives in one place and
+ * A client leaf shared by all five CTAs, so the capture lives in one place and
  * each Server Component parent stays a Server Component.
  */
 export function SellCtaLink({

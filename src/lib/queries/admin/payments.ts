@@ -1,5 +1,5 @@
 import { ADMIN_EMPTY_VALUE } from "@/lib/admin/constants";
-import { endOfDayMs, fetchAdminListPage } from "@/lib/admin/list";
+import { endOfDayMs, fetchAdminListPage, startOfDayMs } from "@/lib/admin/list";
 import { createClient } from "@/lib/supabase/server";
 
 import { resolveUserEmails } from "./users";
@@ -58,7 +58,7 @@ export async function getAdminPayments(
         query = query.ilike("listing.title", `%${params.query}%`);
       }
       if (params.from) {
-        query = query.gte("created_at", new Date(params.from).toISOString());
+        query = query.gte("created_at", new Date(startOfDayMs(params.from)).toISOString());
       }
       if (params.to) {
         query = query.lte(

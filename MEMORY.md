@@ -87,6 +87,8 @@ Uncommitted entries are still a draft. Before adding a line, `git diff MEMORY.md
 
 - [09-14-2026] decision: Sign-up with a registered email returns inline "An account with this email already exists. Sign in instead.", detected via Supabase's placeholder user with empty `identities` (confirm-email returns no error). Email enumeration accepted for clearer UX; rejected neutral "check your email" copy (promises an email that never arrives) and a custom account-exists email (needs a provider plus rate limiting).
 
+- [09-15-2026] decision: Admin `from`/`to` date filters resolve to New York day bounds (`startOfDayMs`/`endOfDayMs` in `lib/admin/list.ts`, DST-aware via `APP_TIME_ZONE`) so filtering matches the New York dates the tables display; every SQL query, the demo fixtures, and the age segments go through them. `queueCutoffDate` still picks its calendar day in UTC, which can shift a segment window by one day in the New York evening.
+
 ## Completed
 
 - [06-01-2026] completed: Fixed invalid listing ID showing error page — UUID guard in browse/[id]/page.tsx + dedicated not-found.tsx for that route

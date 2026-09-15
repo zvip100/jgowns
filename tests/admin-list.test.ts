@@ -16,6 +16,7 @@ import {
   parseAdminListParams,
   queueCutoffDate,
   segmentCutoffIso,
+  startOfDayMs,
   totalPagesFor,
 } from "@/lib/admin/list";
 import {
@@ -140,6 +141,17 @@ describe("filterByDateRange", () => {
       getDate,
     );
     expect(filtered).toEqual([dated("2026-02-15T09:30:00.000Z")]);
+  });
+
+  it("matches the New York day a row displays as", () => {
+    // 01:30Z on Sep 11 is 9:30 PM on Sep 10 in New York.
+    const lateEvening = dated("2026-09-11T01:30:00.000Z");
+    expect(
+      filterByDateRange([lateEvening], params({ to: "2026-09-10" }), getDate),
+    ).toEqual([lateEvening]);
+    expect(
+      filterByDateRange([lateEvening], params({ from: "2026-09-11" }), getDate),
+    ).toEqual([]);
   });
 });
 
@@ -322,18 +334,18 @@ describe("matchesListingSegment", () => {
   });
 
   it("includes the whole cutoff day on the older side", () => {
-    // Cutoff is 2026-07-01; late that day still counts as older.
+    // Cutoff is 2026-07-01; late that New York day still counts as older.
     expect(
       matchesListingSegment(
         ADMIN_STALE_ACTIVE_SEGMENT,
-        listing("active", "2026-07-01T23:59:00.000Z"),
+        listing("active", "2026-07-02T03:59:00.000Z"),
         asOf,
       ),
     ).toBe(true);
     expect(
       matchesListingSegment(
         ADMIN_STALE_ACTIVE_SEGMENT,
-        listing("active", "2026-07-02T00:00:01.000Z"),
+        listing("active", "2026-07-02T04:00:01.000Z"),
         asOf,
       ),
     ).toBe(false);
@@ -397,10 +409,35 @@ describe("matchesListingSegment", () => {
 });
 
 describe("endOfDayMs", () => {
-  it("covers the whole end day, not midnight on it", () => {
+  it("covers the whole New York end day, not midnight on it", () => {
     expect(endOfDayMs("2026-03-31")).toBe(
-      new Date("2026-04-01T00:00:00.000Z").getTime() - 1,
+      new Date("2026-04-01T04:00:00.000Z").getTime() - 1,
     );
+  });
+
+  it("ends a 25-hour fall-back day at New York midnight", () => {
+    expect(endOfDayMs("2026-11-01")).toBe(
+      new Date("2026-11-02T05:00:00.000Z").getTime() - 1,
+    );
+  });
+
+  it("stays NaN for an unparseable date instead of throwing", () => {
+    expect(endOfDayMs("not-a-date")).toBeNaN();
+  });
+});
+
+describe("startOfDayMs", () => {
+  it("starts at New York midnight in both standard and daylight time", () => {
+    expect(startOfDayMs("2026-01-15")).toBe(Date.parse("2026-01-15T05:00:00.000Z"));
+    expect(startOfDayMs("2026-09-10")).toBe(Date.parse("2026-09-10T04:00:00.000Z"));
+  });
+
+  it("starts a spring-forward day before the 2 AM jump", () => {
+    expect(startOfDayMs("2026-03-08")).toBe(Date.parse("2026-03-08T05:00:00.000Z"));
+  });
+
+  it("stays NaN for an unparseable date instead of throwing", () => {
+    expect(startOfDayMs("not-a-date")).toBeNaN();
   });
 });
 
@@ -479,7 +516,7 @@ describe("segmentCutoffIso", () => {
 
   it("looks forward from the start of the cutoff day for a newer segment", () => {
     expect(segmentCutoffIso({ days: 7, side: "newer" }, asOf)).toBe(
-      "2026-07-24T00:00:00.000Z",
+      "2026-07-24T04:00:00.000Z",
     );
   });
 
