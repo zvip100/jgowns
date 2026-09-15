@@ -59,6 +59,11 @@ type ConfirmActionDialogProps<TValue> = {
    * opens still showing the last attempt's message.
    */
   onOpen?: () => void;
+  /**
+   * Blocks confirm while the body is still preparing its value, so a value that
+   * is mid-flight (a photo being shrunk) cannot be submitted in its raw form.
+   */
+  isBusy?: boolean;
   onConfirm: (value: TValue) => Promise<ServerActionResult>;
   renderTrigger: (state: ConfirmActionDialogState) => ReactNode;
 };
@@ -74,6 +79,7 @@ export default function ConfirmActionDialog<TValue = void>({
   renderBody,
   validate,
   onOpen,
+  isBusy = false,
   onConfirm,
   renderTrigger,
 }: ConfirmActionDialogProps<TValue>) {
@@ -152,7 +158,7 @@ export default function ConfirmActionDialog<TValue = void>({
                 : undefined
             }
             onClick={handleConfirm}
-            disabled={isPending}
+            disabled={isPending || isBusy}
           >
             {isPending && (
               <Loader2 data-icon="inline-start" className="animate-spin" />

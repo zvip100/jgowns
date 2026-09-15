@@ -406,10 +406,19 @@ const EMPTY_PHOTO_VALUE: PhotoValue = { file: null };
  */
 function usePhotoFileSlot(id: string, label: string) {
   const [fileError, setFileError] = useState<string>();
+  const [isShrinking, setIsShrinking] = useState(false);
   const latestPickRef = useRef<File | null>(null);
 
   return {
-    onOpen: () => setFileError(undefined),
+    isShrinking,
+    // The ref is cleared too, or a shrink still running from a cancelled
+    // session would pass the identity guard and refill the fresh dialog with
+    // the photo the operator just discarded.
+    onOpen: () => {
+      setFileError(undefined);
+      setIsShrinking(false);
+      latestPickRef.current = null;
+    },
     validate: (value: PhotoValue) => {
       const parsed = listingImageFileSchema.safeParse(value.file);
       setFileError(parsed.success ? undefined : parsed.error.issues[0]?.message);
@@ -427,16 +436,24 @@ function usePhotoFileSlot(id: string, label: string) {
         error={fileError}
         disabled={isPending}
         // The preview shows the pick immediately, then the shrunk file swaps in
-        // once it is ready. A pick made while that runs wins, so a slow shrink
-        // never lands on top of a newer photo.
+        // once it is ready. Confirm is blocked until then, so the original is
+        // never what gets submitted, and only the newest pick may land.
         onSelect={async (file) => {
           setFileError(undefined);
           latestPickRef.current = file;
           setValue({ file });
-          if (!file) return;
-          const shrunk = await downscaleImageFile(file);
-          if (latestPickRef.current === file && shrunk !== file) {
+          if (!file) {
+            setIsShrinking(false);
+            return;
+          }
+
+          setIsShrinking(true);
+          try {
+            const shrunk = await downscaleImageFile(file);
+            if (latestPickRef.current !== file || shrunk === file) return;
             setValue({ file: shrunk });
+          } finally {
+            if (latestPickRef.current === file) setIsShrinking(false);
           }
         }}
       />
@@ -476,6 +493,7 @@ export function AdminReplaceImageButton({
       renderBody={slot.renderBody}
       onOpen={slot.onOpen}
       validate={slot.validate}
+      isBusy={slot.isShrinking}
       // No successMessage: the action always returns a face-count notice, which
       // the dialog prefers on the success path.
       onConfirm={(value) =>
@@ -506,6 +524,7 @@ export function AdminAddImageButton({ listingId, isDemo }: AdminListingIdProps) 
       renderBody={slot.renderBody}
       onOpen={slot.onOpen}
       validate={slot.validate}
+      isBusy={slot.isShrinking}
       onConfirm={(value) =>
         adminAddListingImage(listingId, photoFormData(value.file))
       }
