@@ -1,3 +1,52 @@
+const MAX_UPLOAD_DIMENSION = 2400;
+const DOWNSCALE_ABOVE_BYTES = 2 * 1024 * 1024;
+const DOWNSCALE_QUALITY = 0.9;
+
+/**
+ * Shrinks a large photo in the browser before it is uploaded. The server crops
+ * every photo to 1200x1600 anyway, so the extra megabytes only buy upload time,
+ * and a body that takes 15 to 40 seconds to send is what the dropped uploads had
+ * in common. WebP because it re-encodes smaller than JPEG and keeps alpha. Any
+ * file the browser cannot decode or re-encode falls through untouched.
+ */
+export async function downscaleImageFile(file: File): Promise<File> {
+  if (file.size <= DOWNSCALE_ABOVE_BYTES) return file;
+  if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') {
+    return file;
+  }
+
+  let bitmap: ImageBitmap | null = null;
+  try {
+    // Canvas drops EXIF, so the bitmap has to arrive already rotated or a phone
+    // photo would upload sideways and be stored that way.
+    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+
+    const scale = Math.min(
+      1,
+      MAX_UPLOAD_DIMENSION / Math.max(bitmap.width, bitmap.height),
+    );
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+
+    const context = canvas.getContext('2d');
+    if (!context) return file;
+    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob(resolve, 'image/webp', DOWNSCALE_QUALITY),
+    );
+    if (!blob || blob.size >= file.size) return file;
+
+    const base = file.name.replace(/\.[^.]+$/, '') || 'photo';
+    return new File([blob], `${base}.webp`, { type: 'image/webp' });
+  } catch {
+    return file;
+  } finally {
+    bitmap?.close();
+  }
+}
+
 export async function dataUrlToFile(
   dataUrl: string,
   filename: string,

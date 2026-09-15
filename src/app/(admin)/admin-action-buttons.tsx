@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import {
   Ban,
   CheckCircle2,
@@ -43,6 +43,7 @@ import {
   adminDeleteUser,
   adminUnbanUser,
 } from "@/lib/actions/admin/users";
+import { downscaleImageFile } from "@/lib/image-upload";
 import {
   MAX_SUSPENSION_NOTE_LENGTH,
   SUSPENSION_SLUGS,
@@ -405,6 +406,7 @@ const EMPTY_PHOTO_VALUE: PhotoValue = { file: null };
  */
 function usePhotoFileSlot(id: string, label: string) {
   const [fileError, setFileError] = useState<string>();
+  const latestPickRef = useRef<File | null>(null);
 
   return {
     onOpen: () => setFileError(undefined),
@@ -424,9 +426,18 @@ function usePhotoFileSlot(id: string, label: string) {
         file={value.file}
         error={fileError}
         disabled={isPending}
-        onSelect={(file) => {
+        // The preview shows the pick immediately, then the shrunk file swaps in
+        // once it is ready. A pick made while that runs wins, so a slow shrink
+        // never lands on top of a newer photo.
+        onSelect={async (file) => {
           setFileError(undefined);
+          latestPickRef.current = file;
           setValue({ file });
+          if (!file) return;
+          const shrunk = await downscaleImageFile(file);
+          if (latestPickRef.current === file && shrunk !== file) {
+            setValue({ file: shrunk });
+          }
         }}
       />
     ),
