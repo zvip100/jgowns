@@ -1,3 +1,5 @@
+import { APP_TIME_ZONE } from "@/lib/site";
+
 /** URL keys every admin list page filters on. */
 export const ADMIN_SEGMENT_PARAM = "status";
 export const ADMIN_SEARCH_PARAM = "q";
@@ -23,6 +25,7 @@ const ADMIN_DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
   year: "numeric",
+  timeZone: APP_TIME_ZONE,
 });
 
 const ADMIN_DATE_TIME_FORMAT = new Intl.DateTimeFormat("en-US", {
@@ -31,6 +34,7 @@ const ADMIN_DATE_TIME_FORMAT = new Intl.DateTimeFormat("en-US", {
   year: "numeric",
   hour: "numeric",
   minute: "2-digit",
+  timeZone: APP_TIME_ZONE,
 });
 
 export function formatAdminDate(iso: string): string {

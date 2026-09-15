@@ -19,6 +19,10 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+// Every branch (not found, sold, suspended, the form) turns on the per-user
+// ownership check, so there is no user-independent shell to prerender.
+export const instant = false;
+
 type EditListingPageProps = {
   params: Promise<{ id: string }>;
 };

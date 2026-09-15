@@ -37,6 +37,8 @@ export type RequestPasswordResetResult =
 export type UpdatePasswordInput = { password: string; next?: string };
 
 const SIGN_UP_SUCCESS_MESSAGE = "Check your email to confirm your account!";
+const ACCOUNT_EXISTS_MESSAGE =
+  "An account with this email already exists. Sign in instead.";
 const RESET_EMAIL_SENT_MESSAGE =
   "Check your email for a link to reset your password.";
 const RESET_PASSWORD_PATH = "/reset-password";
@@ -141,7 +143,7 @@ export async function signUp(input: SignUpInput): Promise<SignUpResult> {
   const origin = await getRequestOrigin();
   const next = safeNextPath(input.next);
 
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
@@ -153,6 +155,12 @@ export async function signUp(input: SignUpInput): Promise<SignUpResult> {
   if (error) {
     console.error("Sign-up failed:", error.message);
     return { error: error.message };
+  }
+
+  // With email confirmation on, Supabase answers an existing email with a
+  // placeholder user that has no identities instead of an error.
+  if (data.user?.identities?.length === 0) {
+    return { error: ACCOUNT_EXISTS_MESSAGE };
   }
 
   return { success: true, message: SIGN_UP_SUCCESS_MESSAGE };

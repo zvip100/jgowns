@@ -23,6 +23,7 @@ import { TextInputField } from '@/components/form/TextInputField';
 import { TextareaField } from '@/components/form/TextareaField';
 import { useListingFormSubmit } from '@/hooks/useListingFormSubmit';
 import { useListingImageSlots } from '@/hooks/useListingImageSlots';
+import { formatFeeDollars } from '@/lib/listing-fee';
 import { PRIMARY_CTA_CLASS } from '@/lib/styles';
 import { Button } from '@/components/ui/button';
 import { FieldError, FieldGroup } from '@/components/ui/field';
@@ -32,12 +33,6 @@ type ListingFormProps = {
   listingId?: string;
   listingFeeCents?: number;
 };
-
-/** `500` -> "$5", `550` -> "$5.50". */
-function formatFeeDollars(cents: number): string {
-  const dollars = cents / 100;
-  return Number.isInteger(dollars) ? `$${dollars}` : `$${dollars.toFixed(2)}`;
-}
 
 export default function ListingForm({
   initial,

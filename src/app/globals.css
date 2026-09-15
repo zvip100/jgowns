@@ -24,9 +24,20 @@
   --accent: #b3854c;
   --accent-deep: #8e6330;
   --sold: #a02238;
+  /* One error colour for the whole app: field errors (via --destructive) and
+     error toasts (via --toast-error) both resolve here, so the two surfaces
+     cannot drift to different reds. 4.77:1 on the cream ground. */
+  --error: #b4531f;
   --focus-ring: rgba(179, 133, 76, 0.42);
 
-  /* Brand gold gradient — single source for every gold CTA/pill/badge surface. */
+  /* Brand gold gradient — single source for every gold CTA/pill/badge surface.
+     KNOWN, DELIBERATE WCAG AA EXCEPTION (decided 09-10-2026): the white 12px/600
+     label on this gradient measures 2.75:1 at the top stop, 3.15:1 mid, 3.62:1
+     at the bottom (sampled from rendered pixels), against AA's 4.5:1 for text
+     this size. Darkening to roughly #966b3c -> #7d5729 is what would clear it,
+     and that was weighed and rejected: it is the brand's most-repeated surface
+     and the deeper golds were judged worse. Do not "fix" this by darkening the
+     gradient, and do not re-raise it as a new finding. */
   --gold-gradient: linear-gradient(180deg, #c49a68, #a67841);
 
   /* Sticky navbar offset — matches the borderless navbar's rem-based height
@@ -55,7 +66,7 @@
   --muted: var(--bg-ivory);
   --muted-foreground: var(--muted-ink);
   --accent-foreground: #ffffff;
-  --destructive: oklch(0.577 0.245 27.325);
+  --destructive: var(--error);
   --border: rgb(217 201 182);
   --input: rgb(217 201 182);
   --ring: var(--focus-ring);
@@ -589,7 +600,7 @@
   --toast-success: #6f7a4a;
   --toast-warning: #c68a2c;
   --toast-info: var(--accent);
-  --toast-error: #b4531f;
+  --toast-error: var(--error);
 }
 
 .toaster[data-sonner-toaster][data-sonner-theme="light"] {

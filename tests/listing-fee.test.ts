@@ -71,4 +71,18 @@ describe("listing-fee", () => {
     const { isListingFeeActive } = await importFresh();
     expect(isListingFeeActive()).toBe(true);
   });
+
+  describe("formatFeeDollars", () => {
+    it.each([
+      [2500, "$25"],
+      [500, "$5"],
+      [550, "$5.50"],
+      [99, "$0.99"],
+      [5, "$0.05"],
+      [0, "$0"],
+    ])("formats %i cents as %s", async (cents, expected) => {
+      const { formatFeeDollars } = await importFresh();
+      expect(formatFeeDollars(cents)).toBe(expected);
+    });
+  });
 });

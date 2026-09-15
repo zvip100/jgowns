@@ -13,6 +13,7 @@ import {
   listingPriceValue,
   sortListingSizes,
 } from "@/lib/listing-variants";
+import { APP_TIME_ZONE } from "@/lib/site";
 import { GOWN_CATEGORIES } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -220,6 +221,7 @@ export function ListingDetail({
                   year: "numeric",
                   month: "long",
                   day: "numeric",
+                  timeZone: APP_TIME_ZONE,
                 })}
               </dd>
             </div>

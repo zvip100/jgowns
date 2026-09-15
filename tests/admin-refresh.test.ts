@@ -142,16 +142,16 @@ describe("rememberRefreshedAt", () => {
 });
 
 describe("formatRefreshedAt", () => {
-  it("labels the local wall-clock time", () => {
+  it("labels the New York wall-clock time", () => {
     const { label } = formatRefreshedAt(NOW);
 
-    expect(normalizeSpaces(label)).toBe("Last refreshed at 3:42 PM");
+    expect(normalizeSpaces(label)).toBe("Last refreshed at 11:42 AM");
   });
 
-  it("carries the full local date and time as the title", () => {
+  it("carries the full New York date and time as the title", () => {
     const { title } = formatRefreshedAt(NOW);
 
-    expect(normalizeSpaces(title)).toBe("August 27, 2026 at 3:42 PM");
+    expect(normalizeSpaces(title)).toBe("August 27, 2026 at 11:42 AM");
   });
 
   it("carries a machine-readable dateTime", () => {

@@ -4,6 +4,7 @@ import { PackageOpen, Plus, Sparkles } from 'lucide-react';
 import { SellCtaLink } from '@/components/SellCtaLink';
 import { isListingFeeActive } from '@/lib/listing-fee';
 import { createClient } from '@/lib/supabase/server';
+import { PRIMARY_CTA_PILL_CLASS } from '@/lib/styles';
 import { Button } from '@/components/ui/button';
 import {
   Empty,
@@ -95,20 +96,21 @@ async function DashboardContent({
   );
 }
 
-export default async function DashboardPage() {
+async function fetchUserListings(): Promise<ListingWithSizes[]> {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
 
-  async function fetchUserListings(): Promise<ListingWithSizes[]> {
-    const { data } = await supabase
-      .from('listings')
-      .select('*, sizes:listing_sizes(*)')
-      .eq('user_id', user!.id)
-      .neq('status', 'removed')
-      .order('created_at', { ascending: false });
-    return (data ?? []) as ListingWithSizes[];
-  }
+  const { data } = await supabase
+    .from('listings')
+    .select('*, sizes:listing_sizes(*)')
+    .eq('user_id', user.id)
+    .neq('status', 'removed')
+    .order('created_at', { ascending: false });
+  return (data ?? []) as ListingWithSizes[];
+}
 
+export default function DashboardPage() {
   const listingsPromise = fetchUserListings();
 
   return (
@@ -130,7 +132,7 @@ export default async function DashboardPage() {
         </div>
         <Button
           asChild
-          className="h-11 rounded-full border border-[#b58d5f]/70 gold-gradient px-5 text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)] transition hover:-translate-y-0.5 hover:brightness-105"
+          className={PRIMARY_CTA_PILL_CLASS}
         >
           <SellCtaLink placement="dashboard">
             <Plus data-icon="inline-start" />

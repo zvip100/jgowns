@@ -360,6 +360,30 @@ describe("signUp", () => {
     expect(mockSignUp).not.toHaveBeenCalled();
   });
 
+  it("reports an existing account when Supabase returns a user with no identities", async () => {
+    mockSignUp.mockResolvedValue({
+      data: { user: { id: "u1", identities: [] } },
+      error: null,
+    });
+
+    const result = await signUp({ email: "a@b.com", password: "secret6" });
+
+    expect(result).toEqual({
+      error: "An account with this email already exists. Sign in instead.",
+    });
+  });
+
+  it("treats a new user with an identity as a successful sign-up", async () => {
+    mockSignUp.mockResolvedValue({
+      data: { user: { id: "u1", identities: [{ id: "i1" }] } },
+      error: null,
+    });
+
+    const result = await signUp({ email: "a@b.com", password: "secret6" });
+
+    expect(result).toEqual({ success: true, message: SUCCESS_MESSAGE });
+  });
+
   it("surfaces the Supabase error message", async () => {
     mockSignUp.mockResolvedValue({
       data: {},

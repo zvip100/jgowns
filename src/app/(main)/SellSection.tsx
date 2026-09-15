@@ -2,11 +2,21 @@ import { Plus } from 'lucide-react';
 
 import { SellCtaLink } from '@/components/SellCtaLink';
 import { Button } from '@/components/ui/button';
+import {
+  formatFeeDollars,
+  getListingFeeCents,
+  isListingFeeActive,
+} from '@/lib/listing-fee';
 
 import ScrollReveal from './ScrollReveal';
 
+import type { ReactNode } from 'react';
+
+/* Fixed 1.3em box: Fraunces has no tnum feature, so 01/02/03 measure three
+   different widths and the titles overlapping them lose their shared left edge.
+   Reserving the widest advance is what keeps that edge straight. */
 const STEP_NUMBER_CLASS =
-  'font-display text-[3.4rem] leading-none font-medium text-(--accent-deep)/25 sm:text-[4rem]';
+  'font-display w-[1.3em] shrink-0 text-[3.4rem] leading-none font-medium text-(--accent-deep)/25 sm:text-[4rem]';
 
 const STEP_RISE_CLASSES = [
   'reveal-item [transition-delay:180ms]',
@@ -14,7 +24,38 @@ const STEP_RISE_CLASSES = [
   'reveal-item [transition-delay:360ms]',
 ];
 
-const steps = [
+type SellStep = {
+  n: string;
+  title: string;
+  detail: ReactNode;
+};
+
+/**
+ * The price rides inside step 02's own sentence rather than sitting under it.
+ * Reads the fee env at module scope via `listing-fee`, so the value is baked in
+ * at build time and the home page stays prerendered. Changing the env means a
+ * redeploy, which is already true of every other consumer of these vars.
+ */
+function publishClause(): ReactNode {
+  const cents = getListingFeeCents();
+  if (cents === 0) return 'publish for free';
+
+  const fee = `a one-time ${formatFeeDollars(cents)} fee`;
+  if (isListingFeeActive()) return `publish for ${fee}`;
+
+  /* "publish for" stays live so the live words alone read straight through:
+     "publish for free for a limited time". Only the terms that no longer
+     apply carry the rule. */
+  return (
+    <>
+      publish for{' '}
+      <span className="text-(--muted-ink)/55 line-through">{fee}</span>{' '}
+      free for a limited time
+    </>
+  );
+}
+
+const steps: SellStep[] = [
   {
     n: '01',
     title: 'Photograph',
@@ -23,7 +64,12 @@ const steps = [
   {
     n: '02',
     title: 'List',
-    detail: 'Add a few details, set your price. Listed until someone falls for it.',
+    detail: (
+      <>
+        Add a few details, set your price, and {publishClause()}. Listed until
+        someone falls for it.
+      </>
+    ),
   },
   {
     n: '03',

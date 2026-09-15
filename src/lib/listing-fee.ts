@@ -23,3 +23,9 @@ export function getListingFeeCents(): number {
 export function isListingFeeActive(): boolean {
   return LISTING_FEE_CENTS > 0 && !PAYMENTS_SUSPENDED;
 }
+
+/** `500` -> "$5", `550` -> "$5.50". */
+export function formatFeeDollars(cents: number): string {
+  const dollars = cents / 100;
+  return Number.isInteger(dollars) ? `$${dollars}` : `$${dollars.toFixed(2)}`;
+}

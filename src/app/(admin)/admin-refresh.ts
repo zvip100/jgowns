@@ -1,3 +1,5 @@
+import { APP_TIME_ZONE } from "@/lib/site";
+
 /** How long an open admin page may keep showing the data it rendered with. */
 export const ADMIN_REFRESH_INTERVAL_MS = 60 * 60 * 1000;
 
@@ -37,11 +39,13 @@ export function rememberRefreshedAt(
 const REFRESH_TIME_FORMAT = new Intl.DateTimeFormat("en-US", {
   hour: "numeric",
   minute: "2-digit",
+  timeZone: APP_TIME_ZONE,
 });
 
 const REFRESH_DATE_TIME_FORMAT = new Intl.DateTimeFormat("en-US", {
   dateStyle: "long",
   timeStyle: "short",
+  timeZone: APP_TIME_ZONE,
 });
 
 export type RefreshedAtLabel = {

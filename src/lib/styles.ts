@@ -1,6 +1,14 @@
 import type { AdminActorRole } from "@/lib/admin/types";
 import type { ListingStatus } from "@/lib/types";
 
+/**
+ * Auto-width gold call to action, for a CTA that sits inline beside other
+ * content rather than filling a form or panel. `PRIMARY_CTA_CLASS` is the
+ * full-width counterpart.
+ */
+export const PRIMARY_CTA_PILL_CLASS =
+  "h-11 rounded-full border border-[#b58d5f]/70 gold-gradient px-5 text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)] transition hover:-translate-y-0.5 hover:brightness-105";
+
 /** Shared gold-gradient primary call-to-action button styling */
 export const PRIMARY_CTA_CLASS =
   "w-full rounded-full border border-[#b58d5f]/70 gold-gradient text-xs font-semibold uppercase tracking-[0.12em] text-white shadow-[0_10px_24px_rgba(106,74,39,0.25)] hover:-translate-y-0.5 hover:brightness-105";
