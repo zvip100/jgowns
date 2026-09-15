@@ -154,4 +154,10 @@ describe("ConfirmActionButton: the validate gate", () => {
     render({ onOpen });
     expect(dialogProps[0].onOpen).toBe(onOpen);
   });
+
+  it("forwards isBusy, which is what holds confirm while a body prepares its value", () => {
+    dialogProps.length = 0;
+    render({ isBusy: true });
+    expect(dialogProps[0].isBusy).toBe(true);
+  });
 });

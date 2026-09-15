@@ -5,7 +5,11 @@ import { unstable_rethrow } from 'next/navigation';
 import { optimizeListingPhoto } from '@/lib/actions/images';
 import { captureEvent } from '@/lib/analytics/client';
 import { SELLER_EVENTS } from '@/lib/analytics/events';
-import { generateBlurDataUrl, dataUrlToFile } from '@/lib/image-upload';
+import {
+  downscaleImageFile,
+  generateBlurDataUrl,
+  dataUrlToFile,
+} from '@/lib/image-upload';
 import { MAX_LISTING_IMAGES, type ImageSlotState } from '@/lib/types';
 
 import type { OptimizeListingPhotoResult } from '@/lib/actions/images';
@@ -98,8 +102,12 @@ export function useListingImageSlots({
       existingUrl: null,
     });
 
+    // Shrunk before it crosses the network, not after: a multi-megabyte body is
+    // what the dropped uploads had in common.
+    const uploadFile = await downscaleImageFile(file);
+
     const optimizeForm = new FormData();
-    optimizeForm.set('image', file);
+    optimizeForm.set('image', uploadFile);
 
     // The action itself always returns, so a rejection is the request failing
     // to complete (offline, a body the host refused, a 500). Folding it into
@@ -154,11 +162,14 @@ export function useListingImageSlots({
 
     updateSlotById(slotId, {
       optimizing: false,
+      // The submit falls back to uploading the file itself, so it keeps the
+      // shrunk one rather than the original the seller picked.
+      imageFile: uploadFile,
       optimizeError:
         'error' in result && result.error
           ? `Failed to automatically optimize image. You can try uploading again. (${result.error.length > 140 ? `${result.error.slice(0, 137)}…` : result.error})`
           : 'Failed to automatically optimize image. You can try uploading again.',
-      blurPromise: generateBlurDataUrl(file),
+      blurPromise: generateBlurDataUrl(uploadFile),
     });
   };
 

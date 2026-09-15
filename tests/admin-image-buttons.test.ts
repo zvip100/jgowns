@@ -17,6 +17,7 @@ type DialogProps = {
   }) => ReactNode;
   validate?: (value: { file: File | null }) => boolean;
   onOpen?: () => void;
+  isBusy?: boolean;
   onConfirm: (value: { file: File | null }) => Promise<{ error?: string }>;
   successMessage?: string;
   [key: string]: unknown;
@@ -28,13 +29,17 @@ const {
   mockReplace,
   mockMove,
   mockToastError,
+  mockDownscale,
 } = vi.hoisted(() => ({
   dialogProps: [] as DialogProps[],
   mockAdd: vi.fn(),
   mockReplace: vi.fn(),
   mockMove: vi.fn(),
   mockToastError: vi.fn(),
+  mockDownscale: vi.fn(),
 }));
+
+vi.mock("@/lib/image-upload", () => ({ downscaleImageFile: mockDownscale }));
 
 /** Only the wiring is under test; the dialog's own flow lives in its own file. */
 vi.mock("@/components/ConfirmActionDialog", () => ({
@@ -102,6 +107,7 @@ beforeEach(() => {
   mockAdd.mockResolvedValue({});
   mockReplace.mockResolvedValue({});
   mockMove.mockResolvedValue({});
+  mockDownscale.mockImplementation(async (file: File) => file);
 });
 
 describe("AdminReplaceImageButton", () => {
@@ -241,6 +247,69 @@ describe("AdminAddImageButton", () => {
     const [listingId, formData] = mockAdd.mock.calls[0];
     expect(listingId).toBe(LISTING_ID);
     expect(formData.get("photo")).toBe(file);
+  });
+});
+
+describe("photo dialogs: the browser-side shrink", () => {
+  const shrunk = new File([new Uint8Array([9])], "gown.webp", {
+    type: "image/webp",
+  });
+
+  /** `renderBody` returns the one image field, whose props are the slot's contract. */
+  function onSelectOf(node: ReactNode): (file: File | null) => Promise<void> {
+    return (node as React.ReactElement<{ onSelect: (file: File | null) => Promise<void> }>)
+      .props.onSelect;
+  }
+
+  function mountAddDialog(setValue: (next: { file: File | null }) => void) {
+    render(React.createElement(AdminAddImageButton, { listingId: LISTING_ID }));
+    const props = dialogProps[0];
+    const body = props.renderBody?.({
+      value: { file: null },
+      setValue,
+      isPending: false,
+    });
+    return { props, onSelect: onSelectOf(body) };
+  }
+
+  it("shows the pick at once, then swaps in the shrunk file", async () => {
+    const setValue = vi.fn();
+    const original = photo();
+    mockDownscale.mockResolvedValueOnce(shrunk);
+
+    await mountAddDialog(setValue).onSelect(original);
+
+    expect(setValue.mock.calls).toEqual([
+      [{ file: original }],
+      [{ file: shrunk }],
+    ]);
+  });
+
+  it("hands the dialog a busy flag, so confirm can be held during a shrink", () => {
+    mountAddDialog(vi.fn());
+    expect(dialogProps[0].isBusy).toBe(false);
+  });
+
+  it("does not refill a reopened dialog with a cancelled pick", async () => {
+    const setValue = vi.fn();
+    const original = photo();
+    let finishShrink: (file: File) => void = () => {};
+    mockDownscale.mockReturnValueOnce(
+      new Promise<File>((resolve) => {
+        finishShrink = resolve;
+      }),
+    );
+
+    const { props, onSelect } = mountAddDialog(setValue);
+    const pending = onSelect(original);
+
+    // Cancelled and reopened while the shrink was still running.
+    props.onOpen?.();
+    finishShrink(shrunk);
+    await pending;
+
+    expect(setValue).toHaveBeenCalledTimes(1);
+    expect(setValue).toHaveBeenCalledWith({ file: original });
   });
 });
 

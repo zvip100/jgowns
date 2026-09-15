@@ -57,6 +57,9 @@ vi.mock("@/lib/analytics/client", () => ({ captureEvent: mockCaptureEvent }));
 vi.mock("@/lib/image-upload", () => ({
   generateBlurDataUrl: vi.fn().mockResolvedValue(null),
   dataUrlToFile: vi.fn(),
+  // The shrink step is a browser canvas round trip; the attempt it wraps is
+  // what this suite measures, so it passes the file straight through.
+  downscaleImageFile: vi.fn(async (file: File) => file),
 }));
 
 import { useListingImageSlots } from "@/hooks/useListingImageSlots";
