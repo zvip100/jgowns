@@ -82,6 +82,10 @@ describe("formatAdminDate", () => {
     // Midday UTC so US time zones land on the same calendar day.
     expect(formatAdminDate("2026-07-20T14:00:00.000Z")).toBe("Jul 20, 2026");
   });
+
+  it("reads the calendar day in New York, not UTC", () => {
+    expect(formatAdminDate("2026-09-11T01:30:00.000Z")).toBe("Sep 10, 2026");
+  });
 });
 
 describe("formatAdminDateTime", () => {
@@ -89,6 +93,12 @@ describe("formatAdminDateTime", () => {
     const formatted = formatAdminDateTime("2026-07-20T14:00:00.000Z");
     expect(formatted).toContain("Jul 20, 2026");
     expect(formatted).toMatch(/\d{1,2}:\d{2}\s?(AM|PM)/);
+  });
+
+  it("shows New York wall-clock time, not UTC", () => {
+    expect(
+      formatAdminDateTime("2026-09-10T21:14:58.000Z").normalize("NFKC"),
+    ).toBe("Sep 10, 2026, 5:14 PM");
   });
 });
 

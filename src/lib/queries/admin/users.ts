@@ -4,6 +4,7 @@ import {
   adminListResult,
   endOfDayMs,
   paginateAdminList,
+  startOfDayMs,
 } from "@/lib/admin/list";
 import { createClient } from "@/lib/supabase/server";
 import { createServiceClient } from "@/lib/supabase/service";
@@ -143,7 +144,7 @@ export async function getAdminUsers(
     );
   }
   if (params.from || params.to) {
-    const fromMs = params.from ? new Date(params.from).getTime() : -Infinity;
+    const fromMs = params.from ? startOfDayMs(params.from) : -Infinity;
     const toMs = params.to ? endOfDayMs(params.to) : Infinity;
     rows = rows.filter((user) => {
       const ms = new Date(user.created_at).getTime();

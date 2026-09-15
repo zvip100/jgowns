@@ -61,3 +61,9 @@ export const POSTHOG_PROJECT_URL = posthogProjectUrl.href;
  * an SDK; this does not).
  */
 export const POSTHOG_UI_HOST = posthogProjectUrl.origin;
+
+/**
+ * The business runs on New York time, but servers render in UTC, so every
+ * user-facing date or time formatter passes this explicitly.
+ */
+export const APP_TIME_ZONE = "America/New_York";

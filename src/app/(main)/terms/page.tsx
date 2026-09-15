@@ -13,7 +13,7 @@ export const metadata: Metadata = {
     "The terms that govern your use of JGowns.",
 };
 
-const LAST_UPDATED = "July 14, 2026";
+const LAST_UPDATED = "September 10, 2026";
 
 export default function TermsPage() {
   return (
@@ -49,10 +49,12 @@ export default function TermsPage() {
       <LegalSection title="3. The Service is a venue, not a party to any sale">
         <p>
           JGowns is a venue that connects buyers and sellers. We are not a party
-          to any transaction. We do not process payments, hold funds, provide
-          escrow, take commissions, ship goods, or take possession of any gown.
-          Buyers and sellers deal with each other directly and arrange payment
-          and delivery entirely between themselves.
+          to any sale of a gown. We do not process payments between a buyer and a
+          seller, hold funds, provide escrow, take commissions, ship goods, or
+          take possession of any gown. Buyers and sellers deal with each other
+          directly and arrange payment and delivery entirely between themselves.
+          The only payment we handle is the seller&apos;s publishing fee, covered
+          in section 14.
         </p>
         <p>
           We do not vet, endorse, or guarantee any user, listing, gown, price,
@@ -158,7 +160,7 @@ export default function TermsPage() {
       <LegalSection title="10. Third-party services & links">
         <p>
           We rely on third-party providers to operate the Service, including
-          Supabase, Google, and Railway. The Service may also link to third-party
+          Supabase, Google, Stripe, and Railway. The Service may also link to third-party
           sites. We are not responsible for the content, policies, or practices
           of any third party, and your use of their services is governed by
           their terms.
@@ -167,13 +169,16 @@ export default function TermsPage() {
 
       <LegalSection title="11. Disclaimers">
         <p>
-          The Service is provided &quot;as is&quot; and &quot;as available,&quot;
-          without warranties of any kind, express or implied, including
-          merchantability, fitness for a particular purpose, and
-          non-infringement. We do not warrant that the Service will be
-          uninterrupted or error-free, or that any gown, seller, or buyer is
-          genuine, safe, or suitable. Because we are only a venue, we make no
-          warranty about any gown or transaction.
+          <span className="font-semibold text-(--ink)">
+            The Service is provided &quot;as is&quot; and &quot;as
+            available,&quot; without warranties of any kind, express or implied,
+            including the implied warranties of merchantability, fitness for a
+            particular purpose, and non-infringement.
+          </span>{" "}
+          We do not warrant that the Service will be uninterrupted or
+          error-free, or that any gown, seller, or buyer is genuine, safe, or
+          suitable. Because we are only a venue, we make no warranty about any
+          gown or transaction.
         </p>
       </LegalSection>
 
@@ -184,7 +189,14 @@ export default function TermsPage() {
           punitive damages, or for any loss arising from your use of the Service,
           from any transaction or communication with another user, or from any
           gown you buy or sell. Our total liability for any claim relating to the
-          Service will not exceed one hundred U.S. dollars (USD $100).
+          Service will not exceed the greater of the fees you paid us in the
+          twelve months before the claim, or one hundred U.S. dollars (USD $100).
+        </p>
+        <p>
+          Nothing in these Terms limits any liability that cannot be limited
+          under applicable law, including liability for fraud, gross negligence,
+          or willful misconduct, or your rights under the New York General
+          Business Law.
         </p>
       </LegalSection>
 
@@ -198,22 +210,48 @@ export default function TermsPage() {
         </p>
       </LegalSection>
 
-      <LegalSection title="14. Termination, governing law, changes & contact">
+      <LegalSection title="14. Publishing fees">
+        <p>
+          Publishing a listing carries a one-time fee. We show the current amount
+          on the listing form before you pay, and you pay it through our payment
+          processor at checkout. Your listing goes live once the payment is
+          confirmed.
+        </p>
+        <p>
+          The fee covers publishing that listing. It is not a commission: we take
+          nothing from a sale, and buyers pay us nothing. Editing a listing after
+          it is published is free, and the fee does not change with the number of
+          sizes or photos you add.
+        </p>
+        <p>
+          <span className="font-medium text-(--ink)">
+            The publishing fee is non-refundable.
+          </span>{" "}
+          That includes a listing you later remove or mark as sold, and a gown
+          that does not sell.
+        </p>
+        <p>
+          We may change or waive the fee at any time. Any change applies only to
+          listings published after it takes effect.
+        </p>
+      </LegalSection>
+
+      <LegalSection title="15. Termination, governing law, changes & contact">
         <p>
           We may suspend or terminate your access to the Service at any time if
           you violate these Terms or if we discontinue the Service. You may stop
           using the Service and delete your account at any time.
         </p>
         <p>
-          These Terms are governed by the laws of the State of [State], without
-          regard to its conflict-of-law rules.
+          These Terms are governed by the laws of the State of New York, without
+          regard to its conflict-of-law rules. You and JGowns agree to the
+          exclusive jurisdiction of the state and federal courts located in New
+          York for any dispute arising from these Terms or the Service.
         </p>
         <p>
-          We currently do not process payments or charge fees. If we introduce
-          transactions, payments, or fees in the future, we will update these
-          Terms before doing so. We may otherwise update these Terms from time to
-          time; the &quot;Last updated&quot; date above reflects the latest
-          version, and your continued use after a change means you accept it.
+          We may update these Terms from time to time; the &quot;Last
+          updated&quot; date above reflects the latest version, and your
+          continued use after a change means you accept it.
         </p>
         <p>
           Questions about these Terms? Reach us through our{" "}

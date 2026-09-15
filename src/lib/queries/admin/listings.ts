@@ -6,6 +6,7 @@ import {
   endOfDayMs,
   fetchAdminListPage,
   segmentCutoffIso,
+  startOfDayMs,
 } from "@/lib/admin/list";
 import { createClient } from "@/lib/supabase/server";
 
@@ -120,7 +121,7 @@ export async function getAdminListings(
 
     if (params.query) query = query.ilike("title", `%${params.query}%`);
     if (params.from) {
-      query = query.gte("created_at", new Date(params.from).toISOString());
+      query = query.gte("created_at", new Date(startOfDayMs(params.from)).toISOString());
     }
     if (params.to) {
       query = query.lte(

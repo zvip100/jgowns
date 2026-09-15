@@ -1,6 +1,7 @@
 import { ADMIN_PAGE_SIZE, NEW_LISTING_WINDOW_DAYS, STALE_ACTIVE_DAYS, STUCK_PENDING_PAYMENT_DAYS } from "./constants";
 import { ADMIN_ACTOR_ROLES } from "./types";
 
+import { APP_TIME_ZONE } from "@/lib/site";
 import { firstParam } from "@/lib/utils";
 
 import type { PageSearchParams } from "@/lib/types";
@@ -117,9 +118,34 @@ export function queueCutoffDate(days: number, asOf: string): string {
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
+const ZONE_OFFSET_FORMAT = new Intl.DateTimeFormat("en-US", {
+  timeZone: APP_TIME_ZONE,
+  timeZoneName: "longOffset",
+});
+
+/** Midnight in `APP_TIME_ZONE` for the calendar day starting at `utcMidnight`, DST-aware. */
+function zoneMidnightMs(utcMidnight: number): number {
+  if (Number.isNaN(utcMidnight)) return utcMidnight;
+
+  const offset = ZONE_OFFSET_FORMAT.formatToParts(utcMidnight).find(
+    (part) => part.type === "timeZoneName",
+  )?.value;
+  const match = offset?.match(/GMT([+-])(\d{2}):(\d{2})/);
+  if (!match) return utcMidnight;
+
+  const sign = match[1] === "-" ? -1 : 1;
+  const offsetMs = sign * (Number(match[2]) * 60 + Number(match[3])) * 60_000;
+  return utcMidnight - offsetMs;
+}
+
+/** A `from` bound starts at midnight in the zone admin dates display in. */
+export function startOfDayMs(date: string): number {
+  return zoneMidnightMs(new Date(date).getTime());
+}
+
 /** A `to` bound covers the whole end day, not midnight on it. */
 export function endOfDayMs(date: string): number {
-  return new Date(date).getTime() + DAY_MS - 1;
+  return zoneMidnightMs(new Date(date).getTime() + DAY_MS) - 1;
 }
 
 /**
@@ -128,7 +154,7 @@ export function endOfDayMs(date: string): number {
  */
 export function segmentCutoffMs(rule: AgeSegmentRule, asOf: string): number {
   const cutoff = queueCutoffDate(rule.days, asOf);
-  return rule.side === "older" ? endOfDayMs(cutoff) : new Date(cutoff).getTime();
+  return rule.side === "older" ? endOfDayMs(cutoff) : startOfDayMs(cutoff);
 }
 
 /** The same cutoff as an ISO string, for a `gte`/`lte` against a timestamptz. */

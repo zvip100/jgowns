@@ -7,12 +7,13 @@ import { SELLER_EVENTS } from '@/lib/analytics/events';
 
 import type { ReactNode } from 'react';
 
-/** The four surfaces that send a seller to `/dashboard/new` (spec §5.2). */
+/** The five surfaces that send a seller to `/dashboard/new` (spec §5.2). */
 export type SellCtaPlacement =
   | 'home_sell_section'
   | 'nav'
   | 'dashboard'
-  | 'footer';
+  | 'footer'
+  | 'browse_empty';
 
 type SellCtaLinkProps = {
   placement: SellCtaPlacement;
@@ -22,7 +23,7 @@ type SellCtaLinkProps = {
 };
 
 /**
- * A client leaf shared by all four CTAs, so the capture lives in one place and
+ * A client leaf shared by all five CTAs, so the capture lives in one place and
  * each Server Component parent stays a Server Component.
  */
 export function SellCtaLink({

@@ -282,14 +282,14 @@ describe("getAdminListings", () => {
     expect(argsOf("listings", "eq")).toEqual([["status", "active"]]);
     const [column, cutoff] = argsOf("listings", "lte")[0];
     expect(column).toBe("created_at");
-    // 30 days before asOf, through the end of that day.
-    expect(cutoff).toBe("2026-07-01T23:59:59.999Z");
+    // 30 days before asOf, through the end of that New York day.
+    expect(cutoff).toBe("2026-07-02T03:59:59.999Z");
   });
 
   it("looks forward from the cutoff for a newer age segment", async () => {
     await getAdminListings(params({ status: ADMIN_NEW_WEEK_SEGMENT }), ASOF);
     expect(argsOf("listings", "gte")).toEqual([
-      ["created_at", "2026-07-24T00:00:00.000Z"],
+      ["created_at", "2026-07-24T04:00:00.000Z"],
     ]);
   });
 
@@ -302,10 +302,10 @@ describe("getAdminListings", () => {
     await getAdminListings(params({ from: "2026-01-01", to: "2026-02-01" }), ASOF);
 
     expect(argsOf("listings", "gte")).toEqual([
-      ["created_at", "2026-01-01T00:00:00.000Z"],
+      ["created_at", "2026-01-01T05:00:00.000Z"],
     ]);
     expect(argsOf("listings", "lte")).toEqual([
-      ["created_at", "2026-02-01T23:59:59.999Z"],
+      ["created_at", "2026-02-02T04:59:59.999Z"],
     ]);
   });
 
@@ -670,10 +670,10 @@ describe("getAdminMessages", () => {
     await getAdminMessages(params({ from: "2026-07-01", to: "2026-07-31" }));
 
     expect(argsOf("contact_messages", "gte")).toEqual([
-      ["created_at", "2026-07-01T00:00:00.000Z"],
+      ["created_at", "2026-07-01T04:00:00.000Z"],
     ]);
     expect(argsOf("contact_messages", "lte")).toEqual([
-      ["created_at", "2026-07-31T23:59:59.999Z"],
+      ["created_at", "2026-08-01T03:59:59.999Z"],
     ]);
   });
 
