@@ -82,6 +82,7 @@ export default function ListingForm({
           label="Gown Title"
           required
           placeholder="e.g. Vera Wang Ball Gown, Ivory"
+          autoFocus={!isEdit}
           value={form.title || ''}
           error={errors.fields.title}
           onChange={(e) => setField('title', e.target.value)}

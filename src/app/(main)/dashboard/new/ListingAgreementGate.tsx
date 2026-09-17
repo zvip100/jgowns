@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import { Check, ShieldCheck } from 'lucide-react';
 
 import NoticePanel from '@/components/NoticePanel';
@@ -19,11 +19,6 @@ const LISTING_STANDARDS = [
 
 export default function ListingAgreementGate({ children }: ListingAgreementGateProps) {
   const [hasAgreed, setHasAgreed] = useState(false);
-  const formRegionRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (hasAgreed) formRegionRef.current?.focus();
-  }, [hasAgreed]);
 
   if (!hasAgreed) {
     return (
@@ -57,9 +52,5 @@ export default function ListingAgreementGate({ children }: ListingAgreementGateP
     );
   }
 
-  return (
-    <div ref={formRegionRef} tabIndex={-1} className='outline-none'>
-      {children}
-    </div>
-  );
+  return children;
 }

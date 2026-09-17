@@ -7,14 +7,11 @@ import type { ReactElement } from "react";
 const { hookState } = vi.hoisted(() => ({
   hookState: {
     states: [] as unknown[],
-    refs: [] as { current: unknown }[],
-    effects: [] as (() => void)[],
     stateIndex: 0,
-    refIndex: 0,
   },
 }));
 
-/** Minimal hook harness: state and refs persist across renders, effects are collected to run on demand. */
+/** Minimal hook harness: state persists across renders. */
 vi.mock("react", async () => {
   const actual = await vi.importActual<typeof import("react")>("react");
 
@@ -30,14 +27,6 @@ vi.mock("react", async () => {
         },
       ];
     },
-    useRef: <Value>(initial: Value): { current: Value } => {
-      const index = hookState.refIndex++;
-      if (!hookState.refs[index]) hookState.refs[index] = { current: initial };
-      return hookState.refs[index] as { current: Value };
-    },
-    useEffect: (effect: () => void) => {
-      hookState.effects.push(effect);
-    },
   };
 });
 
@@ -49,8 +38,6 @@ const FORM = React.createElement("form", { id: "listing-form" }, "Listing form")
 
 function resetRender(): void {
   hookState.stateIndex = 0;
-  hookState.refIndex = 0;
-  hookState.effects = [];
 }
 
 function render(): string {
@@ -72,7 +59,6 @@ function clickIAgree(): void {
 
 beforeEach(() => {
   hookState.states = [];
-  hookState.refs = [];
 });
 
 describe("ListingAgreementGate", () => {
@@ -92,31 +78,7 @@ describe("ListingAgreementGate", () => {
     const html = render();
 
     expect(html).toContain("listing-form");
-    expect(html).toContain('tabindex="-1"');
     expect(html).not.toContain("Our Listing Standards");
     expect(html).not.toContain("I Agree");
-  });
-
-  it("moves focus into the form region after agreeing", () => {
-    clickIAgree();
-    resetRender();
-    ListingAgreementGate({ children: FORM });
-
-    const focus = vi.fn();
-    hookState.refs[0].current = { focus };
-    hookState.effects.forEach((effect) => effect());
-
-    expect(focus).toHaveBeenCalledOnce();
-  });
-
-  it("does not move focus before the seller agrees", () => {
-    resetRender();
-    ListingAgreementGate({ children: FORM });
-
-    const focus = vi.fn();
-    hookState.refs[0].current = { focus };
-    hookState.effects.forEach((effect) => effect());
-
-    expect(focus).not.toHaveBeenCalled();
   });
 });
