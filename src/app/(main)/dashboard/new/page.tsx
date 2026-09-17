@@ -4,6 +4,7 @@ import { getListingFeeCents, isListingFeeActive } from '@/lib/listing-fee';
 import { getSessionContact } from '@/lib/queries/auth';
 import ListingForm from '@/components/ListingForm';
 
+import ListingAgreementGate from './ListingAgreementGate';
 import ListingFormSkeleton from './ListingFormSkeleton';
 
 import type { Metadata } from 'next';
@@ -32,9 +33,11 @@ export default function NewListingPage() {
         <h1 className='text-[2rem] text-[#2f241b] sm:text-[2.35rem]'>List Your Gown</h1>
         <p className='mt-2 text-sm text-[#7d6652]'>Connect directly with buyers looking for exactly this</p>
       </div>
-      <Suspense fallback={<ListingFormSkeleton />}>
-        <PrefilledListingForm />
-      </Suspense>
+      <ListingAgreementGate>
+        <Suspense fallback={<ListingFormSkeleton />}>
+          <PrefilledListingForm />
+        </Suspense>
+      </ListingAgreementGate>
     </div>
   );
 }

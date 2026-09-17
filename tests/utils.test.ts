@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  capitalizeWords,
   cn,
   digitsOnlyPhone,
   firstParam,
@@ -51,6 +52,40 @@ describe("utils", () => {
 
     it("returns undefined for an empty array", () => {
       expect(firstParam([])).toBeUndefined();
+    });
+  });
+
+  describe("capitalizeWords", () => {
+    it("capitalizes each lowercase word", () => {
+      expect(capitalizeWords("vera wang ball gown")).toBe("Vera Wang Ball Gown");
+    });
+
+    it("preserves the rest of each word as typed", () => {
+      expect(capitalizeWords("mcQueen gown")).toBe("McQueen Gown");
+      expect(capitalizeWords("LBD")).toBe("LBD");
+      expect(capitalizeWords("iVORY lace")).toBe("IVORY Lace");
+    });
+
+    it("keeps original spacing between words", () => {
+      expect(capitalizeWords("ivory   lace\tgown")).toBe("Ivory   Lace\tGown");
+      expect(capitalizeWords("  ivory ")).toBe("  Ivory ");
+    });
+
+    it("leaves already capitalized text unchanged", () => {
+      expect(capitalizeWords("Vera Wang Ball Gown")).toBe("Vera Wang Ball Gown");
+    });
+
+    it("capitalizes a single word", () => {
+      expect(capitalizeWords("gown")).toBe("Gown");
+    });
+
+    it("leaves words starting with digits or punctuation as is", () => {
+      expect(capitalizeWords("2 piece set (ivory)")).toBe("2 Piece Set (ivory)");
+      expect(capitalizeWords("a-line gown, size 8")).toBe("A-line Gown, Size 8");
+    });
+
+    it("returns an empty string unchanged", () => {
+      expect(capitalizeWords("")).toBe("");
     });
   });
 

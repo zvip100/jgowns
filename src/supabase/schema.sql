@@ -109,7 +109,7 @@ create table listing_sizes (
     (size_group = 'toddler' and size in ('2T','3T','4T','5T','6T','7T','8T','9T','10T')) or
     (size_group = 'kids'    and size in ('3','5','6','7','8','10','12','14','16')) or
     (size_group = 'junior'  and size in ('J6','J8','J10','J12','J14','J16','J18')) or
-    (size_group = 'adult'   and size in ('0','2','4','6','8','10','12','14','16','18','20','22','24','26','28','30','32','34','36'))
+    (size_group = 'adult'   and size in ('OS','0','2','4','6','8','10','12','14','16','18','20','22','24','26','28','30','32','34','36'))
   )
 );
 
