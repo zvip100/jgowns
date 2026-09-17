@@ -35,8 +35,14 @@ function evenSizesThrough(max: number): string[] {
   return sizes;
 }
 
-/** US formal even sizes — bridal, MOTB, women, maternity, and girls (adult group). */
-export const ADULT_FORMAL_SIZES = evenSizesThrough(36) as readonly string[];
+/** US formal sizes (OS = one size fits all) — bridal, MOTB, women, maternity, and girls (adult group). */
+export const ADULT_FORMAL_SIZES: readonly string[] = [
+  "OS",
+  ...evenSizesThrough(36),
+];
+
+/** Adult-group sizes offered only to adult categories, never to girls. */
+const ADULT_CATEGORY_ONLY_SIZES: readonly string[] = ["OS"];
 
 const TODDLER_SIZES = [
   "2T",
@@ -121,7 +127,9 @@ function categorySizeOptions(
 ): readonly SizeOption[] {
   return CATEGORY_GROUP_SLUGS[category].flatMap((slug) => {
     const def = SIZE_GROUP_DEFS.find((d) => d.slug === slug)!;
-    return buildOptionsForGroup(def);
+    const options = buildOptionsForGroup(def);
+    if (isAdultGownCategory(category)) return options;
+    return options.filter((o) => !ADULT_CATEGORY_ONLY_SIZES.includes(o.value));
   });
 }
 

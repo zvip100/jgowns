@@ -1186,7 +1186,7 @@ describe("updateListing", () => {
     );
     expect(capture.payload).toEqual(
       expect.objectContaining({
-        title: "Pending gown (edited)",
+        title: "Pending Gown (edited)",
         status: "pending_payment",
       }),
     );

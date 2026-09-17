@@ -25,6 +25,7 @@ import { useListingFormSubmit } from '@/hooks/useListingFormSubmit';
 import { useListingImageSlots } from '@/hooks/useListingImageSlots';
 import { formatFeeDollars } from '@/lib/listing-fee';
 import { PRIMARY_CTA_CLASS } from '@/lib/styles';
+import { capitalizeWords } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { FieldError, FieldGroup } from '@/components/ui/field';
 
@@ -81,9 +82,14 @@ export default function ListingForm({
           label="Gown Title"
           required
           placeholder="e.g. Vera Wang Ball Gown, Ivory"
+          autoFocus={!isEdit}
           value={form.title || ''}
           error={errors.fields.title}
           onChange={(e) => setField('title', e.target.value)}
+          onBlur={(e) => {
+            const capitalized = capitalizeWords(e.target.value);
+            if (capitalized !== e.target.value) setField('title', capitalized);
+          }}
         />
 
         <TextareaField

@@ -39,6 +39,15 @@ export const optionalPhoneSchema = z.preprocess(
     .optional(),
 );
 
+/** Uppercases the first character of each whitespace-separated word, leaving the rest as typed. */
+export function capitalizeWords(value: string): string {
+  return value.replace(
+    /(^|\s)(\S)/g,
+    (_match: string, boundary: string, first: string): string =>
+      `${boundary}${first.toUpperCase()}`,
+  );
+}
+
 const UUID_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 

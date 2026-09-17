@@ -102,6 +102,19 @@ describe("variantRowsPayload", () => {
     expect(rows.map((r) => r.sort_order)).toEqual([0, 1]);
   });
 
+  it("orders one size (OS) before every numeric adult size", () => {
+    const rows = variantRowsPayload(
+      parse({
+        sizes: [
+          { size: "0", size_group: "adult", price: 300 },
+          { size: "OS", size_group: "adult", price: 400 },
+        ],
+      }),
+    );
+    expect(rows.map((r) => r.size)).toEqual(["OS", "0"]);
+    expect(rows.map((r) => r.sort_order)).toEqual([0, 1]);
+  });
+
   it("mirrors the set price onto every variant of a set-only listing", () => {
     const rows = variantRowsPayload(
       parse({
@@ -223,6 +236,50 @@ describe("zodListingFormErrorMessage", () => {
         }),
       ),
     ).toBe("Please fill in all required fields.");
+  });
+});
+
+describe("listingInputSchema title", () => {
+  it("trims and capitalizes each word, keeping the rest as typed", () => {
+    expect(parse({ title: "  vera wang mcQueen LBD  " }).title).toBe(
+      "Vera Wang McQueen LBD",
+    );
+  });
+
+  it("validates length before capitalizing", () => {
+    const parsed = listingInputSchema.safeParse({ title: "  ab " });
+    expect(parsed.success).toBe(false);
+    expect(
+      parsed.error?.issues.some((issue) => issue.path[0] === "title"),
+    ).toBe(true);
+  });
+});
+
+describe("listingInputSchema one size (OS)", () => {
+  it("accepts OS for an adult category", () => {
+    expect(
+      parse({ sizes: [{ size: "OS", size_group: "adult", price: 400 }] })
+        .sizes[0].size,
+    ).toBe("OS");
+  });
+
+  it("rejects OS for girls", () => {
+    const parsed = listingInputSchema.safeParse({
+      title: "Ivory lace gown",
+      location: "Monsey",
+      condition: "Brand New",
+      category: "girls",
+      sizes: [{ size: "OS", size_group: "adult", price: 400 }],
+      contact_email: "seller@example.com",
+      contact_methods: [],
+    });
+    expect(parsed.success).toBe(false);
+    expect(parsed.error?.issues).toContainEqual(
+      expect.objectContaining({
+        path: ["sizes", 0, "size"],
+        message: "Size is not valid for this category.",
+      }),
+    );
   });
 });
 

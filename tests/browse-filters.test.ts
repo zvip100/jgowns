@@ -84,6 +84,10 @@ describe("browse-filters", () => {
         expect(parseBrowseFilters({ color: "Ivory" }).color).toEqual(["Ivory"]);
       });
 
+      it("accepts Lavender", () => {
+        expect(parseBrowseFilters({ color: "Lavender" }).color).toEqual(["Lavender"]);
+      });
+
       it("accepts multiple valid colors", () => {
         const filters = parseBrowseFilters({ color: "Ivory,White" });
         expect(filters.color).toEqual(["Ivory", "White"]);

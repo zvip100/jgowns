@@ -8,7 +8,7 @@ import {
   SIZE_GROUPS,
   type GownCategoryId,
 } from "@/lib/types";
-import { optionalPhoneSchema } from "@/lib/utils";
+import { capitalizeWords, optionalPhoneSchema } from "@/lib/utils";
 
 const CATEGORY_IDS = GOWN_CATEGORIES.map((c) => c.id) as [
   GownCategoryId,
@@ -29,7 +29,11 @@ const sizeEntrySchema = z.object({
  * client-side field validation), so the rules and messages live once. */
 export const listingInputSchema = z
   .object({
-    title: z.string().trim().min(4, "Enter a title of at least 4 characters."),
+    title: z
+      .string()
+      .trim()
+      .min(4, "Enter a title of at least 4 characters.")
+      .transform(capitalizeWords),
     description: z.string().trim().optional(),
     color: z.string().trim().optional(),
     location: z.string().trim().min(1, "Choose your location."),

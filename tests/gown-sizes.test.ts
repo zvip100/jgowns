@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  ALL_VALID_SIZE_LABELS,
   decodeSizeFilterToken,
   encodeSizeFilterToken,
   findSizeOption,
@@ -47,7 +48,7 @@ describe("gown-sizes", () => {
     expect(decodeSizeFilterToken("x:8")).toBeNull();
   });
 
-  it("includes full adult formal grid for girls", () => {
+  it("includes the adult formal grid for girls, without OS", () => {
     const adultSizes = getSizeOptionsForCategory("girls")
       .filter((o) => o.sizeGroup === "adult")
       .map((o) => o.value);
@@ -55,15 +56,16 @@ describe("gown-sizes", () => {
     expect(adultSizes).toContain("6");
     expect(adultSizes).toContain("8");
     expect(adultSizes).toContain("36");
+    expect(adultSizes).not.toContain("OS");
     expect(adultSizes.length).toBe(19);
   });
 
   describe("getSizeOptionsForCategory", () => {
-    it("bridal has only junior and adult groups (26 options)", () => {
+    it("bridal has only junior and adult groups (27 options)", () => {
       const options = getSizeOptionsForCategory("bridal");
       const groups = [...new Set(options.map((o) => o.sizeGroup))];
       expect(groups).toEqual(["junior", "adult"]);
-      expect(options.length).toBe(26);
+      expect(options.length).toBe(27);
     });
 
     it("mother-of-the-bride matches bridal size groups", () => {
@@ -188,14 +190,14 @@ describe("gown-sizes", () => {
   });
 
   describe("getSizeFilterOptions", () => {
-    it("returns all 44 options for no category", () => {
-      expect(getSizeFilterOptions(null).length).toBe(44);
-      expect(getSizeFilterOptions(undefined).length).toBe(44);
+    it("returns all 45 options for no category", () => {
+      expect(getSizeFilterOptions(null).length).toBe(45);
+      expect(getSizeFilterOptions(undefined).length).toBe(45);
     });
 
     it("returns only the category's options when a category is given", () => {
       const bridal = getSizeFilterOptions("bridal");
-      expect(bridal.length).toBe(26);
+      expect(bridal.length).toBe(27);
       expect(bridal.every((o) => ["junior", "adult"].includes(o.sizeGroup))).toBe(
         true,
       );
@@ -209,7 +211,7 @@ describe("gown-sizes", () => {
       expect(tokens).toContain("k:8");
       expect(tokens).toContain("j:J10");
       expect(tokens).toContain("a:8");
-      expect(tokens.length).toBe(44);
+      expect(tokens.length).toBe(45);
     });
 
     it("returns only valid tokens for bridal (junior + adult)", () => {
@@ -218,7 +220,7 @@ describe("gown-sizes", () => {
       expect(tokens).toContain("a:8");
       expect(tokens).not.toContain("t:2T");
       expect(tokens).not.toContain("k:8");
-      expect(tokens.length).toBe(26);
+      expect(tokens.length).toBe(27);
     });
 
     it("returns all four groups for girls", () => {
@@ -252,10 +254,11 @@ describe("gown-sizes", () => {
       );
     });
 
-    it("adult formal group has 19 options for bridal", () => {
+    it("adult formal group has 20 options for bridal, OS first", () => {
       const groups = getSizeSelectGroups("bridal");
       const adultGroup = groups.find((g) => g.label === "Adult formal");
-      expect(adultGroup?.options.length).toBe(19);
+      expect(adultGroup?.options.length).toBe(20);
+      expect(adultGroup?.options[0]?.value).toBe("OS");
     });
   });
 
@@ -270,6 +273,82 @@ describe("gown-sizes", () => {
 
     it("returns -1 for a size that is not valid in the category", () => {
       expect(sizeOptionIndex("bridal", "kids", "8")).toBe(-1);
+    });
+
+    it("sorts OS before every other adult size", () => {
+      expect(sizeOptionIndex("bridal", "adult", "OS")).toBeLessThan(
+        sizeOptionIndex("bridal", "adult", "0"),
+      );
+      expect(sizeOptionIndex("bridal", "junior", "J18")).toBeLessThan(
+        sizeOptionIndex("bridal", "adult", "OS"),
+      );
+      expect(sizeOptionIndex("girls", "adult", "OS")).toBe(-1);
+    });
+  });
+
+  describe("one size (OS)", () => {
+    const ADULT_CATEGORIES = [
+      "bridal",
+      "mother-of-the-bride",
+      "women",
+      "maternity",
+    ] as const;
+
+    it("is the first adult size for every adult category", () => {
+      for (const category of ADULT_CATEGORIES) {
+        const adult = getSizeOptionsForCategory(category).filter(
+          (o) => o.sizeGroup === "adult",
+        );
+        expect(adult[0]).toEqual({
+          sizeGroup: "adult",
+          value: "OS",
+          label: "OS",
+          group: "Adult formal",
+          filterToken: "a:OS",
+        });
+        expect(adult[1]?.value).toBe("0");
+      }
+    });
+
+    it("is not offered for girls", () => {
+      const values = getSizeOptionsForCategory("girls").map((o) => o.value);
+      expect(values).not.toContain("OS");
+      expect(
+        getSizeSelectGroups("girls")
+          .flatMap((g) => g.options)
+          .some((o) => o.value === "OS"),
+      ).toBe(false);
+    });
+
+    it("is a valid pair only for adult categories", () => {
+      for (const category of ADULT_CATEGORIES) {
+        expect(isValidSizePair(category, "adult", "OS")).toBe(true);
+      }
+      expect(isValidSizePair("girls", "adult", "OS")).toBe(false);
+      expect(isValidSizePair("bridal", "junior", "OS")).toBe(false);
+      expect(findSizeOption("girls", "adult", "OS")).toBeUndefined();
+    });
+
+    it("decodes the a:OS token and rejects OS under other prefixes", () => {
+      expect(decodeSizeFilterToken("a:OS")).toEqual({
+        sizeGroup: "adult",
+        size: "OS",
+      });
+      expect(encodeSizeFilterToken("adult", "OS")).toBe("a:OS");
+      expect(decodeSizeFilterToken("k:OS")).toBeNull();
+      expect(decodeSizeFilterToken("a:os")).toBeNull();
+    });
+
+    it("is a browse filter token with no category or an adult category, not girls", () => {
+      const all = getBrowseAllowedSizes(undefined);
+      expect(all.filter((t) => t === "a:OS")).toHaveLength(1);
+      expect(getBrowseAllowedSizes("bridal")).toContain("a:OS");
+      expect(getBrowseAllowedSizes("maternity")).toContain("a:OS");
+      expect(getBrowseAllowedSizes("girls")).not.toContain("a:OS");
+    });
+
+    it("is included once in ALL_VALID_SIZE_LABELS", () => {
+      expect(ALL_VALID_SIZE_LABELS.filter((l) => l === "OS")).toHaveLength(1);
     });
   });
 });
