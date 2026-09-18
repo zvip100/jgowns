@@ -7,7 +7,6 @@ function makeSupabaseUrl(path: string): string {
 }
 
 const {
-  mockInsert,
   mockUpload,
   mockGetPublicUrl,
   mockUpdateTag,
@@ -23,7 +22,6 @@ const {
     data: { publicUrl: makeSupabaseUrl(`img-${++urlCounter}.webp`) },
   }));
   const mockUpload = vi.fn().mockResolvedValue({ error: null });
-  const mockInsert = vi.fn().mockResolvedValue({ error: null });
   const mockUpdateTag = vi.fn();
   const mockRedirect = vi.fn().mockImplementation(() => {
     throw new Error("NEXT_REDIRECT");
@@ -35,7 +33,6 @@ const {
   const mockCaptureServerEvent = vi.fn();
 
   return {
-    mockInsert,
     mockUpload,
     mockGetPublicUrl,
     mockUpdateTag,
@@ -65,6 +62,7 @@ vi.mock("@/lib/actions/payments", () => ({
   createListingCheckout: mockCreateListingCheckout,
 }));
 
+import { GENERIC_ACTION_ERROR } from "@/lib/action-errors";
 import { createListing, updateListing } from "@/lib/actions/sell";
 
 function makeFile(name = "photo.webp"): File {
@@ -98,27 +96,33 @@ function baseFormData(sizes: SizeEntry[] = DEFAULT_SIZES): FormData {
   return fd;
 }
 
-const CREATED_LISTING_ID = "created-listing-1";
+// A real uuid: createListing checks the RPC's return rather than casting it.
+const CREATED_LISTING_ID = "11111111-2222-4333-8444-555555555555";
 
 type CreateCapture = { payload: unknown; variantRows?: unknown };
 
+type CreateRpcResult = {
+  data: unknown;
+  error: null | { message: string; code?: string };
+};
+
+// createListing hands the listing row + variant set to one atomic RPC; the
+// two inserts and the rollback run server-side (covered by the SQL smoke test),
+// so the unit test asserts the payload the RPC receives and what the action
+// does with each outcome.
 function makeCreateSupabase(
   insertCapture: CreateCapture,
-  opts: { sizesInsertError?: { message: string } } = {},
+  result: CreateRpcResult = { data: CREATED_LISTING_ID, error: null },
 ) {
-  const single = vi
+  const rpc = vi
     .fn()
-    .mockResolvedValue({ data: { id: CREATED_LISTING_ID }, error: null });
-  const listingsInsert = vi.fn().mockImplementation((payload: unknown) => {
-    insertCapture.payload = payload;
-    return { select: vi.fn().mockReturnValue({ single }) };
-  });
-  const listingsDeleteEq = vi.fn().mockResolvedValue({ error: null });
-  const listingsDelete = vi.fn().mockReturnValue({ eq: listingsDeleteEq });
-  const sizesInsert = vi.fn().mockImplementation((rows: unknown) => {
-    insertCapture.variantRows = rows;
-    return Promise.resolve({ error: opts.sizesInsertError ?? null });
-  });
+    .mockImplementation(
+      (_fn: string, args: { p_listing: unknown; p_variants: unknown }) => {
+        insertCapture.payload = args.p_listing;
+        insertCapture.variantRows = args.p_variants;
+        return Promise.resolve(result);
+      },
+    );
 
   return {
     storage: {
@@ -127,14 +131,8 @@ function makeCreateSupabase(
         getPublicUrl: mockGetPublicUrl,
       }),
     },
-    from: vi.fn().mockImplementation((table: string) =>
-      table === "listing_sizes"
-        ? { insert: sizesInsert }
-        : { insert: listingsInsert, delete: listingsDelete },
-    ),
-    _sizesInsert: sizesInsert,
-    _listingsDelete: listingsDelete,
-    _listingsDeleteEq: listingsDeleteEq,
+    from: vi.fn(),
+    rpc,
   };
 }
 
@@ -196,8 +194,6 @@ describe("createListing", () => {
   beforeEach(() => {
     mockUpload.mockClear();
     mockUpload.mockResolvedValue({ error: null });
-    mockInsert.mockClear();
-    mockInsert.mockResolvedValue({ error: null });
     mockUpdateTag.mockClear();
     mockRedirect.mockClear();
     mockDeleteListingImages.mockClear();
@@ -414,7 +410,7 @@ describe("createListing", () => {
     expect(payload.image_blur_data_urls).toEqual(["", ""]);
   });
 
-  it("inserts variant rows in canonical order with sort_order and listing_id", async () => {
+  it("sends variant rows in canonical order with sort_order; the RPC attaches listing_id", async () => {
     const capture: CreateCapture = { payload: {} };
     mockGetAuthClient.mockResolvedValue({
       ok: true,
@@ -432,8 +428,8 @@ describe("createListing", () => {
     try { await createListing(fd); } catch { /* redirect */ }
 
     expect(capture.variantRows).toEqual([
-      { size: "8", size_group: "adult", price: 800, sort_order: 0, listing_id: CREATED_LISTING_ID },
-      { size: "12", size_group: "adult", price: 900, sort_order: 1, listing_id: CREATED_LISTING_ID },
+      { size: "8", size_group: "adult", price: 800, sort_order: 0 },
+      { size: "12", size_group: "adult", price: 900, sort_order: 1 },
     ]);
     const payload = capture.payload as Record<string, unknown>;
     expect(payload.sell_mode).toBe("individual");
@@ -508,8 +504,8 @@ describe("createListing", () => {
     try { await createListing(fd); } catch { /* redirect */ }
 
     expect(capture.variantRows).toEqual([
-      { size: "8", size_group: "adult", price: 1500, sort_order: 0, listing_id: CREATED_LISTING_ID },
-      { size: "10", size_group: "adult", price: 1500, sort_order: 1, listing_id: CREATED_LISTING_ID },
+      { size: "8", size_group: "adult", price: 1500, sort_order: 0 },
+      { size: "10", size_group: "adult", price: 1500, sort_order: 1 },
     ]);
     const payload = capture.payload as Record<string, unknown>;
     expect(payload.sell_mode).toBe("set_only");
@@ -581,11 +577,9 @@ describe("createListing", () => {
     expect(payload.bundle_price).toBe(1500);
   });
 
-  it("deletes the listing row and images when the variant insert fails", async () => {
+  it("creates the listing and its sizes through the one atomic RPC", async () => {
     const capture: CreateCapture = { payload: {} };
-    const supabase = makeCreateSupabase(capture, {
-      sizesInsertError: { message: "variant insert failed" },
-    });
+    const supabase = makeCreateSupabase(capture);
     mockGetAuthClient.mockResolvedValue({
       ok: true,
       user: { id: "user-123" },
@@ -596,13 +590,97 @@ describe("createListing", () => {
     fd.set("image_file_0", makeFile());
     fd.set("blur_0", makeBlur("blur0"));
 
+    await createListing(fd);
+
+    expect(supabase.rpc).toHaveBeenCalledOnce();
+    expect(supabase.rpc).toHaveBeenCalledWith(
+      "create_listing_with_variants",
+      expect.objectContaining({ p_listing: expect.any(Object), p_variants: expect.any(Array) }),
+    );
+    // No direct table writes remain: nothing can land between two calls.
+    expect(supabase.from).not.toHaveBeenCalled();
+  });
+
+  it("leaves user_id to the RPC, which takes it from the session", async () => {
+    const capture: CreateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture),
+    });
+
+    const fd = baseFormData();
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    await createListing(fd);
+
+    expect(capture.payload).not.toHaveProperty("user_id");
+  });
+
+  it("deletes the uploads when Postgres rejects the create (rolled back)", async () => {
+    const capture: CreateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture, {
+        data: null,
+        error: { message: "A listing needs at least one size", code: "22023" },
+      }),
+    });
+
+    const fd = baseFormData();
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
     const result = await createListing(fd);
 
-    expect(result).toEqual({ error: "variant insert failed" });
-    expect(supabase._listingsDelete).toHaveBeenCalled();
-    expect(supabase._listingsDeleteEq).toHaveBeenCalledWith("id", CREATED_LISTING_ID);
-    expect(mockDeleteListingImages).toHaveBeenCalled();
+    expect(result).toEqual({ error: GENERIC_ACTION_ERROR });
+    expect(mockDeleteListingImages).toHaveBeenCalledOnce();
+    expect(mockCreateListingCheckout).not.toHaveBeenCalled();
     expect(mockUpdateTag).not.toHaveBeenCalled();
+  });
+
+  it("keeps the uploads when a transport failure may hide a committed create", async () => {
+    const capture: CreateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture, {
+        data: null,
+        error: { message: "fetch failed" },
+      }),
+    });
+
+    const fd = baseFormData();
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    const result = await createListing(fd);
+
+    expect(result).toEqual({ error: GENERIC_ACTION_ERROR });
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+    expect(mockCreateListingCheckout).not.toHaveBeenCalled();
+  });
+
+  it("never deletes a committed listing's photos when the returned id is unusable", async () => {
+    const capture: CreateCapture = { payload: {} };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase(capture, { data: null, error: null }),
+    });
+
+    const fd = baseFormData();
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+
+    const result = await createListing(fd);
+
+    expect(result).toHaveProperty("error");
+    // No error from the RPC means it committed; its photos must survive.
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
+    expect(mockCreateListingCheckout).not.toHaveBeenCalled();
   });
 
   it("stores a null contact_email when only a phone is provided", async () => {
@@ -822,6 +900,52 @@ describe("updateListing", () => {
     }));
   });
 
+  it("hides a failed listing lookup behind the generic line", async () => {
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const rpc = vi.fn();
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: {
+        from: vi.fn().mockReturnValue({
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          maybeSingle: vi.fn().mockResolvedValue({
+            data: null,
+            error: { message: "canceling statement due to statement timeout", code: "57014" },
+          }),
+        }),
+        rpc,
+      },
+    });
+
+    const result = await updateListing(LISTING_ID, baseFormData());
+
+    expect(result).toEqual({ error: GENERIC_ACTION_ERROR });
+    expect(logged).toHaveBeenCalled();
+    expect(rpc).not.toHaveBeenCalled();
+    logged.mockRestore();
+  });
+
+  it("maps a listing removed mid-edit to the same message the pre-check uses", async () => {
+    const capture = { payload: {} as unknown };
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeUpdateSupabase([OLD_URL_0], capture, {
+        error: { message: "Listing not found", code: "P0002" },
+      }),
+    });
+
+    const fd = baseFormData();
+    fd.set("existing_url_0", OLD_URL_0);
+    fd.set("blur_0", makeBlur("blur0"));
+
+    const result = await updateListing(LISTING_ID, fd);
+
+    expect(result).toEqual({ error: "Listing not found" });
+  });
+
   it("drops slot 1 and calls deleteListingImages with the orphaned URL", async () => {
     const capture = { payload: {} as unknown };
     mockGetAuthClient.mockResolvedValue({
@@ -899,7 +1023,7 @@ describe("updateListing", () => {
 
     const result = await updateListing(LISTING_ID, fd);
 
-    expect(result).toEqual({ error: "not authorized" });
+    expect(result).toEqual({ error: "Not authorized" });
     expect(mockDeleteListingImages).toHaveBeenCalledWith([
       makeSupabaseUrl("new-1.webp"),
     ]);
@@ -922,7 +1046,7 @@ describe("updateListing", () => {
 
     const result = await updateListing(LISTING_ID, fd);
 
-    expect(result).toEqual({ error: "fetch failed" });
+    expect(result).toEqual({ error: GENERIC_ACTION_ERROR });
     expect(mockDeleteListingImages).not.toHaveBeenCalled();
     expect(warn).toHaveBeenCalled();
     warn.mockRestore();
@@ -1282,17 +1406,10 @@ describe("listing_submitted", () => {
 
   // Never on click: only a committed listing counts as submitted.
   it("stays silent when the listing insert fails", async () => {
-    const supabase = makeCreateSupabase({ payload: {} as unknown });
-    supabase.from = vi.fn().mockReturnValue({
-      insert: vi.fn().mockReturnValue({
-        select: vi.fn().mockReturnValue({
-          single: vi.fn().mockResolvedValue({
-            data: null,
-            error: { message: "insert failed" },
-          }),
-        }),
-      }),
-    });
+    const supabase = makeCreateSupabase(
+      { payload: {} as unknown },
+      { data: null, error: { message: "insert failed", code: "23514" } },
+    );
     mockGetAuthClient.mockResolvedValue({
       ok: true,
       user: { id: "user-123" },
@@ -1305,7 +1422,7 @@ describe("listing_submitted", () => {
 
     const result = await createListing(fd);
 
-    expect(result).toEqual({ error: "insert failed" });
+    expect(result).toEqual({ error: GENERIC_ACTION_ERROR });
     expect(mockCaptureServerEvent).not.toHaveBeenCalled();
   });
 

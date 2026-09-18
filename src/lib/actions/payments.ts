@@ -3,6 +3,7 @@
 import { revalidateTag, updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { rpcError } from "@/lib/action-errors";
 import { SELLER_EVENTS, SERVER_EVENTS } from "@/lib/analytics/events";
 import { captureServerError, captureServerEvent } from "@/lib/analytics/server";
 import { getAuthClient } from "@/lib/actions/auth";
@@ -61,7 +62,9 @@ export async function createListingCheckout(
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (listingError) return { error: listingError.message };
+  if (listingError) {
+    return rpcError("payments.createListingCheckout.listingLookup", listingError);
+  }
   if (!listing) return { error: "Listing not found" };
   if (listing.status !== "pending_payment") return NOT_PENDING_ERROR;
 
@@ -85,7 +88,7 @@ export async function createListingCheckout(
       .eq("status", "pending_payment")
       .select("id");
 
-    if (error) return { error: error.message };
+    if (error) return rpcError("payments.createListingCheckout.freePublish", error);
     if (!updated?.length) return NOT_PENDING_ERROR;
 
     updateTag("listings");

@@ -3,6 +3,7 @@
 import { updateTag } from "next/cache";
 import { redirect } from "next/navigation";
 
+import { rpcError } from "@/lib/action-errors";
 import { listingPriceValue } from "@/lib/listing-variants";
 import {
   listingFormActionError,
@@ -16,7 +17,7 @@ import {
   MAX_LISTING_IMAGES,
   type ServerActionErrorResult,
 } from "@/lib/types";
-import { imageSlotFormKeys } from "@/lib/utils";
+import { imageSlotFormKeys, isValidUUID } from "@/lib/utils";
 import { SELLER_EVENTS } from "@/lib/analytics/events";
 import { captureServerError, captureServerEvent } from "@/lib/analytics/server";
 import { getAuthClient } from "@/lib/actions/auth";
@@ -77,9 +78,10 @@ export async function createListing(
 ): Promise<ServerActionErrorResult> {
   const auth = await getAuthClient();
   if (!auth.ok) return { error: auth.error };
-  const { supabase, user } = auth;
+  const { supabase } = auth;
 
   let shouldRedirect = false;
+  let hasCommitted = false;
   let createdListingId: string | null = null;
   const uploadedUrls: string[] = [];
 
@@ -114,43 +116,60 @@ export async function createListing(
 
     const image_blur_data_urls = slots.map((s) => s.blur);
 
-    // Always unpaid, whether or not the fee is switched on: the seller's own
-    // client can no longer write any other status (migration 039), and
+    // Always unpaid, whether or not the fee is switched on: the RPC writes
+    // pending_payment itself and takes user_id from the session, and
     // createListingCheckout owns both doors out of pending_payment.
-    const payload = {
-      ...listingRowPayload(
-        parsed,
-        uploadedUrls,
-        image_blur_data_urls,
-        "pending_payment",
-      ),
-      user_id: user.id,
-    };
+    const payload = listingRowPayload(
+      parsed,
+      uploadedUrls,
+      image_blur_data_urls,
+      "pending_payment",
+    );
 
-    const { data: created, error: dbError } = await supabase
-      .from("listings")
-      .insert(payload)
-      .select("id")
-      .single();
-    if (dbError || !created) {
-      await deleteListingImages(uploadedUrls);
-      return { error: dbError?.message ?? "Failed to create listing." };
+    // One transaction for the listing and its sizes, so a request that dies
+    // part-way can no longer leave a listing with no sizes (migration 041).
+    const { data: createdId, error: dbError } = await supabase.rpc(
+      "create_listing_with_variants",
+      {
+        p_listing: payload,
+        p_variants: variantRowsPayload(parsed),
+      },
+    );
+
+    if (dbError) {
+      // Same asymmetry as updateListing: a structured rejection (`code`
+      // present) is a Postgres error PostgREST relayed, so the transaction
+      // rolled back and the uploads are orphans. A bare transport failure may
+      // be hiding a create that DID commit, where deleting would strand the new
+      // listing on missing objects.
+      if (uploadedUrls.length > 0 && dbError.code) {
+        const cleanup = await deleteListingImages(uploadedUrls);
+        if ("error" in cleanup) {
+          console.warn(
+            "Failed to clean up images after listing create error:",
+            { imageUrls: uploadedUrls, error: cleanup.error },
+          );
+        }
+      } else if (uploadedUrls.length > 0) {
+        console.warn("Listing create outcome unknown; keeping the uploads", {
+          imageUrls: uploadedUrls,
+        });
+      }
+      // Validation already caught everything a seller can fix, so no code here
+      // maps to a message of its own.
+      return rpcError("sell.createListing", dbError);
     }
 
-    const variantRows = variantRowsPayload(parsed).map((row) => ({
-      ...row,
-      listing_id: created.id as string,
-    }));
-    const { error: sizesError } = await supabase
-      .from("listing_sizes")
-      .insert(variantRows);
-    if (sizesError) {
-      await supabase.from("listings").delete().eq("id", created.id);
-      await deleteListingImages(uploadedUrls);
-      return { error: sizesError.message };
-    }
+    // No error means the transaction committed, so the uploads are referenced
+    // by a real row from here on and nothing below may roll them back. Set
+    // before the id check, which would otherwise delete a live listing's photos.
+    hasCommitted = true;
 
-    createdListingId = created.id as string;
+    // The client is untyped, so the id is checked rather than cast.
+    if (typeof createdId !== "string" || !isValidUUID(createdId)) {
+      throw new Error("Listing create returned no id.");
+    }
+    createdListingId = createdId;
     // Nothing to invalidate yet either way: the row is pending_payment, so it
     // is invisible to browse until createListingCheckout activates it, and that
     // action invalidates both tags itself.
@@ -165,7 +184,9 @@ export async function createListing(
       photo_count: uploadedUrls.length,
     });
   } catch (e) {
-    if (uploadedUrls.length > 0) await deleteListingImages(uploadedUrls);
+    if (!hasCommitted && uploadedUrls.length > 0) {
+      await deleteListingImages(uploadedUrls);
+    }
     await captureServerError({ scope: "sell.createListing" }, e);
     return listingFormActionError(e);
   }
@@ -205,7 +226,7 @@ export async function updateListing(
     .eq("id", id)
     .maybeSingle();
 
-  if (existingError) return { error: existingError.message };
+  if (existingError) return rpcError("sell.updateListing", existingError);
   if (!existing) return { error: "Listing not found" };
   if (existing.user_id !== user.id) return { error: "Not authorized" };
   // Active (live) and pending_payment (saved, fee unpaid) are editable.
@@ -314,7 +335,12 @@ export async function updateListing(
           replacementImageUrls: newlyUploadedUrls,
         });
       }
-      return { error: dbError.message };
+      // Reachable by a race the checks above cannot close, such as the listing
+      // being removed in another tab; same wording as those checks.
+      return rpcError("sell.updateListing", dbError, {
+        P0002: "Listing not found",
+        "42501": "Not authorized",
+      });
     }
 
     // Past this point the replacements are referenced by a committed row, so

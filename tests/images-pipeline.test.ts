@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { mockSharp, mockSharpInstance, mockFaceDetection } = vi.hoisted(() => {
   const mockFaceDetection = vi.fn();
   const mockSharpInstance = {
+    metadata: vi.fn(),
     resize: vi.fn().mockReturnThis(),
     webp: vi.fn().mockReturnThis(),
     jpeg: vi.fn().mockReturnThis(),
@@ -55,6 +56,9 @@ describe("processListingImage", () => {
     vi.clearAllMocks();
     mockSharp.mockReturnValue(mockSharpInstance);
     mockSharpInstance.toBuffer.mockResolvedValue(Buffer.from("processed"));
+    mockSharpInstance.metadata.mockResolvedValue({
+      autoOrient: { width: 3000, height: 4000 },
+    });
     mockFaceDetection.mockResolvedValue([
       { faceAnnotations: [], error: null },
     ]);
@@ -75,6 +79,55 @@ describe("processListingImage", () => {
     expect(mockSharp).toHaveBeenCalledWith(Buffer.from("input"), {
       autoOrient: true,
     });
+    expect(mockSharpInstance.resize).toHaveBeenCalledWith(1200, 1600, {
+      fit: "cover",
+      position: "attention",
+    });
+  });
+
+  it.each([
+    ["2:3", 2000, 3000],
+    ["4:5", 2400, 3000],
+  ])("crops a %s photo as before", async (_, width, height) => {
+    mockSharpInstance.metadata.mockResolvedValue({
+      autoOrient: { width, height },
+    });
+
+    await processListingImage(Buffer.from("input"));
+
+    expect(mockSharpInstance.resize).toHaveBeenCalledWith(1200, 1600, {
+      fit: "cover",
+      position: "attention",
+    });
+  });
+
+  it.each([
+    ["very tall", 468, 1305],
+    ["9:16", 1080, 1920],
+    ["square", 2000, 2000],
+    ["landscape", 4000, 3000],
+  ])("letterboxes a %s photo in the card fill", async (_, width, height) => {
+    mockSharpInstance.metadata.mockResolvedValue({
+      autoOrient: { width, height },
+    });
+
+    await processListingImage(Buffer.from("input"));
+
+    expect(mockSharpInstance.resize).toHaveBeenCalledWith(1200, 1600, {
+      fit: "contain",
+      background: "#efe7dc",
+    });
+  });
+
+  it("judges the shape on the oriented dimensions", async () => {
+    mockSharpInstance.metadata.mockResolvedValue({
+      width: 4000,
+      height: 3000,
+      autoOrient: { width: 3000, height: 4000 },
+    });
+
+    await processListingImage(Buffer.from("input"));
+
     expect(mockSharpInstance.resize).toHaveBeenCalledWith(1200, 1600, {
       fit: "cover",
       position: "attention",

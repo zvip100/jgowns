@@ -917,6 +917,87 @@ $$;
 
 grant execute on function update_listing_with_variants(uuid, jsonb, jsonb) to authenticated;
 
+-- The create-side twin of update_listing_with_variants (migration 041): the
+-- listing row and its variants land together or not at all, so no request can
+-- die between them and leave a sizeless listing. A rollback also takes the
+-- trigger's listing.create audit row with it.
+--
+-- security invoker keeps the seller INSERT policy evaluating as the caller; it
+-- is what refuses any status but pending_payment, and a definer function would
+-- bypass it and reopen the free publish migration 039 closed. So user_id and
+-- status never come from p_listing. The listing is written first because
+-- listing_sizes has a foreign key to it and its insert policy looks the parent
+-- up by owner. An empty variant set is refused here, not trusted to the form:
+-- any signed-in user can call this directly.
+create or replace function create_listing_with_variants(
+  p_listing jsonb,
+  p_variants jsonb
+)
+returns uuid
+language plpgsql
+security invoker
+set search_path = ''
+as $$
+declare
+  v_uid uuid := (select auth.uid());
+  v_listing_id uuid;
+begin
+  if v_uid is null then
+    raise exception 'Not authenticated' using errcode = '28000';
+  end if;
+
+  if p_variants is null
+     or jsonb_typeof(p_variants) <> 'array'
+     or jsonb_array_length(p_variants) = 0 then
+    raise exception 'A listing needs at least one size' using errcode = '22023';
+  end if;
+
+  insert into public.listings (
+    user_id,
+    title,
+    description,
+    color,
+    location,
+    condition,
+    category,
+    sell_mode,
+    bundle_price,
+    image_urls,
+    image_blur_data_urls,
+    contact_email,
+    contact_phone,
+    contact_methods,
+    status
+  ) values (
+    v_uid,
+    p_listing->>'title',
+    p_listing->>'description',
+    p_listing->>'color',
+    p_listing->>'location',
+    p_listing->>'condition',
+    p_listing->>'category',
+    p_listing->>'sell_mode',
+    (p_listing->>'bundle_price')::numeric,
+    array(select jsonb_array_elements_text(p_listing->'image_urls')),
+    array(select jsonb_array_elements_text(p_listing->'image_blur_data_urls')),
+    p_listing->>'contact_email',
+    p_listing->>'contact_phone',
+    array(select jsonb_array_elements_text(p_listing->'contact_methods')),
+    'pending_payment'
+  )
+  returning id into v_listing_id;
+
+  insert into public.listing_sizes (listing_id, size, size_group, price, sort_order)
+  select v_listing_id, d.size, d.size_group, d.price, d.sort_order
+    from jsonb_to_recordset(p_variants)
+      as d(size text, size_group text, price numeric, sort_order int);
+
+  return v_listing_id;
+end;
+$$;
+
+grant execute on function create_listing_with_variants(jsonb, jsonb) to authenticated;
+
 -- Existence check for wishlist merge-on-sign-in. A buyer's RLS view of listings
 -- only shows active/sold/own rows, so a plain select can't tell a `removed`
 -- listing (keep it) from a hard-deleted one (drop it, or the wishlist_items FK

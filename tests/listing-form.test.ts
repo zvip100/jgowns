@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 
+import { GENERIC_ACTION_ERROR } from "@/lib/action-errors";
 import {
   EMPTY_LISTING_ERRORS,
   hasListingFieldErrors,
+  isListingFieldName,
   listingFormActionError,
   listingRowPayload,
   parseJsonFormValue,
@@ -291,15 +293,24 @@ describe("listingFormActionError", () => {
     expect(listingFormActionError(parsed.error).error).toBeTruthy();
   });
 
-  it("uses a thrown Error's own message", () => {
+  it("passes a validation message through to the seller", () => {
+    const parsed = listingInputSchema.safeParse({});
+    if (parsed.success) throw new Error("expected invalid input");
+    expect(listingFormActionError(parsed.error).error).not.toBe(
+      GENERIC_ACTION_ERROR,
+    );
+  });
+
+  it("never shows a thrown Error's own text to the seller", () => {
+    // A raw storage or RPC message is written for a developer, not a seller.
     expect(listingFormActionError(new Error("storage down"))).toEqual({
-      error: "storage down",
+      error: GENERIC_ACTION_ERROR,
     });
   });
 
-  it("falls back for a non-Error throw", () => {
+  it("uses the generic line for a non-Error throw", () => {
     expect(listingFormActionError("boom")).toEqual({
-      error: "Something went wrong.",
+      error: GENERIC_ACTION_ERROR,
     });
   });
 });
@@ -336,6 +347,36 @@ describe("hasListingFieldErrors", () => {
     expect(
       hasListingFieldErrors({ fields: {}, sizes: [{}, {}], general: "" }),
     ).toBe(false);
+  });
+});
+
+describe("isListingFieldName", () => {
+  it("accepts every field that owns an inline error slot", () => {
+    for (const name of [
+      "title",
+      "location",
+      "condition",
+      "category",
+      "contact_email",
+      "contact_phone",
+      "bundle_price",
+    ]) {
+      expect(isListingFieldName(name)).toBe(true);
+    }
+  });
+
+  it("rejects form fields with no inline error slot", () => {
+    expect(isListingFieldName("description")).toBe(false);
+    expect(isListingFieldName("color")).toBe(false);
+    expect(isListingFieldName("sell_mode")).toBe(false);
+    expect(isListingFieldName("image_urls")).toBe(false);
+  });
+
+  it("rejects non-string keys and unknown names", () => {
+    expect(isListingFieldName(Symbol("title"))).toBe(false);
+    expect(isListingFieldName(0)).toBe(false);
+    expect(isListingFieldName("")).toBe(false);
+    expect(isListingFieldName("toString")).toBe(false);
   });
 });
 
