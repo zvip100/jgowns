@@ -4,6 +4,8 @@ import vision from "@google-cloud/vision";
 
 import { MAX_BLUR_DATA_URL_LENGTH } from "@/lib/types";
 
+import type { ResizeOptions } from "sharp";
+
 /**
  * The listing image pipeline, shared by the seller upload (optimizeListingPhoto)
  * and the admin reprocess action. Buffer in, buffer out: neither a browser nor
@@ -25,6 +27,8 @@ const OUT_H = 1600;
 const BLUR_PAD = 0.1;
 const BLUR_SIGMA = 32;
 const PLACEHOLDER_DIM = 32;
+const MIN_COVER_KEEP = 0.85;
+const FILL_COLOR = "#efe7dc";
 
 type Region = { left: number; top: number; width: number; height: number };
 
@@ -65,8 +69,10 @@ function getVisionClient(): InstanceType<typeof vision.ImageAnnotatorClient> {
 export async function processListingImage(
   input: Buffer,
 ): Promise<ProcessedListingImage> {
-  const resized = await sharp(input, { autoOrient: true })
-    .resize(OUT_W, OUT_H, { fit: "cover", position: "attention" })
+  const image = sharp(input, { autoOrient: true });
+  const { autoOrient } = await image.metadata();
+  const resized = await image
+    .resize(OUT_W, OUT_H, resizeOptions(autoOrient.width, autoOrient.height))
     .toBuffer();
 
   const faces = await detectFaces(resized);
@@ -81,6 +87,21 @@ export async function processListingImage(
     facesDetected: faces.regions.length,
     visionOk: faces.ok,
   };
+}
+
+/**
+ * Crops to 3:4 when that keeps most of the photo. A far-off ratio (a very tall
+ * or wide shot) is letterboxed in the card's own fill instead, so a full-length
+ * gown is never cut to the busiest region.
+ */
+function resizeOptions(width: number, height: number): ResizeOptions {
+  const ratio = width / height;
+  const target = OUT_W / OUT_H;
+  const kept = Math.min(ratio / target, target / ratio);
+
+  return kept >= MIN_COVER_KEEP
+    ? { fit: "cover", position: "attention" }
+    : { fit: "contain", background: FILL_COLOR };
 }
 
 /**

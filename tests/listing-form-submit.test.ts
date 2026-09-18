@@ -113,6 +113,7 @@ const MISSING_PHOTO = "Please add at least one gown photo.";
 // 4 sellOnlyAsSet, 5 bundlePrice, 6 contactMethods. useRef order:
 // 0 initialFormRef, 1 initialSizeSnapshotRef, 2 originalImageUrlsRef,
 // 3 initialContactMethodsRef.
+const STATE_ERRORS = 1;
 const STATE_FORM = 2;
 const STATE_ROWS = 3;
 const STATE_SELL_ONLY_AS_SET = 4;
@@ -220,6 +221,8 @@ function rowSetterValues(): unknown[] {
     .filter((call) => call.index === STATE_ROWS)
     .map((call) => call.value);
 }
+
+type ErrorsUpdater = (current: ListingFormErrors) => ListingFormErrors;
 
 type ContactMethodsUpdater = (current: string[]) => string[];
 
@@ -1342,6 +1345,177 @@ describe("useListingFormSubmit", () => {
       );
       expect(setOnlyCalls.map((c) => c.value)).toEqual([true]);
       expect(rowSetterValues()).toEqual([]);
+    });
+  });
+
+  describe("clearing errors as the seller corrects a field", () => {
+    /** The clear helpers hand setErrors an updater; run it against a given state. */
+    function applyErrorUpdaters(from: ListingFormErrors): ListingFormErrors {
+      return hookState.setterCalls
+        .filter((call) => call.index === STATE_ERRORS)
+        .reduce(
+          (acc, call) => (call.value as ErrorsUpdater)(acc),
+          from,
+        );
+    }
+
+    function renderWithErrors(errors: ListingFormErrors) {
+      hookState.overrides.set(STATE_ERRORS, errors);
+      return useListingFormSubmit({
+        slots: [makeSlot()],
+        resolveUploadFile: vi.fn(),
+      });
+    }
+
+    it("drops only the edited field's error and keeps the others", () => {
+      const errors: ListingFormErrors = {
+        fields: { title: "Enter a title.", location: "Choose your location." },
+        sizes: [],
+        general: FIX_HIGHLIGHTED,
+      };
+      const submit = renderWithErrors(errors);
+
+      submit.setField("title", "A Real Gown Title");
+
+      const next = applyErrorUpdaters(errors);
+      expect(next.fields.title).toBeUndefined();
+      expect(next.fields.location).toBe("Choose your location.");
+      expect(next.general).toBe(FIX_HIGHLIGHTED);
+    });
+
+    it("clears the banner once the last highlighted field is fixed", () => {
+      const errors: ListingFormErrors = {
+        fields: { title: "Enter a title." },
+        sizes: [],
+        general: FIX_HIGHLIGHTED,
+      };
+      const submit = renderWithErrors(errors);
+
+      submit.setField("title", "A Real Gown Title");
+
+      const next = applyErrorUpdaters(errors);
+      expect(next.fields).toEqual({});
+      expect(next.general).toBe("");
+    });
+
+    it("clears the category error when a category is picked", () => {
+      const errors: ListingFormErrors = {
+        fields: { category: "Choose a category." },
+        sizes: [],
+        general: FIX_HIGHLIGHTED,
+      };
+      const submit = renderWithErrors(errors);
+
+      submit.setCategory("bridal");
+
+      const next = applyErrorUpdaters(errors);
+      expect(next.fields.category).toBeUndefined();
+      expect(next.general).toBe("");
+    });
+
+    it("clears the phone error when the phone is edited", () => {
+      const errors: ListingFormErrors = {
+        fields: { contact_phone: "Leave phone blank, or enter a valid phone number." },
+        sizes: [],
+        general: FIX_HIGHLIGHTED,
+      };
+      const submit = renderWithErrors(errors);
+
+      submit.setContactPhone("(555) 111-2222");
+
+      const next = applyErrorUpdaters(errors);
+      expect(next.fields.contact_phone).toBeUndefined();
+      expect(next.general).toBe("");
+    });
+
+    it("leaves fields that own no inline error slot alone", () => {
+      const errors: ListingFormErrors = {
+        fields: { title: "Enter a title." },
+        sizes: [],
+        general: FIX_HIGHLIGHTED,
+      };
+      const submit = renderWithErrors(errors);
+
+      submit.setField("description", "Typing a description");
+
+      expect(applyErrorUpdaters(errors)).toEqual(errors);
+    });
+
+    it("clears a size row's size error when that row's size changes", () => {
+      const errors: ListingFormErrors = {
+        fields: {},
+        sizes: [{ size: "Choose a size for every row.", price: "Enter a price." }],
+        general: FIX_HIGHLIGHTED,
+      };
+      const submit = renderWithErrors(errors);
+
+      submit.sizesController.updateRow("row-0", {
+        size: "8",
+        size_group: "adult",
+      });
+
+      const next = applyErrorUpdaters(errors);
+      expect(next.sizes[0]?.size).toBeUndefined();
+      expect(next.sizes[0]?.price).toBe("Enter a price.");
+      expect(next.general).toBe(FIX_HIGHLIGHTED);
+    });
+
+    it("clears a size row's price error when that row's price changes", () => {
+      const errors: ListingFormErrors = {
+        fields: {},
+        sizes: [{ price: "Enter a price." }],
+        general: FIX_HIGHLIGHTED,
+      };
+      const submit = renderWithErrors(errors);
+
+      submit.sizesController.updateRow("row-0", { price: "800" });
+
+      const next = applyErrorUpdaters(errors);
+      expect(next.sizes[0]?.price).toBeUndefined();
+      expect(next.general).toBe("");
+    });
+
+    it("leaves another row's error alone", () => {
+      hookState.overrides.set(STATE_ROWS, makeTwoRows());
+      const errors: ListingFormErrors = {
+        fields: {},
+        sizes: [{ price: "Enter a price." }, { price: "Enter a price." }],
+        general: FIX_HIGHLIGHTED,
+      };
+      const submit = renderWithErrors(errors);
+
+      submit.sizesController.updateRow("row-1", { price: "850" });
+
+      const next = applyErrorUpdaters(errors);
+      expect(next.sizes[0]?.price).toBe("Enter a price.");
+      expect(next.sizes[1]?.price).toBeUndefined();
+      expect(next.general).toBe(FIX_HIGHLIGHTED);
+    });
+
+    it("clears the missing-photo line once a photo is added", () => {
+      const errors: ListingFormErrors = {
+        fields: {},
+        sizes: [],
+        general: MISSING_PHOTO,
+      };
+      const submit = renderWithErrors(errors);
+
+      submit.clearPhotoError();
+
+      expect(applyErrorUpdaters(errors).general).toBe("");
+    });
+
+    it("never clears a general message that editing did not fix", () => {
+      const errors: ListingFormErrors = {
+        fields: { title: "Enter a title." },
+        sizes: [],
+        general: MISSING_PHOTO,
+      };
+      const submit = renderWithErrors(errors);
+
+      submit.setField("title", "A Real Gown Title");
+
+      expect(applyErrorUpdaters(errors).general).toBe(MISSING_PHOTO);
     });
   });
 });

@@ -19,6 +19,9 @@ const {
   const mockFaceDetection = vi.fn().mockResolvedValue([{ faceAnnotations: [], error: null }]);
 
   const mockSharpInstance = {
+    metadata: vi
+      .fn()
+      .mockResolvedValue({ autoOrient: { width: 3000, height: 4000 } }),
     resize: vi.fn().mockReturnThis(),
     toBuffer: vi.fn().mockResolvedValue(Buffer.from("processed")),
     webp: vi.fn().mockReturnThis(),
@@ -49,6 +52,7 @@ process.env.GOOGLE_CLOUD_PRIVATE_KEY =
   "-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----";
 process.env.NEXT_PUBLIC_SUPABASE_URL = SUPABASE_URL;
 
+import { GENERIC_ACTION_ERROR } from "@/lib/action-errors";
 import {
   optimizeListingPhoto,
   deleteListingImages,
@@ -169,6 +173,24 @@ describe("deleteListingImages", () => {
     expect(result).toEqual({ ok: true });
     expect(mockRemove).toHaveBeenCalledOnce();
     expect(mockRemove).toHaveBeenCalledWith(["real.webp"]);
+  });
+
+  // A "use server" export is a callable endpoint, so a failed remove must not
+  // hand raw storage text back; the real reason goes to the server log.
+  it("hides a storage failure behind the generic line and logs the real one", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    onTestFinished(() => consoleError.mockRestore());
+    const raw = "new row violates row-level security policy";
+    mockRemove.mockResolvedValue({ error: { message: raw, statusCode: "403" } });
+
+    const result = await deleteListingImages([makeSupabaseUrl("img1.webp")]);
+
+    expect(result).toEqual({ error: GENERIC_ACTION_ERROR });
+    expect(JSON.stringify(result)).not.toContain(raw);
+    expect(consoleError).toHaveBeenCalledWith(
+      "[images.deleteListingImages] database error",
+      expect.objectContaining({ message: raw }),
+    );
   });
 
   it("returns ok without calling remove when all URLs are non-Supabase", async () => {

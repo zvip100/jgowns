@@ -13,6 +13,7 @@ import {
   collectListingFieldErrors,
   hasListingErrors,
   hasListingFieldErrors,
+  isListingFieldName,
   toggleContactMethod as toggleContactMethodValue,
 } from "@/lib/listing-form";
 import { toast } from "@/lib/toast";
@@ -110,6 +111,17 @@ export function validateListingForm({
   }
 
   return errors;
+}
+
+/**
+ * The form-wide line only speaks for highlighted controls, so it goes once the
+ * seller has cleared the last one. Never promotes a different message: the
+ * other general errors belong to a submit, not to editing a field.
+ */
+function withClearedBanner(errors: ListingFormErrors): ListingFormErrors {
+  if (errors.general !== FIX_HIGHLIGHTED_FIELDS) return errors;
+  if (hasListingFieldErrors(errors)) return errors;
+  return { ...errors, general: "" };
 }
 
 export type ListingSizesController = {
@@ -290,12 +302,57 @@ export function useListingFormSubmit({
     captureEvent(SELLER_EVENTS.listingDraftStarted);
   }, [listingId]);
 
+  /**
+   * The photo slots live above this hook, so adding one is the only correction
+   * the field setters cannot observe; the form calls this instead. Clears only
+   * the message a photo actually fixes.
+   */
+  const clearPhotoError = useCallback(() => {
+    setErrors((prev) =>
+      prev.general === MISSING_PHOTO_ERROR ? { ...prev, general: "" } : prev,
+    );
+  }, []);
+
+  /**
+   * Errors are only ever produced by a submit, so without this a field the
+   * seller has just corrected keeps showing its old message until they submit
+   * again. Dropping one field at a time leaves every still-broken control
+   * highlighted, and nothing here can introduce an error mid-edit.
+   */
+  const clearFieldError = useCallback((key: PropertyKey) => {
+    if (!isListingFieldName(key)) return;
+    setErrors((prev) => {
+      if (!prev.fields[key]) return prev;
+      const fields = { ...prev.fields };
+      delete fields[key];
+      return withClearedBanner({ ...prev, fields });
+    });
+  }, []);
+
+  /** The same rule for the per-row size and price controls. */
+  const clearSizeRowError = useCallback(
+    (index: number, touched: readonly (keyof SizeRowError)[]) => {
+      if (index < 0) return;
+      setErrors((prev) => {
+        const row = prev.sizes[index];
+        if (!row || !touched.some((key) => row[key])) return prev;
+        const next: SizeRowError = { ...row };
+        for (const key of touched) delete next[key];
+        const sizes = [...prev.sizes];
+        sizes[index] = next;
+        return withClearedBanner({ ...prev, sizes });
+      });
+    },
+    [],
+  );
+
   const setField = useCallback(
     (key: keyof ListingScalarFormData, value: string | number) => {
       markDraftStarted();
       setForm((f) => ({ ...f, [key]: value }));
+      clearFieldError(key);
     },
-    [markDraftStarted],
+    [clearFieldError, markDraftStarted],
   );
 
   const setCategory = useCallback(
@@ -305,6 +362,7 @@ export function useListingFormSubmit({
         ? (value as GownCategoryId)
         : null;
       setForm((f) => ({ ...f, category }));
+      clearFieldError("category");
       clearInvalidRows(
         (row) =>
           category != null &&
@@ -312,7 +370,7 @@ export function useListingFormSubmit({
           isValidSizePair(category, row.size_group, row.size),
       );
     },
-    [clearInvalidRows, markDraftStarted],
+    [clearFieldError, clearInvalidRows, markDraftStarted],
   );
 
   const setContactPhone = useCallback(
@@ -320,10 +378,11 @@ export function useListingFormSubmit({
       markDraftStarted();
       const digits = digitsOnlyPhone(value);
       setForm((f) => ({ ...f, contact_phone: digits }));
+      clearFieldError("contact_phone");
       // A contact method only makes sense with a phone number to act on.
       if (!digits) setContactMethods([]);
     },
-    [markDraftStarted],
+    [clearFieldError, markDraftStarted],
   );
 
   const toggleContactMethod = useCallback(
@@ -343,6 +402,13 @@ export function useListingFormSubmit({
     updateRow: (key, patch) => {
       markDraftStarted();
       updateRow(key, patch);
+      const touched: (keyof SizeRowError)[] = [];
+      if ("size" in patch || "size_group" in patch) touched.push("size");
+      if ("price" in patch) touched.push("price");
+      clearSizeRowError(
+        sizeRows.findIndex((row) => row.key === key),
+        touched,
+      );
     },
     addRow,
     removeRow,
@@ -481,6 +547,7 @@ export function useListingFormSubmit({
     setField,
     setCategory,
     setContactPhone,
+    clearPhotoError,
     contactMethods,
     toggleContactMethod,
     sizesController,

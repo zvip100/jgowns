@@ -2,29 +2,11 @@
 
 import { revalidateTag, updateTag } from "next/cache";
 
+import { rpcError } from "@/lib/action-errors";
 import { getAuthClient } from "@/lib/actions/auth";
 import { retireOpenListingCheckout } from "@/lib/stripe/checkout";
 
 import type { ServerActionErrorResult } from "@/lib/types";
-
-const GENERIC_RPC_ERROR = "Something went wrong. Please try again.";
-
-type PostgrestLikeError = { message: string; code?: string };
-
-/**
- * Postgres codes carry the meaning; the raised text is written for a developer
- * reading logs, so an unmapped code never reaches the seller's screen verbatim.
- */
-function rpcError(
-  scope: string,
-  error: PostgrestLikeError,
-  codeMessages?: Record<string, string>,
-): ServerActionErrorResult {
-  const mapped = codeMessages && error.code ? codeMessages[error.code] : undefined;
-  if (mapped) return { error: mapped };
-  console.error(`[actions/listings] ${scope} RPC failed`, error);
-  return { error: GENERIC_RPC_ERROR };
-}
 
 export async function revalidateListings() {
   revalidateTag("listings", "max");

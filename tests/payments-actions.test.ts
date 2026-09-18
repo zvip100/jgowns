@@ -108,6 +108,7 @@ vi.mock("@/lib/supabase/service", () => ({
   }),
 }));
 
+import { GENERIC_ACTION_ERROR } from "@/lib/action-errors";
 import { createListingCheckout, confirmListingPayment } from "@/lib/actions/payments";
 
 const LISTING_ID = "11111111-1111-1111-1111-111111111111";
@@ -275,6 +276,25 @@ describe("createListingCheckout", () => {
     expect(result).toEqual({ error: "Listing not found" });
   });
 
+  // This is the dashboard's "Complete Payment" action, so its error is shown.
+  it("hides a failed listing lookup behind the generic line", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const supabase = makeCheckoutSupabase({
+      listingResult: {
+        data: null,
+        error: { message: "canceling statement due to statement timeout", code: "57014" },
+      },
+    });
+    mockGetAuthClient.mockResolvedValue({ ok: true, user: { id: USER_ID }, supabase });
+
+    const result = await createListingCheckout(LISTING_ID);
+
+    expect(result).toEqual({ error: GENERIC_ACTION_ERROR });
+    expect(consoleError).toHaveBeenCalled();
+    expect(mockCheckoutSessionsCreate).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
   it("rejects a listing that isn't pending_payment", async () => {
     const supabase = makeCheckoutSupabase({
       listingResult: { data: { id: LISTING_ID, status: "active" }, error: null },
@@ -320,6 +340,26 @@ describe("createListingCheckout", () => {
       expect(result).toEqual({ error: "This listing doesn't need a payment." });
       expect(mockUpdateTag).not.toHaveBeenCalled();
       expect(mockRedirect).not.toHaveBeenCalled();
+    });
+
+    it("hides a failed free-publish update behind the generic line", async () => {
+      const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+      const supabase = makeCheckoutSupabase({
+        updateResult: {
+          data: null,
+          error: { message: 'new row for relation "listings" violates check constraint', code: "23514" },
+        },
+      });
+      mockGetAuthClient.mockResolvedValue({ ok: true, user: { id: USER_ID }, supabase });
+
+      const result = await createListingCheckout(LISTING_ID);
+
+      expect(result).toEqual({ error: GENERIC_ACTION_ERROR });
+      expect(consoleError).toHaveBeenCalled();
+      // Not published, so nothing was invalidated and no redirect was taken.
+      expect(mockUpdateTag).not.toHaveBeenCalled();
+      expect(mockRedirect).not.toHaveBeenCalled();
+      consoleError.mockRestore();
     });
   });
 

@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { GENERIC_ACTION_ERROR } from "@/lib/action-errors";
 import { sizeOptionIndex } from "@/lib/gown-sizes";
 import { SIZE_GROUPS, type ContactMethod, type ListingStatus } from "@/lib/types";
 
@@ -133,22 +134,30 @@ export function zodListingFormErrorMessage(e: z.ZodError): string {
   return "Please fill in all required fields.";
 }
 
+/**
+ * Validation messages are written for the seller, so they pass through. Every
+ * other error (a storage upload, a failed RPC) carries text written for a
+ * developer; the caller has already logged it, so the seller gets a generic line.
+ */
 export function listingFormActionError(e: unknown): { error: string } {
   if (e instanceof z.ZodError) {
     return { error: zodListingFormErrorMessage(e) };
   }
-  return { error: e instanceof Error ? e.message : "Something went wrong." };
+  return { error: GENERIC_ACTION_ERROR };
 }
 
 /** Fields that surface an inline error directly below the control. */
-export type ListingFieldName =
-  | "title"
-  | "location"
-  | "condition"
-  | "category"
-  | "contact_email"
-  | "contact_phone"
-  | "bundle_price";
+const LISTING_FIELD_NAMES = [
+  "title",
+  "location",
+  "condition",
+  "category",
+  "contact_email",
+  "contact_phone",
+  "bundle_price",
+] as const;
+
+export type ListingFieldName = (typeof LISTING_FIELD_NAMES)[number];
 
 /** Per-row inline errors for a size row (size picker + price). */
 export type SizeRowError = { size?: string; price?: string };
@@ -167,16 +176,16 @@ export const EMPTY_LISTING_ERRORS: ListingFormErrors = {
   general: "",
 };
 
-const CONTACT_PHONE_ERROR = "Leave phone blank, or enter a valid phone number.";
+const LISTING_FIELD_NAME_SET: ReadonlySet<string> = new Set(
+  LISTING_FIELD_NAMES,
+);
 
-const SCALAR_FIELD_NAMES = new Set<ListingFieldName>([
-  "title",
-  "location",
-  "condition",
-  "category",
-  "contact_email",
-  "bundle_price",
-]);
+/** Narrows an arbitrary form key to one that owns an inline error slot. */
+export function isListingFieldName(key: PropertyKey): key is ListingFieldName {
+  return typeof key === "string" && LISTING_FIELD_NAME_SET.has(key);
+}
+
+const CONTACT_PHONE_ERROR = "Leave phone blank, or enter a valid phone number.";
 
 type IssueLike = { path: PropertyKey[]; message: string };
 
@@ -207,11 +216,10 @@ export function collectListingFieldErrors(
       setField("contact_phone", CONTACT_PHONE_ERROR);
       continue;
     }
-    if (
-      typeof head === "string" &&
-      SCALAR_FIELD_NAMES.has(head as ListingFieldName)
-    ) {
-      setField(head as ListingFieldName, issue.message);
+    // contact_phone is in the list above but unreachable here: its own branch
+    // always continues, so its generic zod message never replaces the specific one.
+    if (isListingFieldName(head)) {
+      setField(head, issue.message);
       continue;
     }
     if (!general) general = issue.message;

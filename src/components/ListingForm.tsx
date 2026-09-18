@@ -52,6 +52,7 @@ export default function ListingForm({
     setField,
     setCategory,
     setContactPhone,
+    clearPhotoError,
     contactMethods,
     toggleContactMethod,
     sizesController,
@@ -156,6 +157,7 @@ export default function ListingForm({
           slots={slots}
           onFileSelected={(index, file) => {
             markDraftStarted();
+            clearPhotoError();
             return onFileSelected(index, file);
           }}
           onClear={onClear}

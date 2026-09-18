@@ -1,5 +1,6 @@
 "use server";
 
+import { rpcError } from "@/lib/action-errors";
 import { captureServerError } from "@/lib/analytics/server";
 import { getAuthClient, type SupabaseServer } from "@/lib/actions/auth";
 import {
@@ -92,9 +93,8 @@ export async function deleteListingImages(
     .from(LISTING_IMAGE_BUCKET)
     .remove(paths);
 
-  if (error) {
-    console.warn("deleteListingImages failed:", error.message);
-    return { error: error.message };
-  }
+  // Exported from a "use server" file, so this is a callable endpoint too; the
+  // raw storage text goes to the log, never back to the caller.
+  if (error) return rpcError("images.deleteListingImages", error);
   return { ok: true };
 }
