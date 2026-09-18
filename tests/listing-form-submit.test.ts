@@ -1492,6 +1492,82 @@ describe("useListingFormSubmit", () => {
       expect(next.general).toBe(FIX_HIGHLIGHTED);
     });
 
+    it("clears the set price error when the set price is edited", () => {
+      const errors: ListingFormErrors = {
+        fields: { bundle_price: "Enter a set price." },
+        sizes: [],
+        general: FIX_HIGHLIGHTED,
+      };
+      const submit = renderWithErrors(errors);
+
+      submit.sizesController.setBundlePrice("1500");
+
+      const next = applyErrorUpdaters(errors);
+      expect(next.fields.bundle_price).toBeUndefined();
+      expect(next.general).toBe("");
+    });
+
+    it("drops a removed row's error slot so later rows keep their own", () => {
+      hookState.overrides.set(STATE_ROWS, makeTwoRows());
+      const errors: ListingFormErrors = {
+        fields: {},
+        sizes: [{ price: "Enter a price." }, { size: "Choose a size." }],
+        general: FIX_HIGHLIGHTED,
+      };
+      const submit = renderWithErrors(errors);
+
+      submit.sizesController.removeRow("row-0");
+
+      const next = applyErrorUpdaters(errors);
+      expect(next.sizes).toEqual([{ size: "Choose a size." }]);
+      expect(next.general).toBe(FIX_HIGHLIGHTED);
+    });
+
+    it("clears the banner when the last invalid row is removed", () => {
+      hookState.overrides.set(STATE_ROWS, makeTwoRows());
+      const errors: ListingFormErrors = {
+        fields: {},
+        sizes: [{}, { price: "Enter a price." }],
+        general: FIX_HIGHLIGHTED,
+      };
+      const submit = renderWithErrors(errors);
+
+      submit.sizesController.removeRow("row-1");
+
+      const next = applyErrorUpdaters(errors);
+      expect(next.sizes).toEqual([{}]);
+      expect(next.general).toBe("");
+    });
+
+    it("clears the set price error when removal leaves one row", () => {
+      hookState.overrides.set(STATE_ROWS, makeTwoRows());
+      const errors: ListingFormErrors = {
+        fields: { bundle_price: "Enter the price for the complete set." },
+        sizes: [],
+        general: FIX_HIGHLIGHTED,
+      };
+      const submit = renderWithErrors(errors);
+
+      submit.sizesController.removeRow("row-1");
+
+      const next = applyErrorUpdaters(errors);
+      expect(next.fields.bundle_price).toBeUndefined();
+      expect(next.general).toBe("");
+    });
+
+    it("leaves errors alone when the only row cannot be removed", () => {
+      const errors: ListingFormErrors = {
+        fields: {},
+        sizes: [{ price: "Enter a price." }],
+        general: FIX_HIGHLIGHTED,
+      };
+      const submit = renderWithErrors(errors);
+
+      submit.sizesController.removeRow("row-0");
+
+      expect(applyErrorUpdaters(errors)).toEqual(errors);
+    });
+
     it("clears the missing-photo line once a photo is added", () => {
       const errors: ListingFormErrors = {
         fields: {},

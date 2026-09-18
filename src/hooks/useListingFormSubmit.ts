@@ -346,6 +346,16 @@ export function useListingFormSubmit({
     [],
   );
 
+  /** Row errors are indexed, so a removed row takes its slot with it. */
+  const removeSizeRowError = useCallback((index: number) => {
+    if (index < 0) return;
+    setErrors((prev) => {
+      if (index >= prev.sizes.length) return prev;
+      const sizes = prev.sizes.filter((_, i) => i !== index);
+      return withClearedBanner({ ...prev, sizes });
+    });
+  }, []);
+
   const setField = useCallback(
     (key: keyof ListingScalarFormData, value: string | number) => {
       markDraftStarted();
@@ -411,11 +421,19 @@ export function useListingFormSubmit({
       );
     },
     addRow,
-    removeRow,
+    removeRow: (key) => {
+      removeRow(key);
+      if (sizeRows.length <= 1) return;
+      removeSizeRowError(sizeRows.findIndex((row) => row.key === key));
+      if (sizeRows.length === 2) clearFieldError("bundle_price");
+    },
     sellOnlyAsSet,
     setSellOnlyAsSet,
     bundlePrice,
-    setBundlePrice,
+    setBundlePrice: (value) => {
+      setBundlePrice(value);
+      clearFieldError("bundle_price");
+    },
   };
 
   const handleSubmit = useCallback(async () => {

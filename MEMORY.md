@@ -249,6 +249,8 @@ Uncommitted entries are still a draft. Before adding a line, `git diff MEMORY.md
 
 - [09-18-2026] completed: Listing photos far from 3:4 are letterboxed instead of cropped. `processListingImage` (src/lib/images/pipeline.ts) reads the EXIF-oriented size and keeps `fit: "cover", position: "attention"` when the crop keeps at least 85% of the photo (`MIN_COVER_KEEP`), otherwise `fit: "contain"` on the card fill `#efe7dc`. WHY: a 0.36-ratio seller photo kept under half its height and `attention` cut it to face and upper body. 85% keeps 3:4, 4:5 and 2:3 byte-identical to before; 9:16, square, landscape and very tall shots get cream bars. A blurred-photo fill was mocked and rejected in favor of fixed cream bars; a 70% cutoff was rejected because 9:16 full-length shots would still lose a quarter of their height.
 
+- [09-18-2026] completed: Listing form error self-clearing now covers the set price and row removal (PR #24 review). `sizesController.setBundlePrice` clears `bundle_price` via `clearFieldError`, and `removeRow` drops the removed row's slot from the index-parallel `errors.sizes` (`removeSizeRowError`, skipped when the last row cannot be removed), and clears `bundle_price` when removal leaves one row (the set price field unmounts), so a later row's message no longer lands on the wrong control and the banner clears once the last invalid row is gone.
+
 ## Never
 
 - [05-28-2026] never: Do not add runtime legacy/backfill/migration-bridge logic (inferring missing fields, aliasing old formats, guessing from partial data) unless the user explicitly asks. Assume the DB and APIs are on the current schema.
