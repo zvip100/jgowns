@@ -23,7 +23,7 @@ export type DeleteListingImageResult = { ok: true } | { error: string };
  * back as a data URL, which the form re-uploads once the listing is submitted.
  *
  * A Vision outage is deliberately not an error here: the seller gets a
- * correctly cropped, correctly sized WebP either way, and blocking the sale on
+ * correctly cropped, correctly sized photo either way, and blocking the sale on
  * Google being reachable would be worse than publishing a photo an admin can
  * reprocess later (adminReprocessListingImage).
  */
@@ -43,8 +43,8 @@ export async function optimizeListingPhoto(
     const processed = await processListingImage(input);
 
     return {
-      dataUrl: `data:image/webp;base64,${processed.webp.toString("base64")}`,
-      blurDataUrl: await blurPlaceholderDataUrl(processed.webp),
+      dataUrl: `data:${processed.contentType};base64,${processed.image.toString("base64")}`,
+      blurDataUrl: await blurPlaceholderDataUrl(processed.image),
     };
   } catch (e) {
     await captureServerError({ scope: "images.optimizeListingPhoto" }, e);

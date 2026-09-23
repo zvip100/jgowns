@@ -379,14 +379,14 @@ async function prepareListingPhoto(
   try {
     const url = await uploadListingImage({
       supabase,
-      body: processed.webp,
-      contentType: "image/webp",
+      body: processed.image,
+      contentType: processed.contentType,
       listingId,
     });
     return {
       ok: true,
       url,
-      blur: await blurPlaceholderDataUrl(processed.webp),
+      blur: await blurPlaceholderDataUrl(processed.image),
       facesDetected: processed.facesDetected,
     };
   } catch (e) {

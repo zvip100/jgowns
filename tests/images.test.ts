@@ -23,8 +23,10 @@ const {
       .fn()
       .mockResolvedValue({ autoOrient: { width: 3000, height: 4000 } }),
     resize: vi.fn().mockReturnThis(),
-    toBuffer: vi.fn().mockResolvedValue(Buffer.from("processed")),
-    webp: vi.fn().mockReturnThis(),
+    toBuffer: vi.fn(),
+    raw: vi.fn().mockReturnThis(),
+    avif: vi.fn().mockReturnThis(),
+    png: vi.fn().mockReturnThis(),
     jpeg: vi.fn().mockReturnThis(),
     extract: vi.fn().mockReturnThis(),
     blur: vi.fn().mockReturnThis(),
@@ -70,11 +72,15 @@ describe("optimizeListingPhoto", () => {
   beforeEach(() => {
     mockSharp.mockClear();
     mockSharpInstance.resize.mockClear();
-    mockSharpInstance.webp.mockClear();
     mockSharpInstance.toBuffer.mockClear();
     mockFaceDetection.mockClear();
     mockFaceDetection.mockResolvedValue([{ faceAnnotations: [], error: null }]);
-    mockSharpInstance.toBuffer.mockResolvedValue(Buffer.from("processed"));
+    mockSharpInstance.toBuffer.mockImplementation(
+      async (options?: { resolveWithObject?: boolean }) =>
+        options?.resolveWithObject
+          ? { data: Buffer.from("raw"), info: { width: 1200, height: 1600, channels: 3 } }
+          : Buffer.from("processed"),
+    );
   });
 
   it("returns a data URL for a valid image and invokes sharp + vision", async () => {
@@ -85,7 +91,7 @@ describe("optimizeListingPhoto", () => {
 
     expect("dataUrl" in result).toBe(true);
     if ("dataUrl" in result) {
-      expect(result.dataUrl).toMatch(/^data:image\/webp;base64,/);
+      expect(result.dataUrl).toMatch(/^data:image\/avif;base64,/);
     }
     expect(mockSharp).toHaveBeenCalled();
     expect(mockFaceDetection).toHaveBeenCalled();
@@ -107,6 +113,10 @@ describe("optimizeListingPhoto", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     onTestFinished(() => warn.mockRestore());
     mockSharpInstance.toBuffer
+      .mockResolvedValueOnce({
+        data: Buffer.from("raw"),
+        info: { width: 1200, height: 1600, channels: 3 },
+      })
       .mockResolvedValueOnce(Buffer.from("processed"))
       .mockResolvedValueOnce(Buffer.from("processed"))
       .mockRejectedValueOnce(new Error("bad image"));

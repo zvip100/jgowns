@@ -161,6 +161,13 @@ export const MAX_LISTING_IMAGE_BYTES = MAX_LISTING_IMAGE_MB * 1024 * 1024;
 /** Bound on a stored blur placeholder, shared by both generators and the form's own guard. */
 export const MAX_BLUR_DATA_URL_LENGTH = 4096;
 
+/**
+ * What every optimized `<Image>` asks for, passed explicitly so a URL rendered
+ * before a change to `images.qualities` keeps resolving. Must stay in the
+ * `qualities` allowlist in `next.config.ts`.
+ */
+export const IMAGE_QUALITY = 85;
+
 export const GOWN_CATEGORIES = [
   { id: "bridal", label: "Bridal" },
   { id: "mother-of-the-bride", label: "Mother of the Bride" },

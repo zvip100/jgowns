@@ -65,6 +65,17 @@ describe("uploadListingImage", () => {
     expect(upload.mock.calls[0][2]).toEqual({ contentType: "image/webp" });
   });
 
+  it("names an avif buffer by its content type", async () => {
+    await uploadListingImage({
+      supabase,
+      body: Buffer.from("bytes"),
+      contentType: "image/avif",
+    });
+
+    expect(upload.mock.calls[0][0]).toMatch(/\.avif$/);
+    expect(upload.mock.calls[0][2]).toEqual({ contentType: "image/avif" });
+  });
+
   it("falls back to a jpg extension for an unrecognized content type", async () => {
     await uploadListingImage({
       supabase,

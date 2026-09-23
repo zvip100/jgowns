@@ -60,9 +60,11 @@ vi.mock("@/lib/image-upload", () => ({
   // The shrink step is a browser canvas round trip; the attempt it wraps is
   // what this suite measures, so it passes the file straight through.
   downscaleImageFile: vi.fn(async (file: File) => file),
+  UNREADABLE_PHOTO_ERROR: "This photo can't be opened. Try a JPG or PNG.",
 }));
 
 import { useListingImageSlots } from "@/hooks/useListingImageSlots";
+import { downscaleImageFile } from "@/lib/image-upload";
 
 function makeFile(size: number): File {
   return new File([new Uint8Array(size)], "gown.jpg", { type: "image/jpeg" });
@@ -131,6 +133,19 @@ describe("photo upload events", () => {
     await onFileSelected(0, makeFile(1024));
 
     expect(mockCaptureEvent.mock.calls[1][1].reason).toHaveLength(120);
+  });
+
+  it("fails a photo the browser cannot read without uploading it", async () => {
+    vi.mocked(downscaleImageFile).mockResolvedValueOnce(null);
+
+    const { onFileSelected } = mountHook();
+    await onFileSelected(0, makeFile(1024));
+
+    expect(mockOptimizeListingPhoto).not.toHaveBeenCalled();
+    expect(mockCaptureEvent.mock.calls[1]).toEqual([
+      "photo_upload_failed",
+      { reason: "unreadable_image", file_count: 1, total_size: 1024 },
+    ]);
   });
 
   // Exactly one terminal event per attempt, even when the slot moved on.

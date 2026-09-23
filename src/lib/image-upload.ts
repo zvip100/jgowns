@@ -1,26 +1,50 @@
 const MAX_UPLOAD_DIMENSION = 2400;
-const DOWNSCALE_ABOVE_BYTES = 2 * 1024 * 1024;
 const DOWNSCALE_QUALITY = 0.9;
+export const UNREADABLE_PHOTO_ERROR = "This photo can't be opened. Try a JPG or PNG.";
+const HEIC_BRANDS = new Set(['heic', 'heix', 'hevc', 'hevx', 'heim', 'heis', 'hevm', 'hevs', 'mif1', 'msf1']);
+
+/** Reads the ISO-BMFF brand, so a HEIC renamed to .jpg is still caught. */
+async function hasHeicSignature(file: File): Promise<boolean> {
+  try {
+    const header = new TextDecoder('latin1').decode(
+      await file.slice(0, 12).arrayBuffer(),
+    );
+    return header.slice(4, 8) === 'ftyp' && HEIC_BRANDS.has(header.slice(8, 12));
+  } catch {
+    return false;
+  }
+}
 
 /**
- * Shrinks a large photo in the browser before it is uploaded. The server crops
- * every photo to 1200x1600 anyway, so the extra megabytes only buy upload time,
- * and a body that takes 15 to 40 seconds to send is what the dropped uploads had
- * in common. WebP because it re-encodes smaller than JPEG and keeps alpha. Any
- * file the browser cannot decode or re-encode falls through untouched.
+ * Re-encodes every photo in the browser before it is uploaded: long edge capped
+ * at 2400px, WebP (smaller than JPEG, keeps alpha). The server crops to
+ * 1200x1600 anyway, so extra megabytes only buy upload time. HEIC, which Chrome
+ * and Edge cannot decode, goes through a lazily loaded decoder. Resolves null
+ * when the browser cannot read the image at all, so the caller can reject it;
+ * the original is kept when re-encoding is unavailable or not smaller.
  */
-export async function downscaleImageFile(file: File): Promise<File> {
-  if (file.size <= DOWNSCALE_ABOVE_BYTES) return file;
+export async function downscaleImageFile(file: File): Promise<File | null> {
   if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') {
     return file;
   }
 
-  let bitmap: ImageBitmap | null = null;
+  const isHeic = await hasHeicSignature(file);
+  // The HEIC original is never usable downstream, so a failed re-encode of one
+  // is a rejection too.
+  const fallback = isHeic ? null : file;
+
+  let bitmap: ImageBitmap;
   try {
     // Canvas drops EXIF, so the bitmap has to arrive already rotated or a phone
     // photo would upload sideways and be stored that way.
-    bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    bitmap = isHeic
+      ? await (await import('heic-to')).heicTo({ blob: file, type: 'bitmap' })
+      : await createImageBitmap(file, { imageOrientation: 'from-image' });
+  } catch {
+    return null;
+  }
 
+  try {
     const scale = Math.min(
       1,
       MAX_UPLOAD_DIMENSION / Math.max(bitmap.width, bitmap.height),
@@ -30,20 +54,21 @@ export async function downscaleImageFile(file: File): Promise<File> {
     canvas.height = Math.round(bitmap.height * scale);
 
     const context = canvas.getContext('2d');
-    if (!context) return file;
+    if (!context) return fallback;
     context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
 
     const blob = await new Promise<Blob | null>((resolve) =>
       canvas.toBlob(resolve, 'image/webp', DOWNSCALE_QUALITY),
     );
-    if (!blob || blob.size >= file.size) return file;
+    if (!blob) return fallback;
+    if (!isHeic && blob.size >= file.size) return file;
 
     const base = file.name.replace(/\.[^.]+$/, '') || 'photo';
     return new File([blob], `${base}.webp`, { type: 'image/webp' });
   } catch {
-    return file;
+    return fallback;
   } finally {
-    bitmap?.close();
+    bitmap.close();
   }
 }
 

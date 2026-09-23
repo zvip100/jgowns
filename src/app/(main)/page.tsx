@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 
 import heroImage from "@/assets/jgowns-hero.png";
+import { IMAGE_QUALITY } from "@/lib/types";
 
 import CategoryMarquee from "./CategoryMarquee";
 import ContactSection from "./ContactSection";
@@ -34,6 +35,7 @@ export default function HomePage() {
           fill
           priority
           sizes='(max-width: 768px) 100vw, 1280px'
+          quality={IMAGE_QUALITY}
           className='hero-kenburns object-cover object-center'
         />
         <div className='absolute inset-0 bg-[linear-gradient(112deg,rgba(255,251,246,0.92)_0%,rgba(255,251,246,0.6)_34%,rgba(73,52,30,0.18)_100%)]' />
