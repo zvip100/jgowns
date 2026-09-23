@@ -9,6 +9,7 @@ import {
   listingPriceSummary,
   sortListingSizes,
 } from "@/lib/listing-variants";
+import { IMAGE_QUALITY } from "@/lib/types";
 import { blurProps } from "@/lib/utils";
 
 import type { ListingWithSizes, SizeGroupSlug } from "@/lib/types";
@@ -47,6 +48,7 @@ export default function GownCard({
             alt={listing.title}
             fill
             sizes='(max-width: 640px) 100vw, (max-width: 1024px) 56vw, 30vw'
+            quality={IMAGE_QUALITY}
             className='object-cover transition duration-500 group-hover:scale-[1.045]'
             {...blurProps(listing.image_blur_data_urls[0])}
           />

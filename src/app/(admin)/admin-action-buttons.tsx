@@ -43,7 +43,7 @@ import {
   adminDeleteUser,
   adminUnbanUser,
 } from "@/lib/actions/admin/users";
-import { downscaleImageFile } from "@/lib/image-upload";
+import { downscaleImageFile, UNREADABLE_PHOTO_ERROR } from "@/lib/image-upload";
 import {
   MAX_SUSPENSION_NOTE_LENGTH,
   SUSPENSION_SLUGS,
@@ -451,6 +451,11 @@ function usePhotoFileSlot(id: string, label: string) {
           try {
             const shrunk = await downscaleImageFile(file);
             if (latestPickRef.current !== file || shrunk === file) return;
+            if (!shrunk) {
+              setValue({ file: null });
+              setFileError(UNREADABLE_PHOTO_ERROR);
+              return;
+            }
             setValue({ file: shrunk });
           } finally {
             if (latestPickRef.current === file) setIsShrinking(false);

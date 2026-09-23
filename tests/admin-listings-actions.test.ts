@@ -180,7 +180,12 @@ beforeEach(() => {
   });
   mockProcessListingImage.mockImplementation(async () => {
     calls.push("pipeline");
-    return { webp: Buffer.from("reprocessed"), facesDetected: 1, visionOk: true };
+    return {
+      image: Buffer.from("reprocessed"),
+      contentType: "image/avif",
+      facesDetected: 1,
+      visionOk: true,
+    };
   });
   mockBlurPlaceholderDataUrl.mockResolvedValue("data:image/jpeg;base64,tiny");
   // Default: nobody else shows the photo, so the cross-listing gate lets the
@@ -751,13 +756,13 @@ describe("adminReprocessListingImage", () => {
     );
   });
 
-  it("uploads the processed bytes as webp, never the original content type", async () => {
+  it("uploads the processed bytes as avif, never the original content type", async () => {
     await adminReprocessListingImage(LISTING_ID, IMAGE_URL);
 
     expect(mockUploadListingImage).toHaveBeenCalledExactlyOnceWith({
       supabase: expect.anything(),
       body: Buffer.from("reprocessed"),
-      contentType: "image/webp",
+      contentType: "image/avif",
       // The admin prefix is what lets the seller delete this object later.
       listingId: LISTING_ID,
     });
@@ -765,7 +770,8 @@ describe("adminReprocessListingImage", () => {
 
   it("pluralizes the face count", async () => {
     mockProcessListingImage.mockResolvedValue({
-      webp: Buffer.from("reprocessed"),
+      image: Buffer.from("reprocessed"),
+      contentType: "image/avif",
       facesDetected: 3,
       visionOk: true,
     });
@@ -777,7 +783,8 @@ describe("adminReprocessListingImage", () => {
 
   it("commits and says so when detection ran but found no face", async () => {
     mockProcessListingImage.mockResolvedValue({
-      webp: Buffer.from("reprocessed"),
+      image: Buffer.from("reprocessed"),
+      contentType: "image/avif",
       facesDetected: 0,
       visionOk: true,
     });
@@ -790,7 +797,8 @@ describe("adminReprocessListingImage", () => {
 
   it("refuses before any write when face detection could not run", async () => {
     mockProcessListingImage.mockResolvedValue({
-      webp: Buffer.from("reprocessed"),
+      image: Buffer.from("reprocessed"),
+      contentType: "image/avif",
       facesDetected: 0,
       visionOk: false,
     });
@@ -1012,13 +1020,13 @@ describe("adminReplaceListingImage", () => {
     );
   });
 
-  it("uploads under the listing's admin prefix, as webp", async () => {
+  it("uploads under the listing's admin prefix, as avif", async () => {
     await adminReplaceListingImage(LISTING_ID, IMAGE_URL, photoForm());
 
     expect(mockUploadListingImage).toHaveBeenCalledExactlyOnceWith({
       supabase: expect.anything(),
       body: Buffer.from("reprocessed"),
-      contentType: "image/webp",
+      contentType: "image/avif",
       listingId: LISTING_ID,
     });
   });
@@ -1033,7 +1041,8 @@ describe("adminReplaceListingImage", () => {
 
   it("reports the face count for zero, one, and many", async () => {
     mockProcessListingImage.mockResolvedValue({
-      webp: Buffer.from("reprocessed"),
+      image: Buffer.from("reprocessed"),
+      contentType: "image/avif",
       facesDetected: 0,
       visionOk: true,
     });
@@ -1042,7 +1051,8 @@ describe("adminReplaceListingImage", () => {
     ).resolves.toEqual({ notice: "Photo replaced. No faces were detected." });
 
     mockProcessListingImage.mockResolvedValue({
-      webp: Buffer.from("reprocessed"),
+      image: Buffer.from("reprocessed"),
+      contentType: "image/avif",
       facesDetected: 2,
       visionOk: true,
     });
@@ -1122,7 +1132,8 @@ describe("adminReplaceListingImage", () => {
 
   it("leaves the old photo alone when face detection could not run", async () => {
     mockProcessListingImage.mockResolvedValue({
-      webp: Buffer.from("reprocessed"),
+      image: Buffer.from("reprocessed"),
+      contentType: "image/avif",
       facesDetected: 0,
       visionOk: false,
     });
@@ -1332,7 +1343,8 @@ describe("adminAddListingImage", () => {
 
   it("writes nothing when face detection could not run", async () => {
     mockProcessListingImage.mockResolvedValue({
-      webp: Buffer.from("reprocessed"),
+      image: Buffer.from("reprocessed"),
+      contentType: "image/avif",
       facesDetected: 0,
       visionOk: false,
     });
@@ -1373,7 +1385,8 @@ describe("adminAddListingImage", () => {
 
   it("says nothing about a face when none was found", async () => {
     mockProcessListingImage.mockResolvedValue({
-      webp: Buffer.from("reprocessed"),
+      image: Buffer.from("reprocessed"),
+      contentType: "image/avif",
       facesDetected: 0,
       visionOk: true,
     });

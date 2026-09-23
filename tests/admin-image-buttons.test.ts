@@ -39,7 +39,10 @@ const {
   mockDownscale: vi.fn(),
 }));
 
-vi.mock("@/lib/image-upload", () => ({ downscaleImageFile: mockDownscale }));
+vi.mock("@/lib/image-upload", () => ({
+  downscaleImageFile: mockDownscale,
+  UNREADABLE_PHOTO_ERROR: "This photo can't be opened. Try a JPG or PNG.",
+}));
 
 /** Only the wiring is under test; the dialog's own flow lives in its own file. */
 vi.mock("@/components/ConfirmActionDialog", () => ({
@@ -282,6 +285,19 @@ describe("photo dialogs: the browser-side shrink", () => {
     expect(setValue.mock.calls).toEqual([
       [{ file: original }],
       [{ file: shrunk }],
+    ]);
+  });
+
+  it("clears a pick the browser cannot read, so it is never submitted", async () => {
+    const setValue = vi.fn();
+    const original = photo();
+    mockDownscale.mockResolvedValueOnce(null);
+
+    await mountAddDialog(setValue).onSelect(original);
+
+    expect(setValue.mock.calls).toEqual([
+      [{ file: original }],
+      [{ file: null }],
     ]);
   });
 

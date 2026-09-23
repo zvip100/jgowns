@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { FormInfoBanner } from '@/components/form/FormInfoBanner';
 import { LISTING_STATUS_TONE, PILL_TONE_CLASS } from '@/lib/styles';
+import { IMAGE_QUALITY } from '@/lib/types';
 import { sellerSuspensionMessage } from '@/lib/suspension';
 import CompletePaymentButton from '@/components/CompletePaymentButton';
 import MarkSizeSoldButton from '@/components/MarkSizeSoldButton';
@@ -57,6 +58,7 @@ export default function ListingRow({
               alt={listing.title}
               fill
               sizes="(max-width: 640px) 96px, 112px"
+              quality={IMAGE_QUALITY}
               className="object-cover transition duration-500 group-hover:scale-105"
               {...blurProps(listing.image_blur_data_urls[0])}
             />

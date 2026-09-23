@@ -4,7 +4,7 @@ import vision from "@google-cloud/vision";
 
 import { MAX_BLUR_DATA_URL_LENGTH } from "@/lib/types";
 
-import type { ResizeOptions } from "sharp";
+import type { OverlayOptions, ResizeOptions, SharpOptions } from "sharp";
 
 /**
  * The listing image pipeline, shared by the seller upload (optimizeListingPhoto)
@@ -17,11 +17,13 @@ import type { ResizeOptions } from "sharp";
  * exists to guarantee a blur has to tell those two apart.
  */
 export type ProcessedListingImage = {
-  webp: Buffer;
+  image: Buffer;
+  contentType: typeof OUTPUT_CONTENT_TYPE;
   facesDetected: number;
   visionOk: boolean;
 };
 
+const OUTPUT_CONTENT_TYPE = "image/avif";
 const OUT_W = 1200;
 const OUT_H = 1600;
 const BLUR_PAD = 0.1;
@@ -64,26 +66,35 @@ function getVisionClient(): InstanceType<typeof vision.ImageAnnotatorClient> {
 /**
  * `autoOrient` matters: sharp leaves EXIF orientation alone by default, so a
  * phone JPEG that reached storage without passing through here would otherwise
- * be cropped sideways and rewritten that way permanently.
+ * be cropped sideways and rewritten that way permanently. The crop stays raw
+ * pixels until the single AVIF encode, so no lossy step compounds on another.
  */
 export async function processListingImage(
   input: Buffer,
 ): Promise<ProcessedListingImage> {
-  const image = sharp(input, { autoOrient: true });
-  const { autoOrient } = await image.metadata();
-  const resized = await image
+  const source = sharp(input, { autoOrient: true });
+  const { autoOrient } = await source.metadata();
+  const { data, info } = await source
     .resize(OUT_W, OUT_H, resizeOptions(autoOrient.width, autoOrient.height))
-    .toBuffer();
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+  const raw = {
+    raw: { width: info.width, height: info.height, channels: info.channels },
+  };
 
-  const faces = await detectFaces(resized);
+  const faces = await detectFaces(
+    await sharp(data, raw).jpeg({ quality: 90 }).toBuffer(),
+  );
 
-  const blurred =
-    faces.regions.length === 0 ? resized : await blurFaces(resized, faces.regions);
-
-  const webp = await sharp(blurred).webp({ quality: 85, effort: 6 }).toBuffer();
+  const canvas = sharp(data, raw);
+  if (faces.regions.length > 0) {
+    canvas.composite(await blurredFaceTiles(data, raw, faces.regions));
+  }
+  const image = await canvas.avif({ quality: 65, effort: 2 }).toBuffer();
 
   return {
-    webp,
+    image,
+    contentType: OUTPUT_CONTENT_TYPE,
     facesDetected: faces.regions.length,
     visionOk: faces.ok,
   };
@@ -179,23 +190,23 @@ function describeVisionError(e: unknown): string {
   return parts.length > 0 ? parts.join(" | ") : err.toString();
 }
 
-async function blurFaces(canvas: Buffer, faces: Region[]): Promise<Buffer> {
-  const composites = await Promise.all(
+/** PNG tiles, so the blur adds no compression loss of its own. */
+function blurredFaceTiles(
+  data: Buffer,
+  raw: SharpOptions,
+  faces: Region[],
+): Promise<OverlayOptions[]> {
+  return Promise.all(
     faces.map(async (face) => {
       const region = padAndClamp(face);
-      const tile = await sharp(canvas)
+      const tile = await sharp(data, raw)
         .extract(region)
         .blur(BLUR_SIGMA)
+        .png()
         .toBuffer();
-      return {
-        input: tile,
-        left: region.left,
-        top: region.top,
-        blend: "over" as const,
-      };
+      return { input: tile, left: region.left, top: region.top, blend: "over" };
     }),
   );
-  return sharp(canvas).composite(composites).toBuffer();
 }
 
 function regionFromVertices(

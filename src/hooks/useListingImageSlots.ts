@@ -9,6 +9,7 @@ import {
   downscaleImageFile,
   generateBlurDataUrl,
   dataUrlToFile,
+  UNREADABLE_PHOTO_ERROR,
 } from '@/lib/image-upload';
 import { MAX_LISTING_IMAGES, type ImageSlotState } from '@/lib/types';
 
@@ -105,6 +106,22 @@ export function useListingImageSlots({
     // Shrunk before it crosses the network, not after: a multi-megabyte body is
     // what the dropped uploads had in common.
     const uploadFile = await downscaleImageFile(file);
+
+    if (!uploadFile) {
+      captureEvent(SELLER_EVENTS.photoUploadFailed, {
+        reason: 'unreadable_image',
+        file_count: 1,
+        total_size: file.size,
+      });
+      const currentSlot = slotsRef.current.find((s) => s.id === slotId);
+      if (!currentSlot || currentSlot.imageFile !== file) return;
+      URL.revokeObjectURL(tempPreview);
+      updateSlotById(slotId, {
+        ...emptySlot(slotId),
+        optimizeError: UNREADABLE_PHOTO_ERROR,
+      });
+      return;
+    }
 
     const optimizeForm = new FormData();
     optimizeForm.set('image', uploadFile);

@@ -5,7 +5,9 @@ const { mockSharp, mockSharpInstance, mockFaceDetection } = vi.hoisted(() => {
   const mockSharpInstance = {
     metadata: vi.fn(),
     resize: vi.fn().mockReturnThis(),
-    webp: vi.fn().mockReturnThis(),
+    raw: vi.fn().mockReturnThis(),
+    avif: vi.fn().mockReturnThis(),
+    png: vi.fn().mockReturnThis(),
     jpeg: vi.fn().mockReturnThis(),
     extract: vi.fn().mockReturnThis(),
     blur: vi.fn().mockReturnThis(),
@@ -51,11 +53,19 @@ function faceAt(x: number, y: number, size = 100) {
   };
 }
 
+const RAW_PIXELS = Buffer.from("raw");
+const RAW_INPUT = { raw: { width: 1200, height: 1600, channels: 3 } };
+
 describe("processListingImage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockSharp.mockReturnValue(mockSharpInstance);
-    mockSharpInstance.toBuffer.mockResolvedValue(Buffer.from("processed"));
+    mockSharpInstance.toBuffer.mockImplementation(
+      async (options?: { resolveWithObject?: boolean }) =>
+        options?.resolveWithObject
+          ? { data: RAW_PIXELS, info: RAW_INPUT.raw }
+          : Buffer.from("processed"),
+    );
     mockSharpInstance.metadata.mockResolvedValue({
       autoOrient: { width: 3000, height: 4000 },
     });
@@ -68,9 +78,32 @@ describe("processListingImage", () => {
   it("returns the encoded buffer and reports a successful detection", async () => {
     const result = await processListingImage(Buffer.from("input"));
 
-    expect(result.webp).toEqual(Buffer.from("processed"));
+    expect(result.image).toEqual(Buffer.from("processed"));
+    expect(result.contentType).toBe("image/avif");
     expect(result.visionOk).toBe(true);
     expect(result.facesDetected).toBe(0);
+  });
+
+  it("keeps the crop as raw pixels and encodes AVIF exactly once", async () => {
+    await processListingImage(Buffer.from("input"));
+
+    expect(mockSharpInstance.raw).toHaveBeenCalledOnce();
+    expect(mockSharp).toHaveBeenCalledWith(RAW_PIXELS, RAW_INPUT);
+    expect(mockSharpInstance.avif).toHaveBeenCalledExactlyOnceWith({
+      quality: 65,
+      effort: 2,
+    });
+  });
+
+  it("sends Vision a JPEG of the crop, not the raw pixels", async () => {
+    await processListingImage(Buffer.from("input"));
+
+    expect(mockSharpInstance.jpeg).toHaveBeenCalledExactlyOnceWith({
+      quality: 90,
+    });
+    expect(mockFaceDetection).toHaveBeenCalledWith({
+      image: { content: Buffer.from("processed") },
+    });
   });
 
   it("auto-orients the input so EXIF rotation is applied before the crop", async () => {
@@ -144,7 +177,10 @@ describe("processListingImage", () => {
     expect(result.facesDetected).toBe(2);
     expect(result.visionOk).toBe(true);
     expect(mockSharpInstance.blur).toHaveBeenCalledTimes(2);
+    expect(mockSharpInstance.png).toHaveBeenCalledTimes(2);
     expect(mockSharpInstance.composite).toHaveBeenCalledOnce();
+    expect(mockSharpInstance.composite.mock.calls[0][0]).toHaveLength(2);
+    expect(mockSharpInstance.avif).toHaveBeenCalledOnce();
   });
 
   it("skips compositing entirely when no face is found", async () => {
@@ -161,7 +197,7 @@ describe("processListingImage", () => {
 
     expect(result.visionOk).toBe(false);
     expect(result.facesDetected).toBe(0);
-    expect(result.webp).toEqual(Buffer.from("processed"));
+    expect(result.image).toEqual(Buffer.from("processed"));
   });
 
   it("reports visionOk false when the error rides in the response body", async () => {

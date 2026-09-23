@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, Maximize, Minus, Plus, X } from 'lucide-reac
 import useEmblaCarousel from 'embla-carousel-react';
 
 import { Dialog, DialogClose, DialogContent, DialogTitle } from '@/components/ui/dialog';
+import { IMAGE_QUALITY } from '@/lib/types';
 import { blurProps, cn } from '@/lib/utils';
 
 import { LightboxToolbar } from './LightboxToolbar';
@@ -298,6 +299,7 @@ function LightboxContent({
                       ? '(max-width: 640px) 100vw, 900px'
                       : '(max-width: 640px) 100vw, 675px'
                   }
+                  quality={IMAGE_QUALITY}
                   className="object-contain"
                   priority={i === startIndex}
                   loading={i === startIndex ? undefined : 'eager'}
@@ -447,6 +449,7 @@ function LightboxContent({
                 alt={`${title} photo ${i + 1}`}
                 fill
                 sizes="80px"
+                quality={IMAGE_QUALITY}
                 className="object-cover"
                 {...blurProps(blurDataUrls[i])}
               />

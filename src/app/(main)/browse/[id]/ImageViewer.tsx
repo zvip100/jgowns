@@ -7,6 +7,7 @@ import useEmblaCarousel from 'embla-carousel-react';
 
 import { captureEvent } from '@/lib/analytics/client';
 import { BUYER_EVENTS } from '@/lib/analytics/events';
+import { IMAGE_QUALITY } from '@/lib/types';
 import { blurProps, cn } from '@/lib/utils';
 import { Lightbox } from '@/components/lightbox/Lightbox';
 
@@ -164,6 +165,7 @@ export function ImageViewer({
                   alt={title}
                   fill
                   sizes="(max-width: 768px) 100vw, 56vw"
+                  quality={IMAGE_QUALITY}
                   className="object-cover"
                   priority={i === 0}
                   {...blurProps(blurDataUrls[i])}

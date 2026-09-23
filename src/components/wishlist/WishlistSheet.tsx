@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { captureEvent } from '@/lib/analytics/client';
 import { BUYER_EVENTS } from '@/lib/analytics/events';
 import { LEGAL_LINK_CLASS } from '@/lib/styles';
+import { IMAGE_QUALITY } from '@/lib/types';
 import {
   Empty,
   EmptyDescription,
@@ -56,6 +57,7 @@ function WishlistRow({ item, onRemove, onNavigate }: WishlistRowProps) {
             alt={snapshot.title}
             fill
             sizes="64px"
+            quality={IMAGE_QUALITY}
             className={cn('object-cover', dimmed && 'grayscale')}
             {...blurProps(snapshot.blurDataUrl ?? undefined)}
           />

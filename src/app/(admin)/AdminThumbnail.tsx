@@ -1,6 +1,7 @@
 import { ImageIcon } from "lucide-react";
 import Image from "next/image";
 
+import { IMAGE_QUALITY } from "@/lib/types";
 import { blurProps } from "@/lib/utils";
 
 type AdminThumbnailProps = {
@@ -34,6 +35,7 @@ export function AdminThumbnail({
       alt={alt}
       width={size}
       height={size}
+      quality={IMAGE_QUALITY}
       // Phase 1 fixture photos are inline SVG data URIs, which the optimizer
       // cannot fetch. Real Supabase URLs still go through it.
       unoptimized={src.startsWith("data:")}
