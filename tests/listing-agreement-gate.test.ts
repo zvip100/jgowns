@@ -159,6 +159,16 @@ describe("ListingAgreementGate", () => {
     expect(render()).toContain("listing-form");
   });
 
+  it("resets on re-show when the create commits after the route was hidden", () => {
+    clickIAgree();
+    render();
+    hideRoute();
+    markListingCreated();
+    render();
+
+    expect(render()).toContain("Our Listing Standards");
+  });
+
   it("resets only once per created listing", () => {
     clickIAgree();
     markListingCreated();

@@ -36,6 +36,8 @@ export default function ListingAgreementGate({ children }: ListingAgreementGateP
     const onPageShow = (e: PageTransitionEvent) => {
       if (e.persisted) resetIfCreated();
     };
+    // Also on re-show: a create can commit after the route was already hidden.
+    resetIfCreated();
     window.addEventListener('pageshow', onPageShow);
     return () => {
       window.removeEventListener('pageshow', onPageShow);
