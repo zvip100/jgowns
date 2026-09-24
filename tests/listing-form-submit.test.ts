@@ -18,11 +18,13 @@ type SetStateAction<State> = State | ((current: State) => State);
 const {
   hookState,
   mockCreateListing,
+  mockOnListingCreated,
   mockPush,
   mockToastError,
   mockUnstableRethrow,
   mockUpdateListing,
 } = vi.hoisted(() => ({
+  mockOnListingCreated: vi.fn(),
   hookState: {
     callCount: 0,
     overrides: new Map<number, unknown>(),
@@ -42,6 +44,7 @@ vi.mock("react", async () => {
 
   return {
     ...actual,
+    use: () => mockOnListingCreated,
     useCallback: <Callback>(callback: Callback): Callback => callback,
     useRef: <Value>(value: Value) => {
       const index = hookState.refCallCount++;
@@ -414,6 +417,7 @@ describe("useListingFormSubmit", () => {
     hookState.setterCalls.length = 0;
     mockCreateListing.mockReset();
     mockCreateListing.mockResolvedValue({});
+    mockOnListingCreated.mockReset();
     mockPush.mockReset();
     mockToastError.mockReset();
     mockUnstableRethrow.mockReset();
@@ -581,6 +585,7 @@ describe("useListingFormSubmit", () => {
 
     expect(mockUnstableRethrow).toHaveBeenCalledOnce();
     expect(mockUnstableRethrow).toHaveBeenCalledWith(redirectError);
+    expect(mockOnListingCreated).not.toHaveBeenCalled();
     expect(errorSetterValues()).toEqual([EMPTY_LISTING_ERRORS]);
     expect(loadingSetterValues()).toEqual([true, false]);
   });
@@ -708,11 +713,45 @@ describe("useListingFormSubmit", () => {
       await submit.handleSubmit();
 
       expect(mockUnstableRethrow).toHaveBeenCalledWith("kaboom");
+      expect(mockOnListingCreated).not.toHaveBeenCalled();
       expect(mockToastError).toHaveBeenCalledWith("Something went wrong.");
       // A thrown failure is a submit outcome, not field validation: only the
       // initial reset touches inline errors.
       expect(errorSetterValues()).toEqual([EMPTY_LISTING_ERRORS]);
       expect(loadingSetterValues()).toEqual([true, false]);
+    });
+
+    it("signals the created listing before rethrowing the success redirect", async () => {
+      const redirectError = new Error("NEXT_REDIRECT");
+      setValidCreateState();
+      mockCreateListing.mockRejectedValue(redirectError);
+      mockUnstableRethrow.mockImplementation((error: unknown) => {
+        throw error;
+      });
+
+      const submit = useListingFormSubmit({
+        slots: [makeSlot()],
+        resolveUploadFile: vi.fn(),
+      });
+
+      await expect(submit.handleSubmit()).rejects.toBe(redirectError);
+
+      expect(mockOnListingCreated).toHaveBeenCalledOnce();
+      expect(mockToastError).not.toHaveBeenCalled();
+    });
+
+    it("does not signal a created listing when createListing returns an error", async () => {
+      setValidCreateState();
+      mockCreateListing.mockResolvedValue({ error: "Upload failed." });
+
+      const submit = useListingFormSubmit({
+        slots: [makeSlot()],
+        resolveUploadFile: vi.fn(),
+      });
+
+      await submit.handleSubmit();
+
+      expect(mockOnListingCreated).not.toHaveBeenCalled();
     });
   });
 

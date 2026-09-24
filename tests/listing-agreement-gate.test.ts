@@ -8,15 +8,28 @@ const { hookState } = vi.hoisted(() => ({
   hookState: {
     states: [] as unknown[],
     stateIndex: 0,
+    refs: [] as { current: unknown }[],
+    refIndex: 0,
+    layoutEffectCleanups: [] as (() => void)[],
   },
 }));
 
-/** Minimal hook harness: state persists across renders. */
+/** Minimal hook harness: state and refs persist across renders. */
 vi.mock("react", async () => {
   const actual = await vi.importActual<typeof import("react")>("react");
 
   return {
     ...actual,
+    useCallback: <Callback>(callback: Callback): Callback => callback,
+    useLayoutEffect: (effect: () => void | (() => void)) => {
+      const cleanup = effect();
+      if (cleanup) hookState.layoutEffectCleanups.push(cleanup);
+    },
+    useRef: <Value>(initial: Value): { current: Value } => {
+      const index = hookState.refIndex++;
+      if (!(index in hookState.refs)) hookState.refs[index] = { current: initial };
+      return hookState.refs[index] as { current: Value };
+    },
     useState: <State>(initial: State): [State, (next: State) => void] => {
       const index = hookState.stateIndex++;
       if (!(index in hookState.states)) hookState.states[index] = initial;
@@ -38,6 +51,7 @@ const FORM = React.createElement("form", { id: "listing-form" }, "Listing form")
 
 function resetRender(): void {
   hookState.stateIndex = 0;
+  hookState.refIndex = 0;
 }
 
 function render(): string {
@@ -57,8 +71,29 @@ function clickIAgree(): void {
   button.props.onClick();
 }
 
+function markListingCreated(): void {
+  resetRender();
+  const tree = ListingAgreementGate({ children: FORM }) as ReactElement<{
+    value: () => void;
+  }>;
+  tree.props.value();
+}
+
+/** Simulates Activity hiding the route, which runs layout-effect cleanups. */
+function hideRoute(): void {
+  for (const cleanup of hookState.layoutEffectCleanups.splice(0)) cleanup();
+}
+
+function pageShow(isPersisted: boolean): void {
+  window.dispatchEvent(Object.assign(new Event("pageshow"), { persisted: isPersisted }));
+}
+
 beforeEach(() => {
+  hideRoute();
   hookState.states = [];
+  hookState.refs = [];
+  hookState.layoutEffectCleanups = [];
+  vi.stubGlobal("window", new EventTarget());
 });
 
 describe("ListingAgreementGate", () => {
@@ -80,5 +115,58 @@ describe("ListingAgreementGate", () => {
     expect(html).toContain("listing-form");
     expect(html).not.toContain("Our Listing Standards");
     expect(html).not.toContain("I Agree");
+  });
+
+  it("keeps the agreement and draft when the route hides without a created listing", () => {
+    clickIAgree();
+    render();
+    hideRoute();
+
+    expect(render()).toContain("listing-form");
+  });
+
+  it("returns to the standards after a created listing once the route hides", () => {
+    clickIAgree();
+    markListingCreated();
+    hideRoute();
+    const html = render();
+
+    expect(html).toContain("Our Listing Standards");
+    expect(html).not.toContain("listing-form");
+  });
+
+  it("returns to the standards when bfcache restores the page after a create", () => {
+    clickIAgree();
+    markListingCreated();
+    pageShow(true);
+
+    expect(render()).toContain("Our Listing Standards");
+  });
+
+  it("keeps the draft on a bfcache restore without a created listing", () => {
+    clickIAgree();
+    render();
+    pageShow(true);
+
+    expect(render()).toContain("listing-form");
+  });
+
+  it("ignores a normal page load after a create", () => {
+    clickIAgree();
+    markListingCreated();
+    pageShow(false);
+
+    expect(render()).toContain("listing-form");
+  });
+
+  it("resets only once per created listing", () => {
+    clickIAgree();
+    markListingCreated();
+    hideRoute();
+    clickIAgree();
+    render();
+    hideRoute();
+
+    expect(render()).toContain("listing-form");
   });
 });
