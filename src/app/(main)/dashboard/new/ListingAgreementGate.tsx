@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useLayoutEffect, useRef, useState } from 'react';
 import { Check, ShieldCheck } from 'lucide-react';
 
 import NoticePanel from '@/components/NoticePanel';
+import { ListingCreatedContext } from '@/hooks/useListingFormSubmit';
 import { NOTICE_PANEL_PRIMARY_ACTION_CLASS } from '@/lib/styles';
 
 import type { ReactNode } from 'react';
@@ -19,6 +20,30 @@ const LISTING_STANDARDS = [
 
 export default function ListingAgreementGate({ children }: ListingAgreementGateProps) {
   const [hasAgreed, setHasAgreed] = useState(false);
+  const hasCreatedRef = useRef(false);
+  const markCreated = useCallback(() => {
+    hasCreatedRef.current = true;
+  }, []);
+
+  // Start fresh after a create, whether Activity hides this route (client
+  // redirect) or the browser restores it from bfcache (Back from Stripe).
+  useLayoutEffect(() => {
+    const resetIfCreated = () => {
+      if (!hasCreatedRef.current) return;
+      hasCreatedRef.current = false;
+      setHasAgreed(false);
+    };
+    const onPageShow = (e: PageTransitionEvent) => {
+      if (e.persisted) resetIfCreated();
+    };
+    // Also on re-show: a create can commit after the route was already hidden.
+    resetIfCreated();
+    window.addEventListener('pageshow', onPageShow);
+    return () => {
+      window.removeEventListener('pageshow', onPageShow);
+      resetIfCreated();
+    };
+  }, []);
 
   if (!hasAgreed) {
     return (
@@ -52,5 +77,5 @@ export default function ListingAgreementGate({ children }: ListingAgreementGateP
     );
   }
 
-  return children;
+  return <ListingCreatedContext value={markCreated}>{children}</ListingCreatedContext>;
 }

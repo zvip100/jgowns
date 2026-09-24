@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { createContext, use, useCallback, useRef, useState } from "react";
 import { unstable_rethrow, useRouter } from "next/navigation";
 
 import { useSizeRows } from "@/hooks/useSizeRows";
@@ -241,6 +241,19 @@ function listingImagesChanged(
   return currentUrls.some((url, i) => url !== originalUrls[i]);
 }
 
+/** Lets an ancestor (the new-listing gate) reset once a create has committed. */
+export const ListingCreatedContext = createContext<() => void>(() => {});
+
+/** True for Next's redirect/notFound signals, which unstable_rethrow rethrows. */
+function isNavigationSignal(e: unknown): boolean {
+  try {
+    unstable_rethrow(e);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 type UseListingFormSubmitOptions = {
   initial?: Partial<ListingFormData>;
   listingId?: string;
@@ -255,6 +268,7 @@ export function useListingFormSubmit({
   resolveUploadFile,
 }: UseListingFormSubmitOptions) {
   const router = useRouter();
+  const onListingCreated = use(ListingCreatedContext);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<ListingFormErrors>(EMPTY_LISTING_ERRORS);
   const [form, setForm] = useState<ListingScalarFormData>(() =>
@@ -542,6 +556,8 @@ export function useListingFormSubmit({
         return;
       }
     } catch (e: unknown) {
+      // createListing only redirects once the listing is committed.
+      if (!listingId && isNavigationSignal(e)) onListingCreated();
       unstable_rethrow(e);
       toast.error("Something went wrong.");
     } finally {
@@ -557,6 +573,7 @@ export function useListingFormSubmit({
     slots,
     resolveUploadFile,
     router,
+    onListingCreated,
   ]);
 
   return {
