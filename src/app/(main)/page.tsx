@@ -42,16 +42,13 @@ export default function HomePage() {
         <div className='absolute inset-0 bg-[radial-gradient(circle_at_20%_12%,rgba(255,255,255,0.7),transparent_52%)]' />
 
         <div className='relative flex flex-col justify-center px-6 py-12 sm:px-10 sm:py-16 lg:px-14 lg:py-20'>
-          <p className='hero-float text-[0.7rem] font-semibold uppercase tracking-[0.24em] text-[#6d5949] [animation-delay:0ms]'>
-            The ultimate marketplace for modest gowns.
-          </p>
-          <h1 className='hero-float mt-5 max-w-3xl text-balance text-[2.6rem] text-[#2f241b] sm:text-6xl lg:text-[4.75rem] [animation-delay:280ms]'>
-            Dream gown, <em className='shimmer-text'>Dreamier</em> price.
+          <h1 className='hero-float max-w-4xl text-balance text-[2.6rem] text-[#2f241b] sm:text-6xl lg:text-[4rem] [animation-delay:0ms]'>
+            The ultimate marketplace for <em className='shimmer-text'>modest</em> gowns.
           </h1>
-          <p className='hero-float mt-6 max-w-xl text-pretty text-base leading-7 text-[#5d4b3d] sm:text-lg [animation-delay:640ms]'>
-            Browse gently worn modest gowns from sellers in your community. Find one you love, contact the seller directly, and save hundreds off retail.
+          <p className='hero-float mt-6 max-w-xl text-pretty text-base leading-7 text-[#5d4b3d] sm:text-lg [animation-delay:360ms]'>
+            Browse gently worn gowns from sellers in your community. Find one you love, contact the seller directly, and save hundreds off retail.
           </p>
-          <p className='hero-float mt-6 hidden text-xs font-semibold italic uppercase tracking-wide text-[#7f6954] sm:block [animation-delay:960ms]'>
+          <p className='hero-float mt-6 hidden text-xs font-semibold italic uppercase tracking-wide text-[#7f6954] sm:block [animation-delay:680ms]'>
             Every category and size
             <span aria-hidden className='mx-2.5'>&middot;</span>
             Direct contact
@@ -59,7 +56,7 @@ export default function HomePage() {
             Like-new quality
           </p>
 
-          <div className='hero-float mt-16 self-center sm:mt-24 [animation-delay:1240ms]'>
+          <div className='hero-float mt-16 self-center sm:mt-24 [animation-delay:960ms]'>
             <Link
               href='/browse'
               prefetch={true}

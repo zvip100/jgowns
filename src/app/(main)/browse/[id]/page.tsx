@@ -1,6 +1,5 @@
 import { notFound } from "next/navigation";
 
-import { browseHrefFromBack } from "@/lib/browse-url";
 import {
   listingPriceSummary,
   listingSizeSummary,
@@ -14,7 +13,6 @@ import type { Metadata } from "next";
 
 type ListingPageProps = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ back?: string; from?: string }>;
 };
 
 export async function generateMetadata({
@@ -60,23 +58,16 @@ export async function generateMetadata({
   };
 }
 
-export default async function ListingPage({
-  params,
-  searchParams,
-}: ListingPageProps) {
-  const [{ id }, { back, from }] = await Promise.all([params, searchParams]);
+export default async function ListingPage({ params }: ListingPageProps) {
+  const { id } = await params;
 
   if (!isValidUUID(id)) notFound();
-
-  const fromDashboard = from === 'dash';
-  const backHref = fromDashboard ? '/dashboard' : browseHrefFromBack(back);
-  const backLabel = fromDashboard ? 'Back to dashboard' : 'Browse all gowns';
 
   const { listing, error } = await fetchListing(id);
   if (error) throw new Error(error.message);
   if (!listing) notFound();
 
   return (
-    <ListingDetail listing={listing} backHref={backHref} backLabel={backLabel} />
+    <ListingDetail listing={listing} />
   );
 }
