@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import {
   Ban,
   CheckCircle2,
@@ -20,6 +20,7 @@ import {
 
 import ConfirmActionButton from "@/components/ConfirmActionButton";
 import { SelectField } from "@/components/form/SelectField";
+import { PhotoStudioDialog } from "@/components/photo-studio/PhotoStudioDialog";
 import { TextareaField } from "@/components/form/TextareaField";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ADMIN_DEMO_MODE_MESSAGE } from "@/lib/admin/constants";
@@ -43,7 +44,7 @@ import {
   adminDeleteUser,
   adminUnbanUser,
 } from "@/lib/actions/admin/users";
-import { downscaleImageFile, UNREADABLE_PHOTO_ERROR } from "@/lib/image-upload";
+import { exportEditedImage, UNREADABLE_PHOTO_ERROR } from "@/lib/image-upload";
 import {
   MAX_SUSPENSION_NOTE_LENGTH,
   SUSPENSION_SLUGS,
@@ -59,8 +60,8 @@ import {
 import { AdminImageFileField } from "./AdminImageFileField";
 import { ADMIN_STATUS_LABELS } from "./admin-audit-labels";
 
-import type { ConfirmActionBodyState } from "@/components/ConfirmActionDialog";
 import type { AdminListingStatus } from "@/lib/admin/types";
+import type { PhotoStudioItem } from "@/lib/types";
 
 /**
  * Every write on the admin surface, as confirm-gated leaves. Each imports its
@@ -391,78 +392,87 @@ export function AdminReprocessImageButton({
   );
 }
 
-/**
- * The value both photo dialogs carry. Nullable rather than absent so the body
- * can render its cleared state without the dialog's own `initialValue` cast.
- */
-type PhotoValue = { file: File | null };
-
-const EMPTY_PHOTO_VALUE: PhotoValue = { file: null };
+type StudioPhoto = {
+  item: Extract<PhotoStudioItem, { kind: "new" }>;
+  file: File;
+};
 
 /**
- * The photo dialogs' shared body, validate gate, and reopen reset. Both
- * dialogs run the same schema the action re-runs, so the operator sees the
- * message on the field before a round trip rather than in a banner after one.
+ * Add and Replace run the photo studio and the confirm dialog one after the
+ * other, never nested: the trigger opens the studio, its Save opens the
+ * confirm with the exported file, and Change photo goes back with the same
+ * source and edits. Closing either one any other way drops the photo.
  */
-function usePhotoFileSlot(id: string, label: string) {
+function useStudioPhotoFlow(id: string, label: string) {
+  const [isStudioOpen, setIsStudioOpen] = useState(false);
+  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
+  const [photo, setPhoto] = useState<StudioPhoto | null>(null);
   const [fileError, setFileError] = useState<string>();
-  const [isShrinking, setIsShrinking] = useState(false);
-  const latestPickRef = useRef<File | null>(null);
+
+  const dropPhoto = () => {
+    if (photo) URL.revokeObjectURL(photo.item.image.src);
+    setPhoto(null);
+  };
+
+  const studio = (
+    <PhotoStudioDialog
+      open={isStudioOpen}
+      onOpenChange={(open) => {
+        setIsStudioOpen(open);
+        if (!open) dropPhoto();
+      }}
+      initialItems={photo ? [photo.item] : []}
+      maxItems={1}
+      mode="single"
+      onSave={async ([item]) => {
+        if (item?.kind !== "new") return "Choose a photo.";
+        const file = await exportEditedImage(item.image, item.edits);
+        if (!file) return UNREADABLE_PHOTO_ERROR;
+        if (photo && photo.item.image.src !== item.image.src) {
+          URL.revokeObjectURL(photo.item.image.src);
+        }
+        setPhoto({ item, file });
+        setFileError(undefined);
+        setIsStudioOpen(false);
+        setIsConfirmOpen(true);
+      }}
+    />
+  );
 
   return {
-    isShrinking,
-    // The ref is cleared too, or a shrink still running from a cancelled
-    // session would pass the identity guard and refill the fresh dialog with
-    // the photo the operator just discarded.
-    onOpen: () => {
-      setFileError(undefined);
-      setIsShrinking(false);
-      latestPickRef.current = null;
+    studio,
+    open: isConfirmOpen,
+    // The trigger asks to open the confirm; it gets the studio first.
+    onOpenChange: (open: boolean) => {
+      if (open) {
+        dropPhoto();
+        setIsStudioOpen(true);
+        return;
+      }
+      setIsConfirmOpen(false);
+      dropPhoto();
     },
-    validate: (value: PhotoValue) => {
-      const parsed = listingImageFileSchema.safeParse(value.file);
+    // The same schema the action re-runs, so the operator sees the message on
+    // the field before a round trip rather than in a banner after one.
+    validate: () => {
+      const parsed = listingImageFileSchema.safeParse(photo?.file);
       setFileError(parsed.success ? undefined : parsed.error.issues[0]?.message);
       return parsed.success;
     },
-    renderBody: ({
-      value,
-      setValue,
-      isPending,
-    }: ConfirmActionBodyState<PhotoValue>) => (
+    renderBody: ({ isPending }: { isPending: boolean }) => (
       <AdminImageFileField
         id={id}
         label={label}
-        file={value.file}
+        file={photo?.file ?? null}
         error={fileError}
         disabled={isPending}
-        // The preview shows the pick immediately, then the shrunk file swaps in
-        // once it is ready. Confirm is blocked until then, so the original is
-        // never what gets submitted, and only the newest pick may land.
-        onSelect={async (file) => {
-          setFileError(undefined);
-          latestPickRef.current = file;
-          setValue({ file });
-          if (!file) {
-            setIsShrinking(false);
-            return;
-          }
-
-          setIsShrinking(true);
-          try {
-            const shrunk = await downscaleImageFile(file);
-            if (latestPickRef.current !== file || shrunk === file) return;
-            if (!shrunk) {
-              setValue({ file: null });
-              setFileError(UNREADABLE_PHOTO_ERROR);
-              return;
-            }
-            setValue({ file: shrunk });
-          } finally {
-            if (latestPickRef.current === file) setIsShrinking(false);
-          }
+        onChange={() => {
+          setIsConfirmOpen(false);
+          setIsStudioOpen(true);
         }}
       />
     ),
+    file: photo?.file ?? null,
   };
 }
 
@@ -478,62 +488,64 @@ export function AdminReplaceImageButton({
   position,
   isDemo,
 }: AdminRemoveImageButtonProps) {
-  const slot = usePhotoFileSlot("replace-photo", "New photo");
+  const flow = useStudioPhotoFlow("replace-photo", "New photo");
 
   return (
-    <ConfirmActionButton<PhotoValue>
-      title="Replace this photo?"
-      description="The new photo runs through face blur and optimization. The current photo is deleted once the replacement is saved."
-      confirmLabel="Replace"
-      pendingLabel="Replacing..."
-      ariaLabel={`Replace photo ${position}`}
-      icon={ImageUp}
-      // Destructive because it does destroy the photo that is there now, even
-      // though the replacement has to land first.
-      confirmVariant="destructive"
-      triggerClassName={TRIGGER_CLASS.icon}
-      {...demoProps(isDemo)}
-      triggerStyle="inline-icon"
-      initialValue={EMPTY_PHOTO_VALUE}
-      renderBody={slot.renderBody}
-      onOpen={slot.onOpen}
-      validate={slot.validate}
-      isBusy={slot.isShrinking}
-      // No successMessage: the action always returns a face-count notice, which
-      // the dialog prefers on the success path.
-      onConfirm={(value) =>
-        adminReplaceListingImage(listingId, imageUrl, photoFormData(value.file))
-      }
-    />
+    <>
+      <ConfirmActionButton
+        title="Replace this photo?"
+        description="The new photo runs through face blur and optimization. The current photo is deleted once the replacement is saved."
+        confirmLabel="Replace"
+        pendingLabel="Replacing..."
+        ariaLabel={`Replace photo ${position}`}
+        icon={ImageUp}
+        // Destructive because it does destroy the photo that is there now, even
+        // though the replacement has to land first.
+        confirmVariant="destructive"
+        triggerClassName={TRIGGER_CLASS.icon}
+        {...demoProps(isDemo)}
+        triggerStyle="inline-icon"
+        open={flow.open}
+        onOpenChange={flow.onOpenChange}
+        renderBody={flow.renderBody}
+        validate={flow.validate}
+        // No successMessage: the action always returns a face-count notice, which
+        // the dialog prefers on the success path.
+        onConfirm={() =>
+          adminReplaceListingImage(listingId, imageUrl, photoFormData(flow.file))
+        }
+      />
+      {flow.studio}
+    </>
   );
 }
 
 export function AdminAddImageButton({ listingId, isDemo }: AdminListingIdProps) {
-  const slot = usePhotoFileSlot("add-photo", "Photo");
+  const flow = useStudioPhotoFlow("add-photo", "Photo");
 
   return (
-    <ConfirmActionButton<PhotoValue>
-      title="Add a photo?"
-      description="Runs face blur and optimization, then adds the photo to this listing."
-      confirmLabel="Add photo"
-      pendingLabel="Adding..."
-      ariaLabel="Add a photo"
-      buttonLabel="Add photo"
-      // Stands alone under the grid rather than in a packed row, so it keeps
-      // its label at every width instead of collapsing to a bare glyph.
-      isLabelAlwaysShown
-      icon={ImagePlus}
-      triggerClassName={TRIGGER_CLASS.default}
-      {...demoProps(isDemo)}
-      initialValue={EMPTY_PHOTO_VALUE}
-      renderBody={slot.renderBody}
-      onOpen={slot.onOpen}
-      validate={slot.validate}
-      isBusy={slot.isShrinking}
-      onConfirm={(value) =>
-        adminAddListingImage(listingId, photoFormData(value.file))
-      }
-    />
+    <>
+      <ConfirmActionButton
+        title="Add a photo?"
+        description="Runs face blur and optimization, then adds the photo to this listing."
+        confirmLabel="Add photo"
+        pendingLabel="Adding..."
+        ariaLabel="Add a photo"
+        buttonLabel="Add photo"
+        // Stands alone under the grid rather than in a packed row, so it keeps
+        // its label at every width instead of collapsing to a bare glyph.
+        isLabelAlwaysShown
+        icon={ImagePlus}
+        triggerClassName={TRIGGER_CLASS.default}
+        {...demoProps(isDemo)}
+        open={flow.open}
+        onOpenChange={flow.onOpenChange}
+        renderBody={flow.renderBody}
+        validate={flow.validate}
+        onConfirm={() => adminAddListingImage(listingId, photoFormData(flow.file))}
+      />
+      {flow.studio}
+    </>
   );
 }
 

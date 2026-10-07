@@ -12,8 +12,9 @@ Read this file and `MEMORY.md` before every change.
 
 **Stack:**
 
-- **Framework:** Next.js App Router (latest)
+- **Framework:** Next.js 16 App Router
 - **Auth / DB / Storage:** Supabase, via the official TypeScript client (`@supabase/supabase-js`, `@supabase/ssr`) for all auth, database queries, and file storage. No ORM.
+- **Supabase projects:** development uses **`jgowns-dev`** (`vkjzsincsxrgrqnzuxiu`), which backs the localhost dev server. It is the only project agents query or write to, whether via the Supabase MCP, SQL, or seeded test data. Production **`jgowns`** (`zbnvgoathtfxzqbemxfw`) is off-limits, reads included, unless the user explicitly asks for that specific operation. Apply new migrations to `jgowns-dev` first; production gets them only when the user applies or approves them. Dev deliberately has no `cleanup-pending-listings` cron job, because that job posts to the production URL.
 - **Image pipeline (server-side):** Google Vision API face detection, then Sharp (blur faces, crop, convert to WebP, optimize). All image processing runs on the server.
 - **Styling:** Tailwind CSS v4 syntax and conventions strictly. No v3 patterns.
 - **Components:** shadcn/ui. **Icons:** `lucide-react`.
@@ -140,7 +141,7 @@ All imports appear at the top of the file. No code, declarations, or exports bet
 
 ## 8. Next.js Version & Skills
 
-This project runs the **latest Next.js** (16.3.4). Do not rely on training data for Next.js APIs, conventions, or behavior; it may be outdated. Before writing any Next.js code: check `node_modules/next/dist/docs/` for the current API and conventions, use the `next-best-practices` skill (Vercel), always load all available skills relevant to the task, and heed any deprecation notices found in those sources.
+This project runs **Next.js 16.3.4**. Do not rely on training data for Next.js APIs, conventions, or behavior; it may be outdated. Before writing any Next.js code: check `node_modules/next/dist/docs/` for the current API and conventions, use the `next-best-practices` skill (Vercel), always load all available skills relevant to the task, and heed any deprecation notices found in those sources.
 
 ## 9. Code Quality
 

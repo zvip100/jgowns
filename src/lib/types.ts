@@ -1,3 +1,5 @@
+import type { Area, Point } from 'react-easy-crop';
+
 import type { SuspensionSlug } from '@/lib/suspension';
 
 export const LISTING_STATUSES = [
@@ -136,9 +138,45 @@ export type ImageSlotState = {
   optimizing: boolean;
   optimizeError: string;
   existingUrl: string | null;
+  /** The decoded photo and studio edits behind a new photo; null for an uploaded one. */
+  source: EditableImage | null;
+  edits: PhotoEdits | null;
+  /** Bumped on every export, so a result that lands after a re-edit is dropped. */
+  version: number;
 };
 
 export const MAX_LISTING_IMAGES = 3;
+
+/** A photo opened for the studio. `src` is an object URL owned as the studio documents. */
+export type EditableImage = {
+  src: string;
+  width: number;
+  height: number;
+  name: string;
+};
+
+/**
+ * `'server'` framing means the seller has not reframed: no crop is applied and
+ * the server letterboxes or cover-crops as usual. `crop` is in source pixels of
+ * the rotated photo, set only in `'crop'` framing. `zoom` is relative to the
+ * zoom that just covers the 3:4 window (1 = cover) and `position` is the
+ * photo's offset as a fraction of the window, so both restore the same view at
+ * any window size.
+ */
+export type PhotoEdits = {
+  framing: 'server' | 'crop';
+  crop: Area | null;
+  rotation90: 0 | 90 | 180 | 270;
+  tilt: number;
+  brightness: number;
+  zoom: number;
+  position: Point;
+};
+
+/** What the photo studio hands back on save, in display order (photo 1 is the cover). */
+export type PhotoStudioItem =
+  | { id: string; kind: 'uploaded'; url: string }
+  | { id: string; kind: 'new'; image: EditableImage; edits: PhotoEdits };
 
 /**
  * Bounds on a photo an ADMIN uploads on a seller's behalf. The seller upload

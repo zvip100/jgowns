@@ -2,6 +2,7 @@ import "server-only";
 import sharp from "sharp";
 import vision from "@google-cloud/vision";
 
+import { keepsEnoughForCover } from "@/lib/images/cover-rule";
 import { MAX_BLUR_DATA_URL_LENGTH } from "@/lib/types";
 
 import type { OverlayOptions, ResizeOptions, SharpOptions } from "sharp";
@@ -29,7 +30,6 @@ const OUT_H = 1600;
 const BLUR_PAD = 0.1;
 const BLUR_SIGMA = 32;
 const PLACEHOLDER_DIM = 32;
-const MIN_COVER_KEEP = 0.85;
 const FILL_COLOR = "#efe7dc";
 
 type Region = { left: number; top: number; width: number; height: number };
@@ -106,11 +106,7 @@ export async function processListingImage(
  * gown is never cut to the busiest region.
  */
 function resizeOptions(width: number, height: number): ResizeOptions {
-  const ratio = width / height;
-  const target = OUT_W / OUT_H;
-  const kept = Math.min(ratio / target, target / ratio);
-
-  return kept >= MIN_COVER_KEEP
+  return keepsEnoughForCover(width, height)
     ? { fit: "cover", position: "attention" }
     : { fit: "contain", background: FILL_COLOR };
 }

@@ -10,6 +10,8 @@
     "skills": "npx skills install"
   },
   "dependencies": {
+    "@dnd-kit/dom": "^0.5.0",
+    "@dnd-kit/react": "^0.5.0",
     "@google-cloud/vision": "^5.3.6",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.103.3",
@@ -25,6 +27,7 @@
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "react-dropzone": "^15.0.0",
+    "react-easy-crop": "^6.2.4",
     "recharts": "^3.8.0",
     "server-only": "^0.0.1",
     "shadcn": "^4.6.0",

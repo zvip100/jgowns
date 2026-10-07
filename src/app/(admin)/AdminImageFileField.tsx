@@ -2,14 +2,14 @@
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
+import { Crop } from "lucide-react";
 
-import { TextInputField } from "@/components/form/TextInputField";
-import { ACCEPTED_LISTING_IMAGE_TYPES } from "@/lib/types";
+import { FormField } from "@/components/form/FormField";
+import { Button } from "@/components/ui/button";
 
 /**
- * The picker plus preview inside the add and replace dialogs. The seller-side
- * dropzone is a three-slot grid built for the listing form; a dialog needs one
- * control, not that component.
+ * The confirm dialog's view of the photo the studio exported, with a way back
+ * into the studio. The pick and every edit happen in the studio itself.
  */
 type AdminImageFileFieldProps = {
   id: string;
@@ -17,7 +17,7 @@ type AdminImageFileFieldProps = {
   file: File | null;
   error?: string;
   disabled?: boolean;
-  onSelect: (file: File | null) => void;
+  onChange: () => void;
 };
 
 export function AdminImageFileField({
@@ -26,12 +26,12 @@ export function AdminImageFileField({
   file,
   error,
   disabled,
-  onSelect,
+  onChange,
 }: AdminImageFileFieldProps) {
   const [preview, setPreview] = useState<string | null>(null);
 
   // Created in an effect, never during render, and revoked on every value
-  // change as well as on unmount, or each pick leaks its object URL.
+  // change as well as on unmount, or each export leaks its object URL.
   useEffect(() => {
     if (!file) {
       setPreview(null);
@@ -43,29 +43,33 @@ export function AdminImageFileField({
   }, [file]);
 
   return (
-    <div className="flex flex-col gap-3">
-      <TextInputField
-        id={id}
-        label={label}
-        type="file"
-        accept={ACCEPTED_LISTING_IMAGE_TYPES.join(",")}
-        disabled={disabled}
-        error={error}
-        onChange={(e) => onSelect(e.target.files?.[0] ?? null)}
-      />
-      {preview && (
-        <div className="relative aspect-3/4 w-28 overflow-hidden rounded-lg border border-(--line) bg-[#eadfce]/60">
-          <Image
-            src={preview}
-            alt="Selected photo"
-            fill
-            sizes="112px"
-            // A blob: URL has nothing for the optimizer to fetch.
-            unoptimized
-            className="object-cover"
-          />
-        </div>
-      )}
-    </div>
+    <FormField id={id} label={label} error={error} disabled={disabled}>
+      <div className="flex items-end gap-3">
+        {preview && (
+          <div className="relative aspect-3/4 w-28 overflow-hidden rounded-lg border border-(--line) bg-[#eadfce]/60">
+            <Image
+              src={preview}
+              alt="Selected photo"
+              fill
+              sizes="112px"
+              // A blob: URL has nothing for the optimizer to fetch.
+              unoptimized
+              className="object-cover"
+            />
+          </div>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={disabled}
+          onClick={onChange}
+          className="rounded-full"
+        >
+          <Crop data-icon="inline-start" />
+          Change photo
+        </Button>
+      </div>
+    </FormField>
   );
 }

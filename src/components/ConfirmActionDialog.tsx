@@ -60,10 +60,12 @@ type ConfirmActionDialogProps<TValue> = {
    */
   onOpen?: () => void;
   /**
-   * Blocks confirm while the body is still preparing its value, so a value that
-   * is mid-flight (a photo being shrunk) cannot be submitted in its raw form.
+   * Optional controlled open state, for a caller that opens the dialog itself
+   * (after the photo studio saves). Left out, the dialog manages its own. A
+   * controlled caller resets its own body state when it opens the dialog.
    */
-  isBusy?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onConfirm: (value: TValue) => Promise<ServerActionResult>;
   renderTrigger: (state: ConfirmActionDialogState) => ReactNode;
 };
@@ -79,27 +81,39 @@ export default function ConfirmActionDialog<TValue = void>({
   renderBody,
   validate,
   onOpen,
-  isBusy = false,
+  open,
+  onOpenChange,
   onConfirm,
   renderTrigger,
 }: ConfirmActionDialogProps<TValue>) {
-  const [isOpen, setIsOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const isOpen = open ?? internalOpen;
+  const [wasOpen, setWasOpen] = useState(isOpen);
   const [isPending, setIsPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Cast because TValue defaults to `void` for the zero-input call sites, where
   // `initialValue` is correctly absent and the value is never read.
   const [value, setValue] = useState<TValue>(initialValue as TValue);
 
-  const handleOpenChange = (open: boolean) => {
-    if (isPending) return;
-    if (open) {
+  // Reopening starts clean, so a cancelled reason is not silently reused,
+  // however the dialog was opened. Same cast, same reason as above.
+  if (isOpen !== wasOpen) {
+    setWasOpen(isOpen);
+    if (isOpen) {
       setError(null);
-      // Reopening starts clean, so a cancelled reason is not silently reused.
-      // Same cast, same reason as above.
       setValue(initialValue as TValue);
-      onOpen?.();
     }
-    setIsOpen(open);
+  }
+
+  const setIsOpen = (next: boolean) => {
+    if (open === undefined) setInternalOpen(next);
+    onOpenChange?.(next);
+  };
+
+  const handleOpenChange = (next: boolean) => {
+    if (isPending) return;
+    if (next) onOpen?.();
+    setIsOpen(next);
   };
 
   const handleConfirm = async () => {
@@ -158,7 +172,7 @@ export default function ConfirmActionDialog<TValue = void>({
                 : undefined
             }
             onClick={handleConfirm}
-            disabled={isPending || isBusy}
+            disabled={isPending}
           >
             {isPending && (
               <Loader2 data-icon="inline-start" className="animate-spin" />

@@ -45,6 +45,7 @@ const FIX_HIGHLIGHTED_FIELDS = "Please fix the highlighted fields.";
 const EITHER_NOT_DISCOUNTED_ERROR =
   "The price for all sizes together should be less than the sizes priced individually.";
 const MISSING_PHOTO_ERROR = "Please add at least one gown photo.";
+const PHOTOS_PROCESSING_ERROR = "Photos are still processing. Try again in a moment.";
 
 type ListingValidationInput = {
   form: ListingScalarFormData;
@@ -451,6 +452,12 @@ export function useListingFormSubmit({
   };
 
   const handleSubmit = useCallback(async () => {
+    // The button is disabled too, but the export behind a still-optimizing slot
+    // must never be what uploads.
+    if (slots.some((slot) => slot.optimizing)) {
+      setErrors({ ...EMPTY_LISTING_ERRORS, general: PHOTOS_PROCESSING_ERROR });
+      return;
+    }
     setErrors(EMPTY_LISTING_ERRORS);
 
     // Editing with no changes: skip the server round-trip and just return to the dashboard.
@@ -576,6 +583,10 @@ export function useListingFormSubmit({
     onListingCreated,
   ]);
 
+  // The processing message only holds while a photo still is.
+  const isProcessingStale =
+    errors.general === PHOTOS_PROCESSING_ERROR && !slots.some((slot) => slot.optimizing);
+
   return {
     form,
     markDraftStarted,
@@ -587,7 +598,7 @@ export function useListingFormSubmit({
     toggleContactMethod,
     sizesController,
     loading,
-    errors,
+    errors: isProcessingStale ? { ...errors, general: "" } : errors,
     handleSubmit,
     isEdit: Boolean(listingId),
   };
