@@ -208,7 +208,11 @@ export function PhotoStudioDialog({
 
     const images = opened.filter((image): image is EditableImage => image !== null);
     if (images.length < opened.length) {
-      dispatch({ type: 'note', message: UNREADABLE_PHOTO_ERROR });
+      const message =
+        files.length > accepted.length
+          ? `${tooManyPhotosNote(maxItems)} ${UNREADABLE_PHOTO_ERROR}`
+          : UNREADABLE_PHOTO_ERROR;
+      dispatch({ type: 'note', message });
     } else if (files.length === accepted.length) {
       dispatch({ type: 'note', message: '' });
     }

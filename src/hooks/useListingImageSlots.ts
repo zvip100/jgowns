@@ -22,6 +22,8 @@ import {
 
 import type { OptimizeListingPhotoResult } from '@/lib/actions/images';
 
+export const EDIT_FAILED_ERROR = "Your edits couldn't be saved. The previous version is kept.";
+
 type UseListingImageSlotsOptions = {
   initialUrls?: string[];
   initialBlurUrls?: string[];
@@ -105,6 +107,7 @@ export function useListingImageSlots({
     version: number,
     image: EditableImage,
     edits: PhotoEdits,
+    previous?: ImageSlotState,
   ) => {
     const startedAt = Date.now();
     const uploadFile = await exportEditedImage(image, edits);
@@ -127,6 +130,16 @@ export function useListingImageSlots({
         file_count: 1,
         total_size: 0,
       });
+      // A re-edit falls back to the version that already exported.
+      if (previous) {
+        updateSlotById(slotId, {
+          ...previous,
+          version,
+          optimizing: false,
+          optimizeError: EDIT_FAILED_ERROR,
+        });
+        return;
+      }
       slotBlobs(exportingSlot).forEach((url) => URL.revokeObjectURL(url));
       updateSlotById(slotId, {
         ...emptySlot(slotId),
@@ -225,7 +238,9 @@ export function useListingImageSlots({
       if (existing && isUntouched) return [existing];
 
       const version = (existing?.version ?? 0) + 1;
-      jobs.push([item.id, version, item.image, item.edits]);
+      const hasExported =
+        Boolean(existing?.imageFile) && existing?.source?.src === item.image.src;
+      jobs.push([item.id, version, item.image, item.edits, hasExported ? existing : undefined]);
       return [
         {
           ...emptySlot(item.id),

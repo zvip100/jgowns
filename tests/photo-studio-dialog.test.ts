@@ -319,6 +319,17 @@ describe("PhotoStudioDialog: photos picked before opening", () => {
     expect(view.rail!.note).toBe(UNREADABLE_PHOTO_ERROR);
     expect(railItems(view)).toHaveLength(2);
   });
+
+  it("keeps the extra-photos note when a photo that fit could not be opened", async () => {
+    openEditableImage.mockResolvedValue(null);
+    (render(props()).rail!.onAddFiles as (files: File[]) => void)([
+      file("broken.heic"),
+      file("extra.jpg"),
+    ]);
+    await flush();
+    const view = render(props());
+    expect(view.rail!.note).toBe(`${tooManyPhotosNote(3)} ${UNREADABLE_PHOTO_ERROR}`);
+  });
 });
 
 describe("PhotoStudioDialog: single mode", () => {

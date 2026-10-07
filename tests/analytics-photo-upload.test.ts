@@ -69,7 +69,11 @@ vi.mock("@/lib/image-upload", () => ({
   UNREADABLE_PHOTO_ERROR: "This photo can't be opened. Try a JPG or PNG.",
 }));
 
-import { slotsToStudioItems, useListingImageSlots } from "@/hooks/useListingImageSlots";
+import {
+  EDIT_FAILED_ERROR,
+  slotsToStudioItems,
+  useListingImageSlots,
+} from "@/hooks/useListingImageSlots";
 
 const EDITS: PhotoEdits = {
   framing: "crop",
@@ -214,6 +218,27 @@ describe("photo upload events", () => {
     expect(hookState.slots[0].source).toBeNull();
     expect(hookState.slots[0].optimizeError).toBe("This photo can't be opened. Try a JPG or PNG.");
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:a");
+  });
+
+  it("keeps the last exported version when a re-edit cannot be exported", async () => {
+    mockOptimizeListingPhoto.mockResolvedValue({ dataUrl: "data:image/avif;base64,ok" });
+    const hook = mountHook();
+    hook.applyStudio([newItem("a")]);
+    await settle();
+    const exportedSlot = hookState.slots[0];
+    vi.mocked(URL.revokeObjectURL).mockClear();
+
+    mockExport.mockResolvedValueOnce(null);
+    hook.applyStudio([newItem("a", { ...EDITS, tilt: 2 })]);
+    await settle();
+
+    expect(hookState.slots[0]).toEqual({
+      ...exportedSlot,
+      version: 2,
+      optimizeError: EDIT_FAILED_ERROR,
+    });
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    expect(mockOptimizeListingPhoto).toHaveBeenCalledOnce();
   });
 
   // Exactly one terminal event per attempt, even when a re-edit replaced it.

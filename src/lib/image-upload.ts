@@ -263,15 +263,16 @@ export async function exportEditedImage(
     }
 
     // Behind the photo and after brightness, so a corner exposed by a tilt
-    // exports as the same unbrightened cream the studio shows.
-    if (edits.framing === 'crop') {
+    // exports as the same unbrightened cream the studio shows. JPEG gets it
+    // too, since it would flatten transparency to black.
+    const type = supportsWebpEncoding() ? 'image/webp' : 'image/jpeg';
+    if (edits.framing === 'crop' || type === 'image/jpeg') {
       context.setTransform(1, 0, 0, 1, 0, 0);
       context.globalCompositeOperation = 'destination-over';
       context.fillStyle = FILL_COLOR;
       context.fillRect(0, 0, canvas.width, canvas.height);
     }
 
-    const type = supportsWebpEncoding() ? 'image/webp' : 'image/jpeg';
     const blob = await canvasToBlob(canvas, type, EXPORT_QUALITY);
     if (!blob) return null;
 

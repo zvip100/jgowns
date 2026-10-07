@@ -465,6 +465,17 @@ describe("exportEditedImage", () => {
     expect(file?.type).toBe("image/jpeg");
   });
 
+  it("puts cream behind a server-framed JPEG, which would flatten transparency to black", async () => {
+    const { output, result } = exportWith(
+      cropEdits({ framing: "server", crop: null }),
+      { webp: false },
+    );
+    await result;
+
+    expect(output.calls.slice(-2).map(([name]) => name)).toEqual(["setTransform", "fillRect"]);
+    expect(output.context?.globalCompositeOperation).toBe("destination-over");
+  });
+
   it("resolves null when the source no longer loads", async () => {
     stubDom([], null);
     await expect(lib.exportEditedImage(IMAGE, cropEdits())).resolves.toBeNull();
