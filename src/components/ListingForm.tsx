@@ -40,7 +40,7 @@ export default function ListingForm({
   listingId,
   listingFeeCents,
 }: ListingFormProps) {
-  const { slots, onFileSelected, onClear, resolveUploadFile } =
+  const { slots, applyStudio, onClear, resolveUploadFile } =
     useListingImageSlots({
       initialUrls: initial?.image_urls ?? [],
       initialBlurUrls: initial?.image_blur_data_urls ?? [],
@@ -155,10 +155,10 @@ export default function ListingForm({
 
         <ListingPhotoField
           slots={slots}
-          onFileSelected={(index, file) => {
+          onSave={(items) => {
             markDraftStarted();
             clearPhotoError();
-            return onFileSelected(index, file);
+            applyStudio(items);
           }}
           onClear={onClear}
         />

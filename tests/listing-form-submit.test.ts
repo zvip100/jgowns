@@ -187,6 +187,9 @@ function makeSlot(overrides: Partial<ImageSlotState> = {}): ImageSlotState {
     optimizing: false,
     optimizeError: "",
     existingUrl: EXISTING_URL,
+    source: null,
+    edits: null,
+    version: 0,
     ...overrides,
   };
 }
@@ -1105,6 +1108,88 @@ describe("useListingFormSubmit", () => {
         throw new Error("Expected createListing to receive FormData.");
       }
       expect(formData.get("blur_0")).toBe("");
+    });
+  });
+
+  describe("photos still processing", () => {
+    it("refuses to submit while any slot is optimizing, like the disabled button", async () => {
+      setValidCreateState();
+      const resolveUploadFile = vi.fn();
+
+      const submit = useListingFormSubmit({
+        slots: [
+          makeSlot(),
+          makeSlot({ id: "slot-1", existingUrl: null, optimizing: true }),
+        ],
+        resolveUploadFile,
+      });
+
+      await submit.handleSubmit();
+
+      expect(mockCreateListing).not.toHaveBeenCalled();
+      expect(resolveUploadFile).not.toHaveBeenCalled();
+      expect(loadingSetterValues()).toEqual([]);
+      expect(errorSetterValues().at(-1)?.general).toBe(
+        "Photos are still processing. Try again in a moment.",
+      );
+    });
+
+    it("refuses an edit too, even one that would otherwise be a no-op", async () => {
+      const submit = useListingFormSubmit({
+        initial: makeInitialForm(),
+        listingId: LISTING_ID,
+        slots: [makeSlot({ optimizing: true })],
+        resolveUploadFile: vi.fn(),
+      });
+
+      await submit.handleSubmit();
+
+      expect(mockUpdateListing).not.toHaveBeenCalled();
+      expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it("drops the processing message once no photo is optimizing any more", () => {
+      const message = "Photos are still processing. Try again in a moment.";
+      hookState.overrides.set(1, { fields: {}, sizes: [], general: message });
+
+      const stillBusy = useListingFormSubmit({
+        slots: [makeSlot({ optimizing: true })],
+        resolveUploadFile: vi.fn(),
+      });
+      expect(stillBusy.errors.general).toBe(message);
+
+      hookState.callCount = 0;
+      hookState.refCallCount = 0;
+      const done = useListingFormSubmit({
+        slots: [makeSlot()],
+        resolveUploadFile: vi.fn(),
+      });
+      expect(done.errors.general).toBe("");
+    });
+
+    it("sends a studio reorder of new and published photos in slot order", async () => {
+      setValidCreateState();
+      const file = new File(["x"], "new.webp", { type: "image/webp" });
+      const resolveUploadFile = vi.fn().mockResolvedValue(file);
+
+      const submit = useListingFormSubmit({
+        slots: [
+          makeSlot({ id: "slot-1", existingUrl: SECOND_URL, preview: SECOND_URL }),
+          makeSlot({ id: "slot-2", existingUrl: null, imageFile: file }),
+          makeSlot({ id: "slot-0", existingUrl: EXISTING_URL }),
+        ],
+        resolveUploadFile,
+      });
+
+      await submit.handleSubmit();
+
+      const formData = mockCreateListing.mock.calls[0]?.[0];
+      if (!(formData instanceof FormData)) {
+        throw new Error("Expected createListing to receive FormData.");
+      }
+      expect(formData.get("existing_url_0")).toBe(SECOND_URL);
+      expect(formData.get("image_file_1")).toBe(file);
+      expect(formData.get("existing_url_2")).toBe(EXISTING_URL);
     });
   });
 

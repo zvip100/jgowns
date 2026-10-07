@@ -155,9 +155,18 @@ describe("ConfirmActionButton: the validate gate", () => {
     expect(dialogProps[0].onOpen).toBe(onOpen);
   });
 
-  it("forwards isBusy, which is what holds confirm while a body prepares its value", () => {
+  it("forwards a controlled open state, for a caller that opens the dialog itself", () => {
     dialogProps.length = 0;
-    render({ isBusy: true });
-    expect(dialogProps[0].isBusy).toBe(true);
+    const onOpenChange = () => {};
+    render({ open: true, onOpenChange });
+    expect(dialogProps[0].open).toBe(true);
+    expect(dialogProps[0].onOpenChange).toBe(onOpenChange);
+  });
+
+  it("stays uncontrolled when no open state is passed", () => {
+    dialogProps.length = 0;
+    render({});
+    expect(dialogProps[0].open).toBeUndefined();
+    expect(dialogProps[0].onOpenChange).toBeUndefined();
   });
 });

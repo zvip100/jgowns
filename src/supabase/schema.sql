@@ -20,8 +20,8 @@ create table listings (
   condition text not null check (condition in ('Brand New', 'Perfect Condition', 'Needs Alterations')),
   sell_mode text not null default 'individual' check (sell_mode in ('individual', 'set_only', 'either')),
   bundle_price numeric(10,2),
-  image_urls text[] not null,
-  image_blur_data_urls text[] not null,
+  image_urls text[] not null default '{}',
+  image_blur_data_urls text[] not null default '{}',
   contact_email text,
   contact_phone text,
   contact_methods text[] not null default '{}',
@@ -2342,7 +2342,8 @@ begin
   end if;
 
   if p_index is null or p_index < 1 or p_index > cardinality(v_urls) then
-    raise exception 'That position is not on this listing' using errcode = '22023';
+    raise exception 'That photo is no longer in that position'
+      using errcode = '22023';
   end if;
 
   -- The photos changed under the operator: their page is stale, and moving
@@ -2353,12 +2354,13 @@ begin
 
   v_target := p_index + p_offset;
   if v_target < 1 or v_target > cardinality(v_urls) then
-    raise exception 'That photo is already at the end' using errcode = '22023';
+    raise exception 'That photo is already at the end'
+      using errcode = '22023';
   end if;
 
   -- Refused rather than treated as a silent no-op: swapping two byte-identical
   -- entries leaves image_digest unchanged, so the audit trigger writes nothing
-  -- and the operator would be told a move happened that no record can show.
+  -- and the operator is told a move happened that no record can show.
   if v_urls[p_index] = v_urls[v_target] then
     raise exception 'Those two photos are identical' using errcode = '22023';
   end if;

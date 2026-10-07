@@ -1,19 +1,28 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { unstable_rethrow } from 'next/navigation';
 import { optimizeListingPhoto } from '@/lib/actions/images';
 import { captureEvent } from '@/lib/analytics/client';
 import { SELLER_EVENTS } from '@/lib/analytics/events';
 import {
-  downscaleImageFile,
+  exportEditedImage,
   generateBlurDataUrl,
   dataUrlToFile,
   UNREADABLE_PHOTO_ERROR,
 } from '@/lib/image-upload';
-import { MAX_LISTING_IMAGES, type ImageSlotState } from '@/lib/types';
+import { editsEqual } from '@/components/photo-studio/photo-studio-draft';
+import {
+  MAX_LISTING_IMAGES,
+  type EditableImage,
+  type ImageSlotState,
+  type PhotoEdits,
+  type PhotoStudioItem,
+} from '@/lib/types';
 
 import type { OptimizeListingPhotoResult } from '@/lib/actions/images';
+
+export const EDIT_FAILED_ERROR = "Your edits couldn't be saved. The previous version is kept.";
 
 type UseListingImageSlotsOptions = {
   initialUrls?: string[];
@@ -32,7 +41,32 @@ function emptySlot(id: string): ImageSlotState {
     optimizing: false,
     optimizeError: '',
     existingUrl: null,
+    source: null,
+    edits: null,
+    version: 0,
   };
+}
+
+function revokeBlob(url: string | null | undefined): void {
+  if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+}
+
+/** Every object URL a slot owns: its preview and the studio source behind it. */
+function slotBlobs(slot: ImageSlotState): string[] {
+  return [slot.preview, slot.source?.src].filter(
+    (url): url is string => Boolean(url?.startsWith('blob:')),
+  );
+}
+
+/** The studio's view of the slots: filled ones, in order. */
+export function slotsToStudioItems(slots: ImageSlotState[]): PhotoStudioItem[] {
+  return slots.flatMap((slot): PhotoStudioItem[] => {
+    if (slot.existingUrl) return [{ id: slot.id, kind: 'uploaded', url: slot.existingUrl }];
+    if (slot.source && slot.edits) {
+      return [{ id: slot.id, kind: 'new', image: slot.source, edits: slot.edits }];
+    }
+    return [];
+  });
 }
 
 export function useListingImageSlots({
@@ -52,25 +86,11 @@ export function useListingImageSlots({
     return initial;
   });
 
+  // No revoke on effect cleanup: Cache Components hides the route in an
+  // Activity, which runs cleanups but keeps these slots, and a revoked source
+  // could not be reopened in the studio. The page's unload frees them.
   const slotsRef = useRef<ImageSlotState[]>(slots);
   slotsRef.current = slots;
-
-  const previewsRef = useRef<(string | null)[]>([]);
-  previewsRef.current = slots.map((s) => s.preview);
-
-  useEffect(() => {
-    return () => {
-      previewsRef.current.forEach((p) => {
-        if (p?.startsWith('blob:')) URL.revokeObjectURL(p);
-      });
-    };
-  }, []);
-
-  const updateSlot = (index: number, patch: Partial<ImageSlotState>) => {
-    setSlots((prev) =>
-      prev.map((slot, i) => (i === index ? { ...slot, ...patch } : slot)),
-    );
-  };
 
   const updateSlotById = (id: string, patch: Partial<ImageSlotState>) => {
     setSlots((prev) =>
@@ -78,50 +98,60 @@ export function useListingImageSlots({
     );
   };
 
-  const onFileSelected = async (index: number, file: File) => {
-    const slotId = slots[index].id;
+  /** The slot, only while this export is still its newest one and on screen. */
+  const currentSlot = (slotId: string, version: number): ImageSlotState | undefined =>
+    slotsRef.current.find((slot) => slot.id === slotId && slot.version === version);
 
-    // One attempt per selected photo, terminated exactly once below. Retrying a
-    // failed photo re-enters here and counts as a new attempt (spec §5.2).
+  const processPhoto = async (
+    slotId: string,
+    version: number,
+    image: EditableImage,
+    edits: PhotoEdits,
+    previous?: ImageSlotState,
+  ) => {
+    const startedAt = Date.now();
+    const uploadFile = await exportEditedImage(image, edits);
+
+    // Superseded by a re-edit or removed before it could upload: no attempt.
+    const exportingSlot = currentSlot(slotId, version);
+    if (!exportingSlot) return;
+
+    // One attempt per new or edited photo, terminated exactly once below.
+    // Retrying a failed photo goes back through the studio and counts as a new
+    // attempt (spec §5.2).
     captureEvent(SELLER_EVENTS.photoUploadStarted, {
       file_count: 1,
-      total_size: file.size,
+      total_size: uploadFile?.size ?? 0,
     });
-    const startedAt = Date.now();
-
-    const oldPreview = slots[index].preview;
-    if (oldPreview?.startsWith('blob:')) URL.revokeObjectURL(oldPreview);
-
-    const tempPreview = URL.createObjectURL(file);
-
-    updateSlot(index, {
-      preview: tempPreview,
-      imageFile: file,
-      optimizedDataUrl: null,
-      optimizeError: '',
-      optimizing: true,
-      existingUrl: null,
-    });
-
-    // Shrunk before it crosses the network, not after: a multi-megabyte body is
-    // what the dropped uploads had in common.
-    const uploadFile = await downscaleImageFile(file);
 
     if (!uploadFile) {
       captureEvent(SELLER_EVENTS.photoUploadFailed, {
         reason: 'unreadable_image',
         file_count: 1,
-        total_size: file.size,
+        total_size: 0,
       });
-      const currentSlot = slotsRef.current.find((s) => s.id === slotId);
-      if (!currentSlot || currentSlot.imageFile !== file) return;
-      URL.revokeObjectURL(tempPreview);
+      // A re-edit falls back to the version that already exported.
+      if (previous) {
+        updateSlotById(slotId, {
+          ...previous,
+          version,
+          optimizing: false,
+          optimizeError: EDIT_FAILED_ERROR,
+        });
+        return;
+      }
+      slotBlobs(exportingSlot).forEach((url) => URL.revokeObjectURL(url));
       updateSlotById(slotId, {
         ...emptySlot(slotId),
+        version,
         optimizeError: UNREADABLE_PHOTO_ERROR,
       });
       return;
     }
+
+    revokeBlob(exportingSlot.preview);
+    const exportedPreview = URL.createObjectURL(uploadFile);
+    updateSlotById(slotId, { preview: exportedPreview, imageFile: uploadFile });
 
     const optimizeForm = new FormData();
     optimizeForm.set('image', uploadFile);
@@ -152,17 +182,16 @@ export function useListingImageSlots({
       captureEvent(SELLER_EVENTS.photoUploadFailed, {
         reason: result.error ? result.error.slice(0, 120) : 'unknown',
         file_count: 1,
-        total_size: file.size,
+        total_size: uploadFile.size,
       });
     }
 
-    // The slot was removed, or a newer file replaced it, while optimizing.
-    // (Its blob preview is already revoked by whichever action superseded it.)
-    const currentSlot = slotsRef.current.find((s) => s.id === slotId);
-    if (!currentSlot || currentSlot.imageFile !== file) return;
+    // The slot was removed, or a newer edit replaced it, while optimizing.
+    // Whichever action superseded it already revoked this preview.
+    if (!currentSlot(slotId, version)) return;
 
     if ('dataUrl' in result) {
-      URL.revokeObjectURL(tempPreview);
+      URL.revokeObjectURL(exportedPreview);
       updateSlotById(slotId, {
         preview: result.dataUrl,
         optimizedDataUrl: result.dataUrl,
@@ -177,11 +206,9 @@ export function useListingImageSlots({
       return;
     }
 
+    // The submit falls back to uploading the exported file itself.
     updateSlotById(slotId, {
       optimizing: false,
-      // The submit falls back to uploading the file itself, so it keeps the
-      // shrunk one rather than the original the seller picked.
-      imageFile: uploadFile,
       optimizeError:
         'error' in result && result.error
           ? `Failed to automatically optimize image. You can try uploading again. (${result.error.length > 140 ? `${result.error.slice(0, 137)}…` : result.error})`
@@ -190,16 +217,72 @@ export function useListingImageSlots({
     });
   };
 
-  const onClear = (index: number) => {
-    const slot = slots[index];
-    if (slot.preview?.startsWith('blob:')) URL.revokeObjectURL(slot.preview);
+  /**
+   * Takes the studio's saved order. Untouched photos keep their slot as is, a
+   * pure reorder exports nothing, and each new or edited photo is exported and
+   * optimized under a fresh version.
+   */
+  const applyStudio = (items: PhotoStudioItem[]) => {
+    const prev = slotsRef.current;
+    const keptSources = new Set(
+      items.flatMap((item) => (item.kind === 'new' ? [item.image.src] : [])),
+    );
+    const jobs: Parameters<typeof processPhoto>[] = [];
 
-    setSlots((prev) => {
-      const next = prev.filter((_, i) => i !== index);
-      while (next.length < MAX_LISTING_IMAGES)
-        next.push(emptySlot(crypto.randomUUID()));
-      return next;
+    const next = items.flatMap((item): ImageSlotState[] => {
+      const existing = prev.find((slot) => slot.id === item.id);
+      if (item.kind === 'uploaded') return existing ? [existing] : [];
+
+      const isUntouched =
+        existing?.source?.src === item.image.src && editsEqual(existing.edits, item.edits);
+      if (existing && isUntouched) return [existing];
+
+      const version = (existing?.version ?? 0) + 1;
+      const hasExported =
+        Boolean(existing?.imageFile) && existing?.source?.src === item.image.src;
+      jobs.push([item.id, version, item.image, item.edits, hasExported ? existing : undefined]);
+      return [
+        {
+          ...emptySlot(item.id),
+          // An edited photo keeps its last preview under the spinner until the new one lands.
+          preview: existing?.preview ?? null,
+          source: item.image,
+          edits: item.edits,
+          version,
+          optimizing: true,
+        },
+      ];
     });
+
+    for (const slot of prev) {
+      const survivor = next.find((candidate) => candidate.id === slot.id);
+      if (!survivor) {
+        slotBlobs(slot)
+          .filter((url) => !keptSources.has(url))
+          .forEach((url) => URL.revokeObjectURL(url));
+        continue;
+      }
+      if (slot.source && slot.source.src !== survivor.source?.src && !keptSources.has(slot.source.src)) {
+        URL.revokeObjectURL(slot.source.src);
+      }
+    }
+
+    while (next.length < MAX_LISTING_IMAGES) next.push(emptySlot(crypto.randomUUID()));
+    slotsRef.current = next;
+    setSlots(next);
+    jobs.forEach((job) => void processPhoto(...job));
+  };
+
+  const onClear = (index: number) => {
+    const prev = slotsRef.current;
+    const slot = prev[index];
+    if (!slot) return;
+    slotBlobs(slot).forEach((url) => URL.revokeObjectURL(url));
+
+    const next = prev.filter((_, i) => i !== index);
+    while (next.length < MAX_LISTING_IMAGES) next.push(emptySlot(crypto.randomUUID()));
+    slotsRef.current = next;
+    setSlots(next);
   };
 
   /** Returns the File to upload for a slot: optimized data URL → File, or raw file. */
@@ -217,7 +300,7 @@ export function useListingImageSlots({
 
   return {
     slots,
-    onFileSelected,
+    applyStudio,
     onClear,
     resolveUploadFile,
   };

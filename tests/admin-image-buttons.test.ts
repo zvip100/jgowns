@@ -2,45 +2,81 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ACCEPTED_LISTING_IMAGE_TYPES } from "@/lib/types";
-
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
+import type { EditableImage, PhotoEdits, PhotoStudioItem } from "@/lib/types";
 
 type TriggerState = { error: string | null; isPending: boolean };
 
 type DialogProps = {
   renderTrigger: (state: TriggerState) => ReactNode;
-  renderBody?: (state: {
-    value: { file: File | null };
-    setValue: (next: { file: File | null }) => void;
-    isPending: boolean;
-  }) => ReactNode;
-  validate?: (value: { file: File | null }) => boolean;
-  onOpen?: () => void;
-  isBusy?: boolean;
-  onConfirm: (value: { file: File | null }) => Promise<{ error?: string }>;
+  renderBody?: (state: { value: unknown; setValue: () => void; isPending: boolean }) => ReactNode;
+  validate?: (value?: unknown) => boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onConfirm: (value?: unknown) => Promise<{ error?: string }>;
   successMessage?: string;
   [key: string]: unknown;
 };
 
+type StudioProps = {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  initialItems: PhotoStudioItem[];
+  maxItems: number;
+  mode: string;
+  onSave: (items: PhotoStudioItem[]) => Promise<string | void>;
+};
+
+type FileFieldProps = {
+  file: File | null;
+  error?: string;
+  disabled?: boolean;
+  onChange: () => void;
+};
+
 const {
   dialogProps,
+  studioProps,
+  hookState,
   mockAdd,
   mockReplace,
   mockMove,
   mockToastError,
-  mockDownscale,
+  mockExport,
 } = vi.hoisted(() => ({
   dialogProps: [] as DialogProps[],
+  studioProps: [] as StudioProps[],
+  hookState: { states: [] as unknown[], index: 0 },
   mockAdd: vi.fn(),
   mockReplace: vi.fn(),
   mockMove: vi.fn(),
   mockToastError: vi.fn(),
-  mockDownscale: vi.fn(),
+  mockExport: vi.fn(),
 }));
 
+/** State persists across renders by call order, like React's own. */
+vi.mock("react", async () => {
+  const actual = await vi.importActual<typeof import("react")>("react");
+  return {
+    ...actual,
+    useState: <State>(initial: State): [State, (next: unknown) => void] => {
+      const index = hookState.index++;
+      if (!(index in hookState.states)) hookState.states[index] = initial;
+      return [
+        hookState.states[index] as State,
+        (next: unknown) => {
+          hookState.states[index] =
+            typeof next === "function"
+              ? (next as (current: unknown) => unknown)(hookState.states[index])
+              : next;
+        },
+      ];
+    },
+  };
+});
+
 vi.mock("@/lib/image-upload", () => ({
-  downscaleImageFile: mockDownscale,
+  exportEditedImage: mockExport,
   UNREADABLE_PHOTO_ERROR: "This photo can't be opened. Try a JPG or PNG.",
 }));
 
@@ -49,6 +85,13 @@ vi.mock("@/components/ConfirmActionDialog", () => ({
   default: (props: DialogProps) => {
     dialogProps.push(props);
     return props.renderTrigger({ error: null, isPending: false });
+  },
+}));
+
+vi.mock("@/components/photo-studio/PhotoStudioDialog", () => ({
+  PhotoStudioDialog: (props: StudioProps) => {
+    studioProps.push(props);
+    return null;
   },
 }));
 
@@ -90,38 +133,82 @@ import {
   AdminPhotoMoveButton,
   AdminReplaceImageButton,
 } from "@/app/(admin)/admin-action-buttons";
+import { AdminImageFileField } from "@/app/(admin)/AdminImageFileField";
 
 const LISTING_ID = "11111111-1111-4111-8111-111111111111";
 const IMAGE_URL =
   "https://proj.supabase.co/storage/v1/object/public/gown-images/a.webp";
 const DEMO_TITLE = "Turn off demo mode to make changes.";
+const UNREADABLE = "This photo can't be opened. Try a JPG or PNG.";
 
-function photo(type = "image/jpeg"): File {
-  return new File([new Uint8Array([1, 2, 3])], "gown.jpg", { type });
+const EDITS: PhotoEdits = {
+  framing: "crop",
+  crop: { x: 0, y: 0, width: 300, height: 400 },
+  rotation90: 0,
+  tilt: 0,
+  brightness: 12,
+  zoom: 1.4,
+  position: { x: 0.1, y: 0 },
+};
+const SOURCE: EditableImage = { src: "blob:source", width: 300, height: 400, name: "gown.jpg" };
+const ITEM: PhotoStudioItem = { id: "p1", kind: "new", image: SOURCE, edits: EDITS };
+
+function photo(type = "image/webp"): File {
+  return new File([new Uint8Array([1, 2, 3])], "gown.webp", { type });
 }
 
 function render(element: React.ReactElement): string {
+  hookState.index = 0;
+  dialogProps.length = 0;
+  studioProps.length = 0;
   return renderToStaticMarkup(element);
+}
+
+function confirm(): DialogProps {
+  return dialogProps[dialogProps.length - 1];
+}
+
+function studio(): StudioProps {
+  return studioProps[studioProps.length - 1];
+}
+
+function fileField(): ReactElement<FileFieldProps> {
+  return confirm().renderBody?.({
+    value: undefined,
+    setValue: () => {},
+    isPending: false,
+  }) as ReactElement<FileFieldProps>;
 }
 
 beforeEach(() => {
   vi.clearAllMocks();
-  dialogProps.length = 0;
+  hookState.states = [];
   mockAdd.mockResolvedValue({});
   mockReplace.mockResolvedValue({});
   mockMove.mockResolvedValue({});
-  mockDownscale.mockImplementation(async (file: File) => file);
+  vi.stubGlobal("URL", { ...URL, revokeObjectURL: vi.fn(), createObjectURL: vi.fn() });
 });
 
+/** Trigger click, studio Save, then the confirm as the operator sees it. */
+async function saveFromStudio(element: () => React.ReactElement, item = ITEM) {
+  render(element());
+  confirm().onOpenChange?.(true);
+  render(element());
+  const message = await studio().onSave([item]);
+  render(element());
+  return message;
+}
+
 describe("AdminReplaceImageButton", () => {
+  const replace = () =>
+    React.createElement(AdminReplaceImageButton, {
+      listingId: LISTING_ID,
+      imageUrl: IMAGE_URL,
+      position: 2,
+    });
+
   it("renders a live icon trigger named for its photo", () => {
-    const html = render(
-      React.createElement(AdminReplaceImageButton, {
-        listingId: LISTING_ID,
-        imageUrl: IMAGE_URL,
-        position: 2,
-      }),
-    );
+    const html = render(replace());
 
     expect(html).toContain('aria-label="Replace photo 2"');
     expect(html).not.toContain("disabled");
@@ -142,81 +229,32 @@ describe("AdminReplaceImageButton", () => {
     expect(html).toContain("opacity-50");
   });
 
-  it("blocks confirm with no photo picked, and lets a valid one through", () => {
-    render(
-      React.createElement(AdminReplaceImageButton, {
-        listingId: LISTING_ID,
-        imageUrl: IMAGE_URL,
-        position: 1,
-      }),
-    );
+  it("passes a FormData carrying the exported file, with both targets", async () => {
+    const exported = photo();
+    mockExport.mockResolvedValue(exported);
+    await saveFromStudio(replace);
 
-    const props = dialogProps[0];
-    expect(props.validate?.({ file: null })).toBe(false);
-    expect(props.validate?.({ file: photo("image/heic") })).toBe(false);
-    expect(props.validate?.({ file: photo() })).toBe(true);
-  });
-
-  it("passes a FormData carrying the file, with both targets", async () => {
-    render(
-      React.createElement(AdminReplaceImageButton, {
-        listingId: LISTING_ID,
-        imageUrl: IMAGE_URL,
-        position: 1,
-      }),
-    );
-
-    const file = photo();
-    await dialogProps[0].onConfirm({ file });
+    await confirm().onConfirm();
 
     expect(mockReplace).toHaveBeenCalledOnce();
     const [listingId, imageUrl, formData] = mockReplace.mock.calls[0];
     expect(listingId).toBe(LISTING_ID);
     expect(imageUrl).toBe(IMAGE_URL);
     expect(formData).toBeInstanceOf(FormData);
-    expect(formData.get("photo")).toBe(file);
+    expect(formData.get("photo")).toBe(exported);
   });
 
   it("leaves the success message to the action's own face-count notice", () => {
-    render(
-      React.createElement(AdminReplaceImageButton, {
-        listingId: LISTING_ID,
-        imageUrl: IMAGE_URL,
-        position: 1,
-      }),
-    );
-    expect(dialogProps[0].successMessage).toBeUndefined();
-  });
-
-  it("renders a picker that only offers what the pipeline can decode", () => {
-    render(
-      React.createElement(AdminReplaceImageButton, {
-        listingId: LISTING_ID,
-        imageUrl: IMAGE_URL,
-        position: 1,
-      }),
-    );
-
-    const body = dialogProps[0].renderBody?.({
-      value: { file: null },
-      setValue: () => {},
-      isPending: false,
-    });
-    const html = renderToStaticMarkup(body as React.ReactElement);
-
-    expect(html).toContain('type="file"');
-    expect(html).toContain(ACCEPTED_LISTING_IMAGE_TYPES.join(","));
-    expect(html).not.toContain("image/heic");
+    render(replace());
+    expect(confirm().successMessage).toBeUndefined();
   });
 });
 
 describe("AdminAddImageButton", () => {
+  const add = () => React.createElement(AdminAddImageButton, { listingId: LISTING_ID });
+
   it("renders a labelled trigger and goes inert in demo mode", () => {
-    expect(
-      render(
-        React.createElement(AdminAddImageButton, { listingId: LISTING_ID }),
-      ),
-    ).toContain('aria-label="Add a photo"');
+    expect(render(add())).toContain('aria-label="Add a photo"');
 
     const demo = render(
       React.createElement(AdminAddImageButton, {
@@ -229,103 +267,148 @@ describe("AdminAddImageButton", () => {
   });
 
   it("keeps its label at every width, unlike the packed row actions", () => {
-    const html = render(
-      React.createElement(AdminAddImageButton, { listingId: LISTING_ID }),
-    );
+    const html = render(add());
     expect(html).toContain("Add photo");
     expect(html).not.toContain("hidden sm:inline");
   });
 
-  it("blocks confirm with no photo picked", () => {
-    render(React.createElement(AdminAddImageButton, { listingId: LISTING_ID }));
-    expect(dialogProps[0].validate?.({ file: null })).toBe(false);
-  });
+  it("passes a FormData carrying the exported file", async () => {
+    const exported = photo("image/jpeg");
+    mockExport.mockResolvedValue(exported);
+    await saveFromStudio(add);
 
-  it("passes a FormData carrying the file", async () => {
-    render(React.createElement(AdminAddImageButton, { listingId: LISTING_ID }));
-
-    const file = photo("image/png");
-    await dialogProps[0].onConfirm({ file });
+    await confirm().onConfirm();
 
     const [listingId, formData] = mockAdd.mock.calls[0];
     expect(listingId).toBe(LISTING_ID);
-    expect(formData.get("photo")).toBe(file);
+    expect(formData.get("photo")).toBe(exported);
   });
 });
 
-describe("photo dialogs: the browser-side shrink", () => {
-  const shrunk = new File([new Uint8Array([9])], "gown.webp", {
-    type: "image/webp",
+describe("photo dialogs: the studio runs first, then the confirm", () => {
+  const add = () => React.createElement(AdminAddImageButton, { listingId: LISTING_ID });
+
+  it("opens the studio in single mode on the trigger, not the confirm", () => {
+    render(add());
+    confirm().onOpenChange?.(true);
+    render(add());
+
+    expect(studio()).toMatchObject({ open: true, maxItems: 1, mode: "single", initialItems: [] });
+    expect(confirm().open).toBe(false);
   });
 
-  /** `renderBody` returns the one image field, whose props are the slot's contract. */
-  function onSelectOf(node: ReactNode): (file: File | null) => Promise<void> {
-    return (node as React.ReactElement<{ onSelect: (file: File | null) => Promise<void> }>)
-      .props.onSelect;
-  }
+  it("exports on Save, then opens the confirm with that file and closes the studio", async () => {
+    const exported = photo();
+    mockExport.mockResolvedValue(exported);
 
-  function mountAddDialog(setValue: (next: { file: File | null }) => void) {
-    render(React.createElement(AdminAddImageButton, { listingId: LISTING_ID }));
-    const props = dialogProps[0];
-    const body = props.renderBody?.({
-      value: { file: null },
-      setValue,
-      isPending: false,
-    });
-    return { props, onSelect: onSelectOf(body) };
-  }
+    await expect(saveFromStudio(add)).resolves.toBeUndefined();
 
-  it("shows the pick at once, then swaps in the shrunk file", async () => {
-    const setValue = vi.fn();
-    const original = photo();
-    mockDownscale.mockResolvedValueOnce(shrunk);
-
-    await mountAddDialog(setValue).onSelect(original);
-
-    expect(setValue.mock.calls).toEqual([
-      [{ file: original }],
-      [{ file: shrunk }],
-    ]);
+    expect(mockExport).toHaveBeenCalledExactlyOnceWith(SOURCE, EDITS);
+    expect(studio().open).toBe(false);
+    expect(confirm().open).toBe(true);
+    expect(fileField().props.file).toBe(exported);
+    expect(confirm().validate?.()).toBe(true);
   });
 
-  it("clears a pick the browser cannot read, so it is never submitted", async () => {
-    const setValue = vi.fn();
-    const original = photo();
-    mockDownscale.mockResolvedValueOnce(null);
+  it("keeps the studio open with a message when the export fails", async () => {
+    mockExport.mockResolvedValue(null);
 
-    await mountAddDialog(setValue).onSelect(original);
+    await expect(saveFromStudio(add)).resolves.toBe(UNREADABLE);
 
-    expect(setValue.mock.calls).toEqual([
-      [{ file: original }],
-      [{ file: null }],
-    ]);
+    expect(studio().open).toBe(true);
+    expect(confirm().open).toBe(false);
   });
 
-  it("hands the dialog a busy flag, so confirm can be held during a shrink", () => {
-    mountAddDialog(vi.fn());
-    expect(dialogProps[0].isBusy).toBe(false);
+  it("asks for a photo when the studio is saved empty", async () => {
+    render(add());
+    confirm().onOpenChange?.(true);
+    render(add());
+
+    await expect(studio().onSave([])).resolves.toBe("Choose a photo.");
+    expect(mockExport).not.toHaveBeenCalled();
   });
 
-  it("does not refill a reopened dialog with a cancelled pick", async () => {
-    const setValue = vi.fn();
-    const original = photo();
-    let finishShrink: (file: File) => void = () => {};
-    mockDownscale.mockReturnValueOnce(
-      new Promise<File>((resolve) => {
-        finishShrink = resolve;
+  it("goes back to the studio with the same source and edits from Change photo", async () => {
+    mockExport.mockResolvedValue(photo());
+    await saveFromStudio(add);
+
+    fileField().props.onChange();
+    render(add());
+
+    expect(confirm().open).toBe(false);
+    expect(studio().open).toBe(true);
+    expect(studio().initialItems).toEqual([ITEM]);
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+  });
+
+  it("opens nothing when the studio is then closed, and drops the photo", async () => {
+    mockExport.mockResolvedValue(photo());
+    await saveFromStudio(add);
+    fileField().props.onChange();
+    render(add());
+
+    studio().onOpenChange(false);
+    render(add());
+
+    expect(studio().open).toBe(false);
+    expect(confirm().open).toBe(false);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:source");
+  });
+
+  it("revokes the earlier source when Change photo ends with a different pick", async () => {
+    mockExport.mockResolvedValue(photo());
+    await saveFromStudio(add);
+    fileField().props.onChange();
+    render(add());
+
+    const other: PhotoStudioItem = { ...ITEM, id: "p2", image: { ...SOURCE, src: "blob:other" } };
+    await studio().onSave([other]);
+    render(add());
+
+    expect(URL.revokeObjectURL).toHaveBeenCalledExactlyOnceWith("blob:source");
+    expect(confirm().open).toBe(true);
+  });
+
+  it("drops the photo when the confirm closes, by cancel or by success", async () => {
+    mockExport.mockResolvedValue(photo());
+    await saveFromStudio(add);
+
+    confirm().onOpenChange?.(false);
+    render(add());
+
+    expect(confirm().open).toBe(false);
+    expect(fileField().props.file).toBeNull();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:source");
+  });
+
+  it("blocks confirm with no photo, and checks the export against the same schema", async () => {
+    render(add());
+    expect(confirm().validate?.()).toBe(false);
+    render(add());
+    expect(fileField().props.error).toBe("Choose a photo.");
+
+    mockExport.mockResolvedValue(photo("image/heic"));
+    await saveFromStudio(add);
+    expect(confirm().validate?.()).toBe(false);
+  });
+});
+
+describe("AdminImageFileField", () => {
+  it("offers Change photo instead of a file input and shows the field's error", () => {
+    hookState.index = 0;
+    const html = renderToStaticMarkup(
+      React.createElement(AdminImageFileField, {
+        id: "add-photo",
+        label: "Photo",
+        file: photo(),
+        error: "Keep the photo under 25 MB.",
+        onChange: vi.fn(),
       }),
     );
 
-    const { props, onSelect } = mountAddDialog(setValue);
-    const pending = onSelect(original);
-
-    // Cancelled and reopened while the shrink was still running.
-    props.onOpen?.();
-    finishShrink(shrunk);
-    await pending;
-
-    expect(setValue).toHaveBeenCalledTimes(1);
-    expect(setValue).toHaveBeenCalledWith({ file: original });
+    expect(html).toContain("Change photo");
+    expect(html).toContain("Keep the photo under 25 MB.");
+    expect(html).not.toContain('type="file"');
   });
 });
 
@@ -397,7 +480,7 @@ describe("AdminPhotoMoveButton: a move that changes the cover photo", () => {
 
   it("calls the action with the same arguments the immediate shape would", async () => {
     render(React.createElement(AdminPhotoMoveButton, { ...PROMOTE }));
-    await dialogProps[0].onConfirm({ file: null });
+    await dialogProps[0].onConfirm();
 
     expect(mockMove).toHaveBeenCalledExactlyOnceWith(LISTING_ID, 2, IMAGE_URL, -1);
   });

@@ -38,7 +38,8 @@ type ConfirmActionButtonProps<TValue> = {
   renderBody?: (state: ConfirmActionBodyState<TValue>) => ReactNode;
   validate?: (value: TValue) => boolean;
   onOpen?: () => void;
-  isBusy?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
   onConfirm: (value: TValue) => Promise<ServerActionResult>;
 };
 
@@ -72,7 +73,8 @@ export default function ConfirmActionButton<TValue = void>({
   renderBody,
   validate,
   onOpen,
-  isBusy,
+  open,
+  onOpenChange,
   onConfirm,
 }: ConfirmActionButtonProps<TValue>) {
   return (
@@ -87,7 +89,8 @@ export default function ConfirmActionButton<TValue = void>({
       renderBody={renderBody}
       validate={validate}
       onOpen={onOpen}
-      isBusy={isBusy}
+      open={open}
+      onOpenChange={onOpenChange}
       onConfirm={onConfirm}
       renderTrigger={({ error, isPending }) =>
         triggerStyle === 'inline-icon' ? (
