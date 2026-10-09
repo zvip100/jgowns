@@ -1,3 +1,5 @@
+import { connection } from "next/server";
+
 import {
   ADMIN_NEW_WEEK_SEGMENT,
   ADMIN_OFF_MARKET_STATUS,
@@ -61,7 +63,9 @@ export async function fetchStats(): Promise<AdminOverviewStats> {
 export async function getAdminOverview(): Promise<AdminOverview> {
   // One timestamp for the whole page: the four age queues and the stat tiles
   // must agree on where "this week" ends, and four separate `new Date()` calls
-  // could straddle a boundary.
+  // could straddle a boundary. `connection()` keeps that read at request time;
+  // nothing before it is dynamic, so the build would otherwise prerender it.
+  await connection();
   const asOf = new Date().toISOString();
 
   const [stats, newThisWeek, staleActives, offMarket, stuckPending, recentActivity] =
