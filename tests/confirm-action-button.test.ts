@@ -85,28 +85,7 @@ describe("ConfirmActionButton: the button label", () => {
 });
 
 describe("ConfirmActionButton: inert trigger", () => {
-  it("renders disabled and says why, so a demo screen never offers the write", () => {
-    const html = render({
-      disabled: true,
-      disabledTitle: "Turn off demo mode to make changes.",
-    });
-
-    expect(html).toContain("disabled");
-    expect(html).toContain('title="Turn off demo mode to make changes."');
-  });
-
-  it("does the same for the inline-icon style", () => {
-    const html = render({
-      triggerStyle: "inline-icon",
-      disabled: true,
-      disabledTitle: "Turn off demo mode to make changes.",
-    });
-
-    expect(html).toContain("disabled");
-    expect(html).toContain('title="Turn off demo mode to make changes."');
-  });
-
-  it("keeps the aria label when disabled without an explanation", () => {
+  it("renders disabled with the aria label as its title", () => {
     const html = render({ disabled: true });
     expect(html).toContain("disabled");
     expect(html).toContain('title="Suspend listing"');

@@ -1,18 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { mockCreateClient, mockGetUser, mockIsAdminDemoMode } = vi.hoisted(
-  () => ({
-    mockCreateClient: vi.fn(),
-    mockGetUser: vi.fn(),
-    mockIsAdminDemoMode: vi.fn(),
-  }),
-);
+const { mockCreateClient, mockGetUser } = vi.hoisted(() => ({
+  mockCreateClient: vi.fn(),
+  mockGetUser: vi.fn(),
+}));
 
 vi.mock("@/lib/supabase/server", () => ({ createClient: mockCreateClient }));
-vi.mock("@/lib/admin/demo", () => ({ isAdminDemoMode: mockIsAdminDemoMode }));
 
 import {
-  ADMIN_DEMO_MODE_ERROR,
   ADMIN_NOT_AUTHORIZED_ERROR,
   ADMIN_UNEXPECTED_ERROR,
   getAdminActionClient,
@@ -36,7 +31,6 @@ const SELLER = {
 beforeEach(() => {
   vi.clearAllMocks();
   mockCreateClient.mockResolvedValue({ auth: { getUser: mockGetUser } });
-  mockIsAdminDemoMode.mockResolvedValue(false);
 });
 
 describe("requireAdmin", () => {
@@ -97,25 +91,6 @@ describe("getAdminActionClient", () => {
       error: ADMIN_NOT_AUTHORIZED_ERROR,
     });
   });
-
-  it("refuses a real admin while the demo cookie is set", async () => {
-    mockGetUser.mockResolvedValue({ data: { user: ADMIN } });
-    mockIsAdminDemoMode.mockResolvedValue(true);
-
-    await expect(getAdminActionClient()).resolves.toEqual({
-      ok: false,
-      error: ADMIN_DEMO_MODE_ERROR,
-    });
-  });
-
-  it("checks the claim before the cookie, so demo mode never reads as a reason to allow", async () => {
-    mockGetUser.mockResolvedValue({ data: { user: SELLER } });
-    mockIsAdminDemoMode.mockResolvedValue(true);
-
-    const result = await getAdminActionClient();
-    expect(result).toEqual({ ok: false, error: ADMIN_NOT_AUTHORIZED_ERROR });
-    expect(mockIsAdminDemoMode).not.toHaveBeenCalled();
-  });
 });
 
 describe("runAdminAction", () => {
@@ -150,12 +125,6 @@ describe("runAdminAction", () => {
     mockGetUser.mockResolvedValue({ data: { user: SELLER } });
     await expect(runAdminAction("scope", body)).resolves.toEqual({
       error: ADMIN_NOT_AUTHORIZED_ERROR,
-    });
-
-    mockGetUser.mockResolvedValue({ data: { user: ADMIN } });
-    mockIsAdminDemoMode.mockResolvedValue(true);
-    await expect(runAdminAction("scope", body)).resolves.toEqual({
-      error: ADMIN_DEMO_MODE_ERROR,
     });
 
     expect(body).not.toHaveBeenCalled();
@@ -219,27 +188,10 @@ describe("runAdminAction: the guard itself is inside the boundary", () => {
     error.mockRestore();
   });
 
-  it("sanitizes a throw from the demo-cookie read", async () => {
-    const error = vi.spyOn(console, "error").mockImplementation(() => {});
-    mockGetUser.mockResolvedValue({ data: { user: ADMIN } });
-    mockIsAdminDemoMode.mockRejectedValue(new Error("cookies() unavailable"));
-
-    await expect(
-      runAdminAction("scope", async () => ({})),
-    ).resolves.toEqual({ error: ADMIN_UNEXPECTED_ERROR });
-    error.mockRestore();
-  });
-
   it("still returns the plain refusals, which are returns and not throws", async () => {
     mockGetUser.mockResolvedValue({ data: { user: SELLER } });
     await expect(runAdminAction("scope", async () => ({}))).resolves.toEqual({
       error: ADMIN_NOT_AUTHORIZED_ERROR,
-    });
-
-    mockGetUser.mockResolvedValue({ data: { user: ADMIN } });
-    mockIsAdminDemoMode.mockResolvedValue(true);
-    await expect(runAdminAction("scope", async () => ({}))).resolves.toEqual({
-      error: ADMIN_DEMO_MODE_ERROR,
     });
   });
 });

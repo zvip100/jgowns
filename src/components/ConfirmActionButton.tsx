@@ -30,9 +30,8 @@ type ConfirmActionButtonProps<TValue> = {
   successMessage?: string;
   triggerClassName: string;
   triggerStyle?: 'button' | 'inline-icon';
-  /** Renders the trigger inert. `disabledTitle` says why on hover. */
+  /** Renders the trigger inert. */
   disabled?: boolean;
-  disabledTitle?: string;
   /** Passed straight through; see ConfirmActionDialog for the contract. */
   initialValue?: TValue;
   renderBody?: (state: ConfirmActionBodyState<TValue>) => ReactNode;
@@ -42,17 +41,6 @@ type ConfirmActionButtonProps<TValue> = {
   onOpenChange?: (open: boolean) => void;
   onConfirm: (value: TValue) => Promise<ServerActionResult>;
 };
-
-/** An inert trigger explains itself; a live one keeps the last action error. */
-function triggerTitle(
-  disabled: boolean,
-  disabledTitle: string | undefined,
-  error: string | null,
-  ariaLabel: string,
-): string {
-  if (disabled && disabledTitle) return disabledTitle;
-  return error ?? ariaLabel;
-}
 
 export default function ConfirmActionButton<TValue = void>({
   title,
@@ -68,7 +56,6 @@ export default function ConfirmActionButton<TValue = void>({
   triggerClassName,
   triggerStyle = 'button',
   disabled = false,
-  disabledTitle,
   initialValue,
   renderBody,
   validate,
@@ -98,7 +85,7 @@ export default function ConfirmActionButton<TValue = void>({
             type="button"
             disabled={disabled || isPending}
             aria-label={ariaLabel}
-            title={triggerTitle(disabled, disabledTitle, error, ariaLabel)}
+            title={error ?? ariaLabel}
             // shadcn's Button dims itself when disabled; this raw trigger has
             // to, or an inert control looks live. Only for `disabled`, so the
             // pending spinner keeps reading as work in progress.
@@ -117,7 +104,7 @@ export default function ConfirmActionButton<TValue = void>({
             size="sm"
             disabled={disabled || isPending}
             aria-label={ariaLabel}
-            title={triggerTitle(disabled, disabledTitle, error, ariaLabel)}
+            title={error ?? ariaLabel}
             className={triggerClassName}
           >
             {isPending ? (

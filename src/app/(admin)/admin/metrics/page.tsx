@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { CreditCard, ExternalLink, Shirt, TrendingUp } from "lucide-react";
+import { CreditCard, Shirt, TrendingUp } from "lucide-react";
 
 import { ADMIN_EMPTY_VALUE } from "@/lib/admin/constants";
 import { getAdminMetrics } from "@/lib/queries/admin/metrics";
@@ -13,8 +13,7 @@ import {
   adminLocationShareLabel,
   adminPriceBandLabel,
 } from "../../admin-audit-labels";
-import { isAdminDemoMode } from "@/lib/admin/demo";
-import { demoMetrics } from "../../admin-fixtures";
+import { AdminExternalLink } from "../../AdminExternalLink";
 import { AdminFact } from "../../AdminFact";
 import { AdminPageHeader } from "../../AdminPageHeader";
 import { AdminSectionHeading } from "../../AdminSectionHeading";
@@ -64,10 +63,7 @@ function MixFact({ label, rows }: MixFactProps): ReactNode {
 }
 
 export default async function AdminMetricsPage() {
-  const isDemo = await isAdminDemoMode();
-  const { stats, series, summary } = isDemo
-    ? demoMetrics()
-    : await getAdminMetrics();
+  const { stats, series, summary } = await getAdminMetrics();
 
   const totalFees = series.reduce((sum, w) => sum + w.fees_collected_cents, 0);
   // Both fees stats read from the charted series, never the payment rows: that
@@ -81,8 +77,8 @@ export default async function AdminMetricsPage() {
   const { attempts, succeeded } = summary.payments;
   const conversionRate = attempts ? Math.round((succeeded / attempts) * 100) : 0;
 
-  // SQL returns stored values; the labels belong to the UI, so both data
-  // sources are mapped here rather than in either query path.
+  // SQL returns stored values; the labels belong to the UI, so they are mapped
+  // here rather than in the query.
   const categories = summary.category_share.map(({ category, count }) => ({
     label: adminCategoryShareLabel(category),
     count,
@@ -101,21 +97,11 @@ export default async function AdminMetricsPage() {
       <AdminPageHeader
         eyebrow="Admin"
         title="Metrics"
-        description={
-          isDemo
-            ? "Previewing fixture data for layout review."
-            : "Marketplace aggregates computed from the database."
-        }
+        description="Marketplace aggregates computed from the database."
         action={
-          <a
-            href={POSTHOG_PROJECT_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-(--accent-deep) hover:text-(--ink)"
-          >
+          <AdminExternalLink href={POSTHOG_PROJECT_URL}>
             Open PostHog
-            <ExternalLink className="size-3.5" aria-hidden />
-          </a>
+          </AdminExternalLink>
         }
       />
 

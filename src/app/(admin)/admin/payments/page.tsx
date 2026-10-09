@@ -2,13 +2,11 @@ import Link from "next/link";
 
 import { TableCell, TableRow } from "@/components/ui/table";
 import { ADMIN_EMPTY_VALUE } from "@/lib/admin/constants";
-import { isAdminDemoMode } from "@/lib/admin/demo";
 import { parseAdminListParams } from "@/lib/admin/list";
 import { getAdminPayments } from "@/lib/queries/admin/payments";
 
 import { AdminListPage } from "../../AdminListPage";
 import { AdminRescuePaymentButton } from "../../admin-action-buttons";
-import { demoPayments } from "../../admin-fixtures";
 import {
   formatAdminDate,
   formatCents,
@@ -42,18 +40,12 @@ async function loadPayments(
 ): Promise<AdminListResult<AdminPaymentRow>> {
   const params = parseAdminListParams(await searchParams);
 
-  if (await isAdminDemoMode()) return demoPayments(params);
-
   return getAdminPayments(params);
 }
 
-export default async function AdminPaymentsPage({
+export default function AdminPaymentsPage({
   searchParams,
 }: AdminPaymentsPageProps) {
-  // Read here rather than inside loadPayments: the rescue button is rendered by
-  // this page, and a demo screen must not offer a write it will refuse.
-  const isDemo = await isAdminDemoMode();
-
   return (
     <AdminListPage
       basePath="/admin/payments"
@@ -114,10 +106,7 @@ export default async function AdminPaymentsPage({
           </TableCell>
           <TableCell>
             {payment.status === "pending" ? (
-              <AdminRescuePaymentButton
-                paymentId={payment.id}
-                isDemo={isDemo}
-              />
+              <AdminRescuePaymentButton paymentId={payment.id} />
             ) : (
               <span className="text-xs text-(--muted-ink)">
                 {ADMIN_EMPTY_VALUE}

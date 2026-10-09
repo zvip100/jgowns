@@ -28,7 +28,6 @@ type AdminPhotoGridProps = {
   title: string;
   imageUrls: string[];
   blurDataUrls: string[];
-  isDemo: boolean;
 };
 
 const THUMBNAIL_SIZE = 184;
@@ -38,7 +37,6 @@ export function AdminPhotoGrid({
   title,
   imageUrls,
   blurDataUrls,
-  isDemo,
 }: AdminPhotoGridProps) {
   const [openAt, setOpenAt] = useState<number | null>(null);
 
@@ -75,25 +73,21 @@ export function AdminPhotoGrid({
                   position={i + 1}
                   offset={-1}
                   atEnd={i === 0}
-                  isDemo={isDemo}
                 />
                 <AdminReprocessImageButton
                   listingId={listingId}
                   imageUrl={url}
                   position={i + 1}
-                  isDemo={isDemo}
                 />
                 <AdminReplaceImageButton
                   listingId={listingId}
                   imageUrl={url}
                   position={i + 1}
-                  isDemo={isDemo}
                 />
                 <AdminRemoveImageButton
                   listingId={listingId}
                   imageUrl={url}
                   position={i + 1}
-                  isDemo={isDemo}
                 />
                 <AdminPhotoMoveButton
                   listingId={listingId}
@@ -101,7 +95,6 @@ export function AdminPhotoGrid({
                   position={i + 1}
                   offset={1}
                   atEnd={i === imageUrls.length - 1}
-                  isDemo={isDemo}
                 />
               </div>
             </div>
@@ -111,7 +104,7 @@ export function AdminPhotoGrid({
 
       {imageUrls.length < MAX_LISTING_IMAGES && (
         <div className="mt-5">
-          <AdminAddImageButton listingId={listingId} isDemo={isDemo} />
+          <AdminAddImageButton listingId={listingId} />
         </div>
       )}
 

@@ -138,7 +138,6 @@ import { AdminImageFileField } from "@/app/(admin)/AdminImageFileField";
 const LISTING_ID = "11111111-1111-4111-8111-111111111111";
 const IMAGE_URL =
   "https://proj.supabase.co/storage/v1/object/public/gown-images/a.webp";
-const DEMO_TITLE = "Turn off demo mode to make changes.";
 const UNREADABLE = "This photo can't be opened. Try a JPG or PNG.";
 
 const EDITS: PhotoEdits = {
@@ -214,21 +213,6 @@ describe("AdminReplaceImageButton", () => {
     expect(html).not.toContain("disabled");
   });
 
-  it("goes visibly inert in demo mode and says why", () => {
-    const html = render(
-      React.createElement(AdminReplaceImageButton, {
-        listingId: LISTING_ID,
-        imageUrl: IMAGE_URL,
-        position: 1,
-        isDemo: true,
-      }),
-    );
-
-    expect(html).toContain("disabled");
-    expect(html).toContain(`title="${DEMO_TITLE}"`);
-    expect(html).toContain("opacity-50");
-  });
-
   it("passes a FormData carrying the exported file, with both targets", async () => {
     const exported = photo();
     mockExport.mockResolvedValue(exported);
@@ -253,17 +237,8 @@ describe("AdminReplaceImageButton", () => {
 describe("AdminAddImageButton", () => {
   const add = () => React.createElement(AdminAddImageButton, { listingId: LISTING_ID });
 
-  it("renders a labelled trigger and goes inert in demo mode", () => {
+  it("renders a labelled trigger", () => {
     expect(render(add())).toContain('aria-label="Add a photo"');
-
-    const demo = render(
-      React.createElement(AdminAddImageButton, {
-        listingId: LISTING_ID,
-        isDemo: true,
-      }),
-    );
-    expect(demo).toContain("disabled");
-    expect(demo).toContain(`title="${DEMO_TITLE}"`);
   });
 
   it("keeps its label at every width, unlike the packed row actions", () => {
@@ -442,14 +417,6 @@ describe("AdminPhotoMoveButton: an ordinary move", () => {
     expect(html).toContain("disabled");
     expect(html).toContain("opacity-50");
   });
-
-  it("is inert in demo mode and says why", () => {
-    const html = render(
-      React.createElement(AdminPhotoMoveButton, { ...PLAIN, isDemo: true }),
-    );
-    expect(html).toContain("disabled");
-    expect(html).toContain(`title="${DEMO_TITLE}"`);
-  });
 });
 
 describe("AdminPhotoMoveButton: a move that changes the cover photo", () => {
@@ -494,15 +461,6 @@ describe("AdminPhotoMoveButton: a move that changes the cover photo", () => {
     const html = render(React.createElement(AdminPhotoMoveButton, { ...PROMOTE }));
     expect(html).toContain('aria-label="Move photo 2 left"');
     expect(html).not.toContain("disabled");
-  });
-
-  it("is inert in demo mode and says why", () => {
-    const html = render(
-      React.createElement(AdminPhotoMoveButton, { ...PROMOTE, isDemo: true }),
-    );
-    expect(html).toContain("disabled");
-    expect(html).toContain(`title="${DEMO_TITLE}"`);
-    expect(html).toContain("opacity-50");
   });
 
   it("leaves photo 1's own left arrow on the immediate shape, since it goes nowhere", () => {

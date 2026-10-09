@@ -4,8 +4,6 @@ import { parseAdminListParams } from "@/lib/admin/list";
 import { getAdminMessages } from "@/lib/queries/admin/messages";
 
 import { AdminListPage } from "../../AdminListPage";
-import { isAdminDemoMode } from "@/lib/admin/demo";
-import { demoMessages } from "../../admin-fixtures";
 import { formatAdminDateTime } from "../../admin-url";
 
 import { ExpandableMessage } from "./ExpandableMessage";
@@ -30,8 +28,6 @@ async function loadMessages(
   searchParams: Promise<PageSearchParams>,
 ): Promise<AdminListResult<AdminContactMessage>> {
   const params = parseAdminListParams(await searchParams);
-
-  if (await isAdminDemoMode()) return demoMessages(params);
 
   return getAdminMessages(params);
 }

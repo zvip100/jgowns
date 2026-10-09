@@ -4,7 +4,6 @@ import { notFound } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 
 import { ADMIN_EMPTY_VALUE } from "@/lib/admin/constants";
-import { isAdminDemoMode } from "@/lib/admin/demo";
 import { getAdminListingsForUser } from "@/lib/queries/admin/listings";
 import { getAuditLogForActor } from "@/lib/queries/admin/logs";
 import { getAdminPaymentsFor } from "@/lib/queries/admin/payments";
@@ -14,38 +13,26 @@ import { AdminFact } from "../../../AdminFact";
 import { AdminListPanel } from "../../../AdminListPanel";
 import { AdminPageHeader } from "../../../AdminPageHeader";
 import { AdminSectionHeading } from "../../../AdminSectionHeading";
-import { AuditActionPill } from "../../../AuditActionPill";
-import { AuditActorGlyph } from "../../../AuditActorGlyph";
+import { AuditEntrySummary } from "../../../AuditEntrySummary";
 import { StatusPill } from "../../../StatusPill";
 import {
   AdminBanUserButton,
   AdminDeleteUserButton,
   AdminUnbanUserButton,
 } from "../../../admin-action-buttons";
-import {
-  FIXTURE_LISTINGS,
-  FIXTURE_PAYMENTS,
-  demoAuditLogForActor,
-  getFixtureUser,
-} from "../../../admin-fixtures";
 import { formatAdminDate, formatAdminDateTime, formatCents } from "../../../admin-url";
 
 import type { Metadata } from "next";
-import type {
-  AdminListing,
-  AdminPaymentRow,
-  AdminUser,
-} from "@/lib/admin/types";
+import type { AdminUser } from "@/lib/admin/types";
 
 type AdminUserDetailPageProps = {
   params: Promise<{ id: string }>;
 };
 
 /** Deduped so generateMetadata and the page body share one read. */
-const loadUser = cache(async (id: string): Promise<AdminUser | null> => {
-  if (await isAdminDemoMode()) return getFixtureUser(id) ?? null;
-  return getAdminUser(id);
-});
+const loadUser = cache(
+  (id: string): Promise<AdminUser | null> => getAdminUser(id),
+);
 
 export async function generateMetadata({
   params,
@@ -62,28 +49,14 @@ export default async function AdminUserDetailPage({
   params,
 }: AdminUserDetailPageProps) {
   const { id } = await params;
-  const isDemo = await isAdminDemoMode();
   const user = await loadUser(id);
   if (!user) notFound();
 
-  // Demo mode branches for activity too: calling the real reader here would
-  // put genuine audit rows under a fixture user, which is exactly the mixing
-  // the toggle exists to prevent.
-  const [listings, payments, activity] = isDemo
-    ? [
-        FIXTURE_LISTINGS.filter(
-          (listing: AdminListing): boolean => listing.user_id === user.id,
-        ),
-        FIXTURE_PAYMENTS.filter(
-          (payment: AdminPaymentRow): boolean => payment.user_id === user.id,
-        ),
-        demoAuditLogForActor(user.id),
-      ]
-    : await Promise.all([
-        getAdminListingsForUser(user.id),
-        getAdminPaymentsFor({ userId: user.id }),
-        getAuditLogForActor(user.id),
-      ]);
+  const [listings, payments, activity] = await Promise.all([
+    getAdminListingsForUser(user.id),
+    getAdminPaymentsFor({ userId: user.id }),
+    getAuditLogForActor(user.id),
+  ]);
 
   return (
     <div className="flex flex-col gap-8">
@@ -120,11 +93,11 @@ export default async function AdminUserDetailPage({
             the substitute, and an open session lasts until its token expires. */}
         <div className="mt-3 flex flex-wrap gap-2">
           {user.is_banned ? (
-            <AdminUnbanUserButton userId={user.id} isDemo={isDemo} />
+            <AdminUnbanUserButton userId={user.id} />
           ) : (
-            <AdminBanUserButton userId={user.id} isDemo={isDemo} />
+            <AdminBanUserButton userId={user.id} />
           )}
-          <AdminDeleteUserButton userId={user.id} isDemo={isDemo} />
+          <AdminDeleteUserButton userId={user.id} />
         </div>
       </section>
 
@@ -180,10 +153,8 @@ export default async function AdminUserDetailPage({
           emptyLabel="No recorded activity."
         >
           {activity.map((entry) => (
-            <li key={entry.id} className="flex gap-2 px-4 py-3 text-sm">
-              <AuditActorGlyph role={entry.actor_role} className="mt-0.5" />
-              <div className="min-w-0">
-                <AuditActionPill action={entry.action} />
+            <li key={entry.id} className="px-4 py-3 text-sm">
+              <AuditEntrySummary entry={entry}>
                 {/* Every row here is this person's, so the actor name would be
                     the page title repeated; the glyph still carries the role. */}
                 <p className="mt-1 truncate text-xs text-(--muted-ink)">
@@ -195,7 +166,7 @@ export default async function AdminUserDetailPage({
                 >
                   {formatAdminDateTime(entry.created_at)}
                 </time>
-              </div>
+              </AuditEntrySummary>
             </li>
           ))}
         </AdminListPanel>

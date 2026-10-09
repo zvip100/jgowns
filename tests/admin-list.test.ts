@@ -1,11 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  ADMIN_NEW_WEEK_SEGMENT,
   ADMIN_OFF_MARKET_STATUS,
-  ADMIN_STALE_ACTIVE_SEGMENT,
-  ADMIN_STUCK_PAYMENT_SEGMENT,
-  AGE_SEGMENTS,
   adminListQuery,
   adminListResult,
   clampPage,
@@ -19,11 +15,6 @@ import {
   startOfDayMs,
   totalPagesFor,
 } from "@/lib/admin/list";
-import {
-  filterByDateRange,
-  matchesListingSegment,
-  matchesListingStatus,
-} from "@/app/(admin)/admin-list";
 
 import type { AdminListParams } from "@/lib/admin/list";
 
@@ -104,57 +95,6 @@ describe("parseAdminListParams", () => {
   });
 });
 
-describe("filterByDateRange", () => {
-  const items = [
-    dated("2026-01-01T12:00:00.000Z"),
-    dated("2026-02-15T09:30:00.000Z"),
-    dated("2026-03-31T23:59:00.000Z"),
-  ];
-  const getDate = (item: { created_at: string }) => item.created_at;
-
-  it("returns everything when neither bound is set", () => {
-    expect(filterByDateRange(items, params(), getDate)).toHaveLength(3);
-  });
-
-  it("keeps rows on or after from", () => {
-    const filtered = filterByDateRange(
-      items,
-      params({ from: "2026-02-15" }),
-      getDate,
-    );
-    expect(filtered).toHaveLength(2);
-  });
-
-  it("covers the whole end day, not midnight on it", () => {
-    const filtered = filterByDateRange(
-      items,
-      params({ to: "2026-03-31" }),
-      getDate,
-    );
-    expect(filtered).toHaveLength(3);
-  });
-
-  it("applies both bounds together", () => {
-    const filtered = filterByDateRange(
-      items,
-      params({ from: "2026-02-01", to: "2026-02-28" }),
-      getDate,
-    );
-    expect(filtered).toEqual([dated("2026-02-15T09:30:00.000Z")]);
-  });
-
-  it("matches the New York day a row displays as", () => {
-    // 01:30Z on Sep 11 is 9:30 PM on Sep 10 in New York.
-    const lateEvening = dated("2026-09-11T01:30:00.000Z");
-    expect(
-      filterByDateRange([lateEvening], params({ to: "2026-09-10" }), getDate),
-    ).toEqual([lateEvening]);
-    expect(
-      filterByDateRange([lateEvening], params({ from: "2026-09-11" }), getDate),
-    ).toEqual([]);
-  });
-});
-
 describe("queueCutoffDate", () => {
   const asOf = "2026-07-31T18:00:00.000Z";
 
@@ -178,10 +118,12 @@ describe("queueCutoffDate", () => {
       dated("2026-07-20T14:00:00.000Z"),
     ];
 
-    // The whole cutoff day is in range, matching filterByDateRange's `to`.
-    expect(
-      filterByDateRange(rows, params({ to: queueCutoffDate(30, asOf) }), (r) => r.created_at),
-    ).toEqual([rows[0], rows[1]]);
+    // The whole cutoff day is in range, matching the list page's `to` bound.
+    const cutoff = endOfDayMs(queueCutoffDate(30, asOf));
+    expect(rows.filter((r) => Date.parse(r.created_at) <= cutoff)).toEqual([
+      rows[0],
+      rows[1],
+    ]);
   });
 });
 
@@ -235,176 +177,13 @@ describe("paginateAdminList", () => {
     expect(result.totalCount).toBe(0);
     expect(result.totalPages).toBe(1);
   });
-});
 
-describe("matchesListingStatus", () => {
-  it("matches every row when nothing is selected", () => {
-    for (const status of [
-      "active",
-      "sold",
-      "pending_payment",
-      "suspended",
-      "removed",
-    ]) {
-      expect(matchesListingStatus("all", status)).toBe(true);
-    }
-  });
-
-  it("matches only the exact status for a single-status segment", () => {
-    expect(matchesListingStatus("removed", "removed")).toBe(true);
-    expect(matchesListingStatus("removed", "suspended")).toBe(false);
-    expect(matchesListingStatus("suspended", "suspended")).toBe(true);
-    expect(matchesListingStatus("suspended", "removed")).toBe(false);
-  });
-
-  it("matches both off-market statuses for the composite segment", () => {
-    expect(matchesListingStatus(ADMIN_OFF_MARKET_STATUS, "suspended")).toBe(
-      true,
-    );
-    expect(matchesListingStatus(ADMIN_OFF_MARKET_STATUS, "removed")).toBe(true);
-  });
-
-  it("keeps on-market statuses out of the composite segment", () => {
-    for (const status of ["active", "sold", "pending_payment"]) {
-      expect(matchesListingStatus(ADMIN_OFF_MARKET_STATUS, status)).toBe(false);
-    }
-  });
-
-  it("rejects everything for a segment value that is not a known status", () => {
-    expect(matchesListingStatus("nonsense", "active")).toBe(false);
-  });
-
-  it("survives a round trip through the URL params", () => {
+  it("round-trips the off-market segment through the URL params", () => {
     const parsed = parseAdminListParams({ status: ADMIN_OFF_MARKET_STATUS });
     expect(parsed.status).toBe(ADMIN_OFF_MARKET_STATUS);
     expect(paginateAdminList([], parsed).current.get("status")).toBe(
       ADMIN_OFF_MARKET_STATUS,
     );
-  });
-});
-
-describe("matchesListingSegment", () => {
-  const asOf = "2026-07-31T18:00:00.000Z";
-  const listing = (status: string, created_at: string) => ({ status, created_at });
-
-  it("falls through to the status matcher for plain segments", () => {
-    expect(
-      matchesListingSegment("all", listing("sold", "2020-01-01T00:00:00.000Z"), asOf),
-    ).toBe(true);
-    expect(
-      matchesListingSegment("active", listing("active", "2026-07-30T00:00:00.000Z"), asOf),
-    ).toBe(true);
-    expect(
-      matchesListingSegment("active", listing("sold", "2026-07-30T00:00:00.000Z"), asOf),
-    ).toBe(false);
-    expect(
-      matchesListingSegment(
-        ADMIN_OFF_MARKET_STATUS,
-        listing("suspended", "2026-07-30T00:00:00.000Z"),
-        asOf,
-      ),
-    ).toBe(true);
-  });
-
-  it("requires both the status and the age for stale actives", () => {
-    // Active and 30+ days old.
-    expect(
-      matchesListingSegment(
-        ADMIN_STALE_ACTIVE_SEGMENT,
-        listing("active", "2026-04-01T12:00:00.000Z"),
-        asOf,
-      ),
-    ).toBe(true);
-    // Old enough, wrong status.
-    expect(
-      matchesListingSegment(
-        ADMIN_STALE_ACTIVE_SEGMENT,
-        listing("sold", "2026-04-01T12:00:00.000Z"),
-        asOf,
-      ),
-    ).toBe(false);
-    // Right status, too recent.
-    expect(
-      matchesListingSegment(
-        ADMIN_STALE_ACTIVE_SEGMENT,
-        listing("active", "2026-07-20T14:00:00.000Z"),
-        asOf,
-      ),
-    ).toBe(false);
-  });
-
-  it("includes the whole cutoff day on the older side", () => {
-    // Cutoff is 2026-07-01; late that New York day still counts as older.
-    expect(
-      matchesListingSegment(
-        ADMIN_STALE_ACTIVE_SEGMENT,
-        listing("active", "2026-07-02T03:59:00.000Z"),
-        asOf,
-      ),
-    ).toBe(true);
-    expect(
-      matchesListingSegment(
-        ADMIN_STALE_ACTIVE_SEGMENT,
-        listing("active", "2026-07-02T04:00:01.000Z"),
-        asOf,
-      ),
-    ).toBe(false);
-  });
-
-  it("requires both the status and the age for stuck payments", () => {
-    expect(
-      matchesListingSegment(
-        ADMIN_STUCK_PAYMENT_SEGMENT,
-        listing("pending_payment", "2026-07-28T09:00:00.000Z"),
-        asOf,
-      ),
-    ).toBe(true);
-    expect(
-      matchesListingSegment(
-        ADMIN_STUCK_PAYMENT_SEGMENT,
-        listing("active", "2026-07-28T09:00:00.000Z"),
-        asOf,
-      ),
-    ).toBe(false);
-    expect(
-      matchesListingSegment(
-        ADMIN_STUCK_PAYMENT_SEGMENT,
-        listing("pending_payment", "2026-07-31T09:00:00.000Z"),
-        asOf,
-      ),
-    ).toBe(false);
-  });
-
-  it("takes any status inside the new-this-week window", () => {
-    expect(
-      matchesListingSegment(
-        ADMIN_NEW_WEEK_SEGMENT,
-        listing("sold", "2026-07-28T09:00:00.000Z"),
-        asOf,
-      ),
-    ).toBe(true);
-    expect(
-      matchesListingSegment(
-        ADMIN_NEW_WEEK_SEGMENT,
-        listing("active", "2026-07-20T09:00:00.000Z"),
-        asOf,
-      ),
-    ).toBe(false);
-  });
-
-  it("rolls with asOf instead of freezing a date", () => {
-    const listed = listing("active", "2026-07-20T14:00:00.000Z");
-    // Not stale on Jul 31, stale once "now" has moved a month on.
-    expect(matchesListingSegment(ADMIN_STALE_ACTIVE_SEGMENT, listed, asOf)).toBe(
-      false,
-    );
-    expect(
-      matchesListingSegment(
-        ADMIN_STALE_ACTIVE_SEGMENT,
-        listed,
-        "2026-09-01T18:00:00.000Z",
-      ),
-    ).toBe(true);
   });
 });
 
@@ -507,8 +286,7 @@ describe("segmentCutoffIso", () => {
   const asOf = "2026-07-31T18:00:00.000Z";
 
   it("looks back to the end of the cutoff day for an older segment", () => {
-    // Same boundary filterByDateRange applies to a `to` bound, so the SQL
-    // predicate and the in-memory matcher select the same rows.
+    // Same boundary the list page applies to a `to` bound.
     expect(segmentCutoffIso({ days: 30, side: "older" }, asOf)).toBe(
       new Date(endOfDayMs("2026-07-01")).toISOString(),
     );
@@ -518,18 +296,6 @@ describe("segmentCutoffIso", () => {
     expect(segmentCutoffIso({ days: 7, side: "newer" }, asOf)).toBe(
       "2026-07-24T04:00:00.000Z",
     );
-  });
-
-  it("agrees with the in-memory matcher on a row sitting on the boundary", () => {
-    const rule = AGE_SEGMENTS[ADMIN_STALE_ACTIVE_SEGMENT];
-    const boundary = segmentCutoffIso(rule, asOf);
-    expect(
-      matchesListingSegment(
-        ADMIN_STALE_ACTIVE_SEGMENT,
-        { status: "active", created_at: boundary },
-        asOf,
-      ),
-    ).toBe(true);
   });
 });
 

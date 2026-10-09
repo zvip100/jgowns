@@ -26,13 +26,9 @@ import {
 } from "@/lib/admin/list";
 import { getAdminOverview } from "@/lib/queries/admin/overview";
 
-import { AdminDemoToggle } from "../AdminDemoToggle";
-import { isAdminDemoMode } from "@/lib/admin/demo";
-import { demoOverview } from "../admin-fixtures";
 import { AdminPageHeader } from "../AdminPageHeader";
 import { AdminSectionHeading } from "../AdminSectionHeading";
-import { AuditActionPill } from "../AuditActionPill";
-import { AuditActorGlyph } from "../AuditActorGlyph";
+import { AuditEntrySummary } from "../AuditEntrySummary";
 import { auditActorName } from "../admin-audit-labels";
 import { toListingWithSizes } from "@/lib/admin/types";
 import { formatAdminDateTime, formatCents } from "../admin-url";
@@ -56,8 +52,6 @@ function daysSince(iso: string, asOf: string): number {
 }
 
 export default async function AdminOverviewPage() {
-  const isDemo = await isAdminDemoMode();
-  // Both sources return the same shape, so nothing below this line branches.
   const {
     stats,
     asOf,
@@ -66,7 +60,7 @@ export default async function AdminOverviewPage() {
     offMarket,
     stuckPending,
     recentActivity,
-  } = isDemo ? demoOverview() : await getAdminOverview();
+  } = await getAdminOverview();
 
   const contactAge =
     stats.oldest_contact_message_age_hours == null
@@ -81,7 +75,6 @@ export default async function AdminOverviewPage() {
         eyebrow="Admin"
         title="Overview"
         description="Listings, fees, and queues that need a look."
-        action={<AdminDemoToggle isDemo={isDemo} />}
       />
 
       {/* Every cluster spans an exact fraction of the row at each breakpoint,
@@ -199,17 +192,13 @@ export default async function AdminOverviewPage() {
                     {/* The feed mixes actors, and three action slugs are
                         produced by both admins and sellers, so the glyph is
                         what separates them without reading the row. */}
-                    <div className="flex min-w-0 gap-2">
-                      <AuditActorGlyph role={entry.actor_role} className="mt-0.5" />
-                      <div className="min-w-0">
-                        <AuditActionPill action={entry.action} />
-                        <p className="mt-1.5 truncate text-xs text-(--muted-ink)">
-                          {entry.entity_label}
-                          {" · "}
-                          {auditActorName(entry.actor_email, entry.actor_role)}
-                        </p>
-                      </div>
-                    </div>
+                    <AuditEntrySummary entry={entry}>
+                      <p className="mt-1.5 truncate text-xs text-(--muted-ink)">
+                        {entry.entity_label}
+                        {" · "}
+                        {auditActorName(entry.actor_email, entry.actor_role)}
+                      </p>
+                    </AuditEntrySummary>
                     <time
                       className="shrink-0 text-xs text-(--muted-ink) lg:text-right"
                       dateTime={entry.created_at}

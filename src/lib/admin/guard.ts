@@ -1,5 +1,3 @@
-import { ADMIN_DEMO_MODE_MESSAGE } from "@/lib/admin/constants";
-import { isAdminDemoMode } from "@/lib/admin/demo";
 import { isAdmin } from "@/lib/admin/is-admin";
 import { createClient } from "@/lib/supabase/server";
 
@@ -32,17 +30,6 @@ export async function requireAdmin(): Promise<{ id: string; email: string | null
 /** Rejected requests read as an ordinary action failure, never as a crash. */
 export const ADMIN_NOT_AUTHORIZED_ERROR = "Not authorized";
 
-/**
- * Demo mode substitutes fixtures into every loader, so a detail page in demo
- * mode renders fixture ids into real action forms. The buttons go inert while
- * the cookie is set, and every action refuses the request as well.
- *
- * This is a safety check, never authorization: the cookie is written from the
- * client, so an attacker simply would not send it, which costs them nothing.
- * The claim check above and RLS are what actually stop them.
- */
-export const ADMIN_DEMO_MODE_ERROR = ADMIN_DEMO_MODE_MESSAGE;
-
 /** Anything the action did not anticipate, sanitized before it leaves. */
 export const ADMIN_UNEXPECTED_ERROR = "Something went wrong. Please try again.";
 
@@ -52,8 +39,8 @@ export type AdminActionClient = {
 };
 
 /**
- * The preamble every admin server action shares: claim check, demo refusal, and
- * the operator's own authenticated client.
+ * The preamble every admin server action shares: claim check and the
+ * operator's own authenticated client.
  *
  * The client is deliberately the operator's, never the service client: the
  * audit triggers derive the actor from `auth.uid()`, so a service-role write
@@ -71,9 +58,6 @@ export async function getAdminActionClient(): Promise<
   if (!user || !isAdmin(user)) {
     return { ok: false, error: ADMIN_NOT_AUTHORIZED_ERROR };
   }
-  if (await isAdminDemoMode()) {
-    return { ok: false, error: ADMIN_DEMO_MODE_ERROR };
-  }
 
   return { ok: true, supabase, admin: { id: user.id, email: user.email ?? null } };
 }
@@ -86,8 +70,8 @@ export async function getAdminActionClient(): Promise<
  * would reject the promise at the client instead of returning the typed result
  * the callers expect (AGENTS §7). The guard runs INSIDE the try for that
  * reason: a refusal is an early return rather than an exception, so the refusal
- * semantics are unchanged, but a throw from `createClient()`, `getUser()`, or
- * the demo-cookie read is now sanitized like any other.
+ * semantics are unchanged, but a throw from `createClient()` or `getUser()` is
+ * sanitized like any other.
  *
  * No admin action redirects today. Adding one means `unstable_rethrow(e)` as
  * the first line of this catch, or the NEXT_REDIRECT signal is swallowed and

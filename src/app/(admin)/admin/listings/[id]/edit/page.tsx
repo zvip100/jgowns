@@ -6,9 +6,7 @@ import { ArrowLeft } from "lucide-react";
 import { getAdminListing } from "@/lib/queries/admin/listings";
 import { sortListingSizes } from "@/lib/listing-variants";
 
-import { isAdminDemoMode } from "@/lib/admin/demo";
 import { AdminRefreshControl } from "../../../../AdminRefreshControl";
-import { getFixtureListing } from "../../../../admin-fixtures";
 import { StatusPill } from "../../../../StatusPill";
 
 import { AdminListingEditForm } from "./AdminListingEditForm";
@@ -21,10 +19,9 @@ type AdminListingEditPageProps = {
 };
 
 /** Deduped so generateMetadata and the page body share one read. */
-const loadListing = cache(async (id: string): Promise<AdminListing | null> => {
-  if (await isAdminDemoMode()) return getFixtureListing(id) ?? null;
-  return getAdminListing(id);
-});
+const loadListing = cache(
+  (id: string): Promise<AdminListing | null> => getAdminListing(id),
+);
 
 export async function generateMetadata({
   params,
@@ -41,7 +38,6 @@ export default async function AdminListingEditPage({
   params,
 }: AdminListingEditPageProps) {
   const { id } = await params;
-  const isDemo = await isAdminDemoMode();
   const listing = await loadListing(id);
   if (!listing) notFound();
 
@@ -68,7 +64,6 @@ export default async function AdminListingEditPage({
       </header>
 
       <AdminListingEditForm
-        isDemo={isDemo}
         listing={{
           id: listing.id,
           title: listing.title,

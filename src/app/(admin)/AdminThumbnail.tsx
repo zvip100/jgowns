@@ -36,9 +36,6 @@ export function AdminThumbnail({
       width={size}
       height={size}
       quality={IMAGE_QUALITY}
-      // Phase 1 fixture photos are inline SVG data URIs, which the optimizer
-      // cannot fetch. Real Supabase URLs still go through it.
-      unoptimized={src.startsWith("data:")}
       className="shrink-0 rounded-md object-cover"
       style={{ width: size, height: size }}
       {...blurProps(blurDataURL ?? undefined)}

@@ -6,8 +6,6 @@ import { parseAdminListParams } from "@/lib/admin/list";
 import { getAdminUsers } from "@/lib/queries/admin/users";
 
 import { AdminListPage } from "../../AdminListPage";
-import { isAdminDemoMode } from "@/lib/admin/demo";
-import { demoUsers } from "../../admin-fixtures";
 import { formatAdminDate } from "../../admin-url";
 
 import type { AdminListResult } from "@/lib/admin/list";
@@ -37,8 +35,6 @@ async function loadUsers(
   searchParams: Promise<PageSearchParams>,
 ): Promise<AdminListResult<AdminUser>> {
   const params = parseAdminListParams(await searchParams);
-
-  if (await isAdminDemoMode()) return demoUsers(params);
 
   return getAdminUsers(params);
 }

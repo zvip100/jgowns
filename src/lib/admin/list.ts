@@ -7,11 +7,10 @@ import { firstParam } from "@/lib/utils";
 import type { PageSearchParams } from "@/lib/types";
 
 /**
- * The URL contract every admin list page shares, and the pagination shape both
- * data sources produce. It lives in `lib` rather than the route group because
- * `src/lib/queries/admin/*` has to build the same result from a real query that
- * the demo fixtures build in memory, and a query module must not import from
- * the app tree.
+ * The URL contract every admin list page shares, and the pagination shape the
+ * queries produce. It lives in `lib` rather than the route group because
+ * `src/lib/queries/admin/*` builds the result, and a query module must not
+ * import from the app tree.
  */
 export type AdminListParams = {
   /** Segment pill value. "all" when nothing is selected. */
@@ -163,8 +162,7 @@ export function segmentCutoffIso(rule: AgeSegmentRule, asOf: string): string {
 }
 
 /**
- * Rebuilds the querystring every link on the page is built from. Kept separate
- * from the result builders so the demo and real paths emit identical URLs.
+ * Rebuilds the querystring every link on the page is built from.
  */
 export function adminListQuery(
   params: AdminListParams,
@@ -237,7 +235,7 @@ export async function fetchAdminListPage<T>(
   return adminListResult(clamped.rows, first.count, params);
 }
 
-/** Paginates an already-filtered in-memory list (the demo data path). */
+/** Paginates an already-filtered in-memory list. */
 export function paginateAdminList<T>(
   items: T[],
   params: AdminListParams,

@@ -6,7 +6,6 @@ import { Ban, Pencil } from "lucide-react";
 import { FormInfoBanner } from "@/components/form/FormInfoBanner";
 import { TableCell, TableRow } from "@/components/ui/table";
 import { ADMIN_EMPTY_VALUE } from "@/lib/admin/constants";
-import { isAdminDemoMode } from "@/lib/admin/demo";
 import { toListingWithSizes } from "@/lib/admin/types";
 import {
   listingPriceSummary,
@@ -25,9 +24,7 @@ import { AdminListPanel } from "../../../AdminListPanel";
 import { AdminPageHeader } from "../../../AdminPageHeader";
 import { AdminSectionHeading } from "../../../AdminSectionHeading";
 import { AdminTable } from "../../../AdminTable";
-import { AuditActionPill } from "../../../AuditActionPill";
-import { AuditActorGlyph } from "../../../AuditActorGlyph";
-import { StatusPill } from "../../../StatusPill";
+import { AuditEntrySummary } from "../../../AuditEntrySummary";
 import {
   AdminMarkListingSoldButton,
   AdminMarkSizeSoldButton,
@@ -43,17 +40,13 @@ import {
   auditActorName,
 } from "../../../admin-audit-labels";
 import {
-  FIXTURE_PAYMENTS,
-  demoAuditLogForListing,
-  getFixtureListing,
-} from "../../../admin-fixtures";
-import {
   formatAdminDate,
   formatAdminDateTime,
   formatCents,
   stripeSessionUrl,
 } from "../../../admin-url";
 import { AdminPhotoGrid } from "./AdminPhotoGrid";
+import { ListingHeaderMeta } from "./ListingHeaderMeta";
 
 import type { Metadata } from "next";
 import type { AdminListingStatus } from "@/lib/admin/types";
@@ -77,10 +70,7 @@ function removedRestoreTarget(
 }
 
 /** Deduped so generateMetadata and the page body share one read. */
-const loadListing = cache(async (id: string) => {
-  if (await isAdminDemoMode()) return getFixtureListing(id) ?? null;
-  return getAdminListing(id);
-});
+const loadListing = cache((id: string) => getAdminListing(id));
 
 export async function generateMetadata({
   params,
@@ -97,19 +87,13 @@ export default async function AdminListingDetailPage({
   params,
 }: AdminListingDetailPageProps) {
   const { id } = await params;
-  const isDemo = await isAdminDemoMode();
   const listing = await loadListing(id);
   if (!listing) notFound();
 
-  const [payments, timeline] = isDemo
-    ? [
-        FIXTURE_PAYMENTS.filter((p) => p.listing_id === listing.id),
-        demoAuditLogForListing(listing.id),
-      ]
-    : await Promise.all([
-        getAdminPaymentsFor({ listingId: listing.id }),
-        getAuditLogForListing(listing.id),
-      ]);
+  const [payments, timeline] = await Promise.all([
+    getAdminPaymentsFor({ listingId: listing.id }),
+    getAuditLogForListing(listing.id),
+  ]);
 
   const category = adminCategoryLabel(listing.category);
   const sizes = sortListingSizes(listing.sizes);
@@ -130,12 +114,11 @@ export default async function AdminListingDetailPage({
           </Link>
         }
       >
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <StatusPill status={listing.status} />
-          <span className="text-sm text-(--muted-ink)">
-            {listingPriceSummary(toListingWithSizes(listing))}
-          </span>
-        </div>
+        <ListingHeaderMeta
+          listingId={listing.id}
+          status={listing.status}
+          priceSummary={listingPriceSummary(toListingWithSizes(listing))}
+        />
       </AdminPageHeader>
 
       {listing.status === "suspended" && (
@@ -210,7 +193,6 @@ export default async function AdminListingDetailPage({
             title={listing.title}
             imageUrls={listing.image_urls}
             blurDataUrls={listing.image_blur_data_urls}
-            isDemo={isDemo}
           />
         </div>
       </section>
@@ -244,14 +226,12 @@ export default async function AdminListingDetailPage({
                       listingId={listing.id}
                       sizeId={s.id}
                       size={s.size}
-                      isDemo={isDemo}
                     />
                   ) : (
                     <AdminReactivateSizeButton
                       listingId={listing.id}
                       sizeId={s.id}
                       size={s.size}
-                      isDemo={isDemo}
                     />
                   ))}
               </span>
@@ -271,22 +251,18 @@ export default async function AdminListingDetailPage({
                   ? listing.previous_status
                   : removedRestoreTarget(listing.previous_status)
               }
-              isDemo={isDemo}
             />
           ) : (
             <>
-              <AdminSuspendListingButton listingId={listing.id} isDemo={isDemo} />
-              <AdminRemoveListingButton listingId={listing.id} isDemo={isDemo} />
+              <AdminSuspendListingButton listingId={listing.id} />
+              <AdminRemoveListingButton listingId={listing.id} />
             </>
           )}
           {listing.status === "active" && (
-            <AdminMarkListingSoldButton listingId={listing.id} isDemo={isDemo} />
+            <AdminMarkListingSoldButton listingId={listing.id} />
           )}
           {listing.status === "sold" && (
-            <AdminReactivateListingButton
-              listingId={listing.id}
-              isDemo={isDemo}
-            />
+            <AdminReactivateListingButton listingId={listing.id} />
           )}
         </div>
       </section>
@@ -337,10 +313,8 @@ export default async function AdminListingDetailPage({
           emptyLabel="No audit events for this listing yet."
         >
           {timeline.map((entry) => (
-            <li key={entry.id} className="flex gap-2 px-4 py-3 text-sm">
-              <AuditActorGlyph role={entry.actor_role} className="mt-0.5" />
-              <div className="min-w-0">
-                <AuditActionPill action={entry.action} />
+            <li key={entry.id} className="px-4 py-3 text-sm">
+              <AuditEntrySummary entry={entry}>
                 <p className="mt-1 text-xs text-(--muted-ink)">
                   by {auditActorName(entry.actor_email, entry.actor_role)}
                 </p>
@@ -355,7 +329,7 @@ export default async function AdminListingDetailPage({
                 >
                   {formatAdminDateTime(entry.created_at)}
                 </time>
-              </div>
+              </AuditEntrySummary>
             </li>
           ))}
         </AdminListPanel>

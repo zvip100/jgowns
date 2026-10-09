@@ -1217,6 +1217,9 @@ declare
   v_after jsonb;
   v_variants jsonb;
   v_action text;
+  v_override text;
+  v_latest_id uuid;
+  v_latest_action text;
 begin
   if tg_op = 'INSERT' then
     perform audit.write_audit_row(
@@ -1273,7 +1276,10 @@ begin
       -- event. A paid activation is already told by payment.succeeded, so a row
       -- here would double every sale. A free publication (fee 0 or payments
       -- suspended) writes no payment row at all, so suppressing it here would
-      -- lose the moment that listing went live.
+      -- lose the moment that listing went live. When nothing has been logged
+      -- since the listing.create row (the immediate free publish), the publish
+      -- folds into that row below instead; a later free publish, after a
+      -- checkout start or an edit, still writes listing.publish_free.
       when old.status = 'pending_payment' and new.status = 'active' then (
         case when exists (
           select 1 from public.listing_payments p
@@ -1292,12 +1298,27 @@ begin
   -- this override, same mechanism and same one-shot rules as app.audit_reason
   -- and app.audit_variants. Read before the null check, so an override still
   -- emits a row in a transition this trigger would otherwise suppress.
-  v_action := coalesce(
-    nullif(current_setting('app.audit_action', true), ''), v_action
-  );
+  v_override := nullif(current_setting('app.audit_action', true), '');
+  v_action := coalesce(v_override, v_action);
 
   if v_action is null then
     return null;
+  end if;
+
+  -- Free publish right after create: one "Listing created" row whose snapshot
+  -- shows Active, rather than a second row for the same moment. An override
+  -- always writes its own row.
+  if v_action = 'listing.publish_free' and v_override is null then
+    select a.id, a.action into v_latest_id, v_latest_action
+      from public.admin_audit_log a
+     where a.entity_id = new.id and a.entity_type in ('listing', 'payment')
+     order by a.created_at desc, a.sequence desc
+     limit 1;
+
+    if v_latest_action = 'listing.create' then
+      update public.admin_audit_log set after = v_after where id = v_latest_id;
+      return null;
+    end if;
   end if;
 
   perform audit.write_audit_row(
