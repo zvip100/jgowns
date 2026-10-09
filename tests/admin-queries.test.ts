@@ -101,6 +101,11 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/supabase/service", () => ({
   createServiceClient: vi.fn(() => serviceClient),
 }));
+vi.mock("next/server", () => ({
+  connection: vi.fn().mockResolvedValue(undefined),
+}));
+
+import { connection } from "next/server";
 
 import { requireAdmin } from "@/lib/admin/guard";
 import {
@@ -1054,6 +1059,11 @@ describe("getAdminOverview", () => {
   it("stamps one asOf the whole page shares", async () => {
     const overview = await getAdminOverview();
     expect(Number.isNaN(Date.parse(overview.asOf))).toBe(false);
+  });
+
+  it("waits for a request before reading the clock, so the build never prerenders it", async () => {
+    await getAdminOverview();
+    expect(connection).toHaveBeenCalled();
   });
 
   it("throws when the stats RPC fails", async () => {

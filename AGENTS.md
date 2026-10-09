@@ -220,5 +220,6 @@ Categories route to sections: `decision` to `## Decisions`, `completed` to `## C
 - [ ] Repeated class strings extracted, shared constants in `src/lib/styles.ts`? (§9)
 - [ ] `loading.tsx` / `error.tsx` / `<Suspense>` where needed? (§9)
 - [ ] Verified with a real render? (§9)
+- [ ] `npm run build` (`next build`) passes before reporting done or opening a PR, for any change to pages, layouts, data loading, or dynamic reads? Tests, `tsc`, and the dev server do not catch prerender errors. (§9)
 - [ ] No em dashes in user-facing copy? (Agent Behavior)
 - [ ] No `git commit` or `git push` run? (Agent Behavior)
