@@ -14,8 +14,6 @@ import { getAdminListings } from "@/lib/queries/admin/listings";
 import { AdminListPage } from "../../AdminListPage";
 import { AdminThumbnail } from "../../AdminThumbnail";
 import { adminCategoryLabel } from "../../admin-audit-labels";
-import { isAdminDemoMode } from "@/lib/admin/demo";
-import { demoListings } from "../../admin-fixtures";
 import { toListingWithSizes } from "@/lib/admin/types";
 import { formatAdminDate } from "../../admin-url";
 import { StatusPill } from "../../StatusPill";
@@ -56,8 +54,6 @@ async function loadListings(
   searchParams: Promise<PageSearchParams>,
 ): Promise<AdminListResult<AdminListing>> {
   const params = parseAdminListParams(await searchParams);
-
-  if (await isAdminDemoMode()) return demoListings(params);
 
   return getAdminListings(params, new Date().toISOString());
 }

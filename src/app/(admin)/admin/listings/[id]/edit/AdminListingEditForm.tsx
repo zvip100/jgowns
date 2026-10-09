@@ -30,7 +30,6 @@ import { TextInputField } from "@/components/form/TextInputField";
 import { TextareaField } from "@/components/form/TextareaField";
 import { SizeRowsList } from "@/components/SizeRowsList";
 import { Button } from "@/components/ui/button";
-import { ADMIN_DEMO_MODE_MESSAGE } from "@/lib/admin/constants";
 import { PRIMARY_CTA_CLASS } from "@/lib/styles";
 import { toast } from "@/lib/toast";
 import { digitsOnlyPhone } from "@/lib/utils";
@@ -67,8 +66,6 @@ export type AdminListingEditFields = Pick<
 
 type AdminListingEditFormProps = {
   listing: AdminListingEditFields;
-  /** Demo mode renders a fixture id, so the form must not offer to save it. */
-  isDemo?: boolean;
 };
 
 const LOCATION_OPTIONS = toSelectOptions(LOCATIONS);
@@ -125,7 +122,6 @@ function buildSizeRows(
  */
 export function AdminListingEditForm({
   listing,
-  isDemo = false,
 }: AdminListingEditFormProps) {
   const [title, setTitle] = useState(listing.title);
   const [description, setDescription] = useState(listing.description ?? "");
@@ -366,8 +362,7 @@ export function AdminListingEditForm({
 
       <Button
         type="submit"
-        disabled={isDemo || isPending}
-        title={isDemo ? ADMIN_DEMO_MODE_MESSAGE : undefined}
+        disabled={isPending}
         className={`${PRIMARY_CTA_CLASS} sm:w-auto sm:self-start`}
       >
         {isPending ? "Saving..." : "Save changes"}

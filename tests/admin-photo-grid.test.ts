@@ -82,7 +82,6 @@ function render(overrides: Record<string, unknown> = {}): () => void {
     title: "Ivory A-line",
     imageUrls: URLS,
     blurDataUrls: BLURS,
-    isDemo: false,
     ...overrides,
   } as Parameters<typeof AdminPhotoGrid>[0];
 
@@ -201,19 +200,6 @@ describe("AdminPhotoGrid: the per-photo controls", () => {
     expect(
       of("AdminPhotoMoveButton").map((node) => node.props.position),
     ).toEqual([1, 1, 2, 2, 3, 3]);
-  });
-
-  it("threads demo mode to every control, so a fixture id is never writable", () => {
-    render({ isDemo: true });
-    const controls = [
-      ...of("AdminPhotoMoveButton"),
-      ...of("AdminReprocessImageButton"),
-      ...of("AdminReplaceImageButton"),
-      ...of("AdminRemoveImageButton"),
-      ...of("AdminAddImageButton"),
-    ];
-    expect(controls.length).toBeGreaterThan(0);
-    expect(controls.every((node) => node.props.isDemo === true)).toBe(true);
   });
 });
 

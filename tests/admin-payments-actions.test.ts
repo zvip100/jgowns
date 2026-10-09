@@ -25,7 +25,6 @@ vi.mock("next/cache", () => ({
 vi.mock("@/lib/admin/guard", () => ({
   getAdminActionClient: mockGetAdminActionClient,
   ADMIN_NOT_AUTHORIZED_ERROR: "Not authorized",
-  ADMIN_DEMO_MODE_ERROR: "Turn off demo mode to make changes.",
   ADMIN_UNEXPECTED_ERROR: "Something went wrong. Please try again.",
   // The wrapper's own behaviour is covered against the real one in
   // tests/admin-guard.test.ts; here it only has to route through the mocked
@@ -114,18 +113,6 @@ describe("adminRescuePayment: guard", () => {
       error: "Not authorized",
     });
     expect(mockFrom).not.toHaveBeenCalled();
-    expect(mockConfirmListingPayment).not.toHaveBeenCalled();
-  });
-
-  it("refuses a demo-mode request, so a fixture id never reaches Stripe", async () => {
-    mockGetAdminActionClient.mockResolvedValue({
-      ok: false,
-      error: "Turn off demo mode to make changes.",
-    });
-
-    await expect(adminRescuePayment(PAYMENT_ID)).resolves.toEqual({
-      error: "Turn off demo mode to make changes.",
-    });
     expect(mockConfirmListingPayment).not.toHaveBeenCalled();
   });
 

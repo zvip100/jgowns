@@ -32,7 +32,6 @@ vi.mock("next/cache", () => ({ updateTag: mockUpdateTag }));
 vi.mock("@/lib/admin/guard", () => ({
   getAdminActionClient: mockGetAdminActionClient,
   ADMIN_NOT_AUTHORIZED_ERROR: "Not authorized",
-  ADMIN_DEMO_MODE_ERROR: "Turn off demo mode to make changes.",
   ADMIN_UNEXPECTED_ERROR: "Something went wrong. Please try again.",
   // The wrapper's own behaviour is covered against the real one in
   // tests/admin-guard.test.ts; here it only has to route through the mocked
@@ -246,22 +245,6 @@ describe("admin listing actions: guard", () => {
       expect(mockFrom, name).not.toHaveBeenCalled();
       expect(mockUpdateTag, name).not.toHaveBeenCalled();
       expect(mockDeleteListingImages, name).not.toHaveBeenCalled();
-    }
-  });
-
-  it("refuses a demo-mode request before any write, for every action", async () => {
-    for (const [name, run] of ALL_ACTIONS) {
-      vi.clearAllMocks();
-      mockGetAdminActionClient.mockResolvedValue({
-        ok: false,
-        error: "Turn off demo mode to make changes.",
-      });
-
-      await expect(run(), name).resolves.toEqual({
-        error: "Turn off demo mode to make changes.",
-      });
-      expect(mockRpc, name).not.toHaveBeenCalled();
-      expect(mockUpdateTag, name).not.toHaveBeenCalled();
     }
   });
 

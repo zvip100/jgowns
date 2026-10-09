@@ -23,7 +23,6 @@ import { SelectField } from "@/components/form/SelectField";
 import { PhotoStudioDialog } from "@/components/photo-studio/PhotoStudioDialog";
 import { TextareaField } from "@/components/form/TextareaField";
 import { Checkbox } from "@/components/ui/checkbox";
-import { ADMIN_DEMO_MODE_MESSAGE } from "@/lib/admin/constants";
 import {
   adminAddListingImage,
   adminMarkListingSold,
@@ -67,18 +66,7 @@ import type { PhotoStudioItem } from "@/lib/types";
  * Every write on the admin surface, as confirm-gated leaves. Each imports its
  * server action directly rather than receiving it as a prop, matching the
  * seller-side buttons, so nothing crosses the Server to Client boundary.
- *
- * Demo mode renders FIXTURE ids into these forms, so every trigger goes
- * visibly inert while the cookie is set. The matching refusal inside each
- * action stays as defence in depth, never as the thing that stops it.
  */
-
-/** Threaded from the page, which is where the demo cookie is read. */
-type AdminWriteControlProps = { isDemo?: boolean };
-
-function demoProps(isDemo: boolean | undefined) {
-  return { disabled: isDemo, disabledTitle: ADMIN_DEMO_MODE_MESSAGE };
-}
 
 const TRIGGER_CLASS = {
   default:
@@ -112,13 +100,12 @@ function suspendFieldErrors(
   return errors;
 }
 
-type AdminSuspendListingButtonProps = AdminWriteControlProps & {
+type AdminSuspendListingButtonProps = {
   listingId: string;
 };
 
 export function AdminSuspendListingButton({
   listingId,
-  isDemo,
 }: AdminSuspendListingButtonProps) {
   const [fieldErrors, setFieldErrors] = useState<SuspendFieldErrors>({});
 
@@ -134,7 +121,6 @@ export function AdminSuspendListingButton({
       confirmVariant="destructive"
       successMessage="Listing suspended"
       triggerClassName={TRIGGER_CLASS.default}
-      {...demoProps(isDemo)}
       initialValue={EMPTY_SUSPEND_VALUE}
       renderBody={({ value, setValue, isPending }) => (
         <div className="flex flex-col gap-3">
@@ -186,7 +172,7 @@ export function AdminSuspendListingButton({
   );
 }
 
-type AdminRestoreListingButtonProps = AdminWriteControlProps & {
+type AdminRestoreListingButtonProps = {
   listingId: string;
   previousStatus: AdminListingStatus | null;
 };
@@ -194,7 +180,6 @@ type AdminRestoreListingButtonProps = AdminWriteControlProps & {
 export function AdminRestoreListingButton({
   listingId,
   previousStatus,
-  isDemo,
 }: AdminRestoreListingButtonProps) {
   return (
     <ConfirmActionButton
@@ -209,13 +194,12 @@ export function AdminRestoreListingButton({
       icon={RotateCcw}
       successMessage="Listing restored"
       triggerClassName={TRIGGER_CLASS.default}
-      {...demoProps(isDemo)}
       onConfirm={() => adminRestoreListing(listingId)}
     />
   );
 }
 
-type AdminListingIdProps = AdminWriteControlProps & { listingId: string };
+type AdminListingIdProps = { listingId: string };
 
 /**
  * A soft removal at the seller's own explicit request, not moderation. Kept
@@ -225,7 +209,6 @@ type AdminListingIdProps = AdminWriteControlProps & { listingId: string };
  */
 export function AdminRemoveListingButton({
   listingId,
-  isDemo,
 }: AdminListingIdProps) {
   return (
     <ConfirmActionButton
@@ -239,7 +222,6 @@ export function AdminRemoveListingButton({
       confirmVariant="destructive"
       successMessage="Listing removed"
       triggerClassName={TRIGGER_CLASS.default}
-      {...demoProps(isDemo)}
       onConfirm={() => adminRemoveListing(listingId)}
     />
   );
@@ -247,7 +229,6 @@ export function AdminRemoveListingButton({
 
 export function AdminMarkListingSoldButton({
   listingId,
-  isDemo,
 }: AdminListingIdProps) {
   return (
     <ConfirmActionButton
@@ -260,7 +241,6 @@ export function AdminMarkListingSoldButton({
       icon={ShoppingBag}
       successMessage="Listing marked sold"
       triggerClassName={TRIGGER_CLASS.default}
-      {...demoProps(isDemo)}
       onConfirm={() => adminMarkListingSold(listingId)}
     />
   );
@@ -268,7 +248,6 @@ export function AdminMarkListingSoldButton({
 
 export function AdminReactivateListingButton({
   listingId,
-  isDemo,
 }: AdminListingIdProps) {
   return (
     <ConfirmActionButton
@@ -281,13 +260,12 @@ export function AdminReactivateListingButton({
       icon={CheckCircle2}
       successMessage="Listing reactivated"
       triggerClassName={TRIGGER_CLASS.default}
-      {...demoProps(isDemo)}
       onConfirm={() => adminReactivateListing(listingId)}
     />
   );
 }
 
-type AdminSizeButtonProps = AdminWriteControlProps & {
+type AdminSizeButtonProps = {
   listingId: string;
   sizeId: string;
   size: string;
@@ -297,7 +275,6 @@ export function AdminMarkSizeSoldButton({
   listingId,
   sizeId,
   size,
-  isDemo,
 }: AdminSizeButtonProps) {
   return (
     <ConfirmActionButton
@@ -309,7 +286,6 @@ export function AdminMarkSizeSoldButton({
       icon={ShoppingBag}
       successMessage="Size marked sold"
       triggerClassName={TRIGGER_CLASS.icon}
-      {...demoProps(isDemo)}
       triggerStyle="inline-icon"
       onConfirm={() => adminMarkSizeSold(listingId, sizeId)}
     />
@@ -320,7 +296,6 @@ export function AdminReactivateSizeButton({
   listingId,
   sizeId,
   size,
-  isDemo,
 }: AdminSizeButtonProps) {
   return (
     <ConfirmActionButton
@@ -332,14 +307,13 @@ export function AdminReactivateSizeButton({
       icon={CheckCircle2}
       successMessage="Size reactivated"
       triggerClassName={TRIGGER_CLASS.icon}
-      {...demoProps(isDemo)}
       triggerStyle="inline-icon"
       onConfirm={() => adminReactivateSize(listingId, sizeId)}
     />
   );
 }
 
-type AdminRemoveImageButtonProps = AdminWriteControlProps & {
+type AdminRemoveImageButtonProps = {
   listingId: string;
   imageUrl: string;
   position: number;
@@ -349,7 +323,6 @@ export function AdminRemoveImageButton({
   listingId,
   imageUrl,
   position,
-  isDemo,
 }: AdminRemoveImageButtonProps) {
   return (
     <ConfirmActionButton
@@ -362,7 +335,6 @@ export function AdminRemoveImageButton({
       confirmVariant="destructive"
       successMessage="Photo removed"
       triggerClassName={TRIGGER_CLASS.icon}
-      {...demoProps(isDemo)}
       triggerStyle="inline-icon"
       onConfirm={() => adminRemoveListingImage(listingId, imageUrl)}
     />
@@ -373,7 +345,6 @@ export function AdminReprocessImageButton({
   listingId,
   imageUrl,
   position,
-  isDemo,
 }: AdminRemoveImageButtonProps) {
   return (
     <ConfirmActionButton
@@ -385,7 +356,6 @@ export function AdminReprocessImageButton({
       icon={ScanFace}
       successMessage="Photo reprocessed"
       triggerClassName={TRIGGER_CLASS.icon}
-      {...demoProps(isDemo)}
       triggerStyle="inline-icon"
       onConfirm={() => adminReprocessListingImage(listingId, imageUrl)}
     />
@@ -486,7 +456,6 @@ export function AdminReplaceImageButton({
   listingId,
   imageUrl,
   position,
-  isDemo,
 }: AdminRemoveImageButtonProps) {
   const flow = useStudioPhotoFlow("replace-photo", "New photo");
 
@@ -503,7 +472,6 @@ export function AdminReplaceImageButton({
         // though the replacement has to land first.
         confirmVariant="destructive"
         triggerClassName={TRIGGER_CLASS.icon}
-        {...demoProps(isDemo)}
         triggerStyle="inline-icon"
         open={flow.open}
         onOpenChange={flow.onOpenChange}
@@ -520,7 +488,7 @@ export function AdminReplaceImageButton({
   );
 }
 
-export function AdminAddImageButton({ listingId, isDemo }: AdminListingIdProps) {
+export function AdminAddImageButton({ listingId }: AdminListingIdProps) {
   const flow = useStudioPhotoFlow("add-photo", "Photo");
 
   return (
@@ -537,7 +505,6 @@ export function AdminAddImageButton({ listingId, isDemo }: AdminListingIdProps) 
         isLabelAlwaysShown
         icon={ImagePlus}
         triggerClassName={TRIGGER_CLASS.default}
-        {...demoProps(isDemo)}
         open={flow.open}
         onOpenChange={flow.onOpenChange}
         renderBody={flow.renderBody}
@@ -549,7 +516,7 @@ export function AdminAddImageButton({ listingId, isDemo }: AdminListingIdProps) 
   );
 }
 
-type AdminPhotoMoveButtonProps = AdminWriteControlProps & {
+type AdminPhotoMoveButtonProps = {
   listingId: string;
   imageUrl: string;
   /** 1-based, matching the RPC's own array indexing. */
@@ -604,20 +571,19 @@ function ImmediatePhotoMoveButton({
   position,
   offset,
   atEnd,
-  isDemo,
 }: AdminPhotoMoveButtonProps) {
   const [isPending, startTransition] = useTransition();
 
   const label = movePhotoLabel(position, offset);
   const Icon = movePhotoIcon(offset);
-  const isInert = Boolean(isDemo) || Boolean(atEnd);
+  const isInert = Boolean(atEnd);
 
   return (
     <button
       type="button"
       disabled={isInert || isPending}
       aria-label={label}
-      title={isDemo ? ADMIN_DEMO_MODE_MESSAGE : label}
+      title={label}
       // shadcn's Button dims itself when disabled; this raw trigger has to.
       className={cn(TRIGGER_CLASS.icon, isInert && "opacity-50")}
       onClick={() =>
@@ -651,7 +617,6 @@ function ConfirmedPhotoMoveButton({
   position,
   offset,
   atEnd,
-  isDemo,
 }: AdminPhotoMoveButtonProps) {
   // Moving left INTO position 1 promotes; moving right OUT of it demotes.
   const isPromotion = offset === -1;
@@ -670,9 +635,7 @@ function ConfirmedPhotoMoveButton({
       icon={movePhotoIcon(offset)}
       triggerClassName={TRIGGER_CLASS.icon}
       triggerStyle="inline-icon"
-      disabled={Boolean(isDemo) || Boolean(atEnd)}
-      // Only demo mode has something to explain; at an end the label is enough.
-      disabledTitle={isDemo ? ADMIN_DEMO_MODE_MESSAGE : undefined}
+      disabled={Boolean(atEnd)}
       onConfirm={() =>
         adminMoveListingImage(listingId, position, imageUrl, offset)
       }
@@ -680,9 +643,9 @@ function ConfirmedPhotoMoveButton({
   );
 }
 
-type AdminUserIdProps = AdminWriteControlProps & { userId: string };
+type AdminUserIdProps = { userId: string };
 
-export function AdminBanUserButton({ userId, isDemo }: AdminUserIdProps) {
+export function AdminBanUserButton({ userId }: AdminUserIdProps) {
   return (
     <ConfirmActionButton<boolean>
       title="Ban user?"
@@ -695,7 +658,6 @@ export function AdminBanUserButton({ userId, isDemo }: AdminUserIdProps) {
       confirmVariant="destructive"
       successMessage="User banned"
       triggerClassName={TRIGGER_CLASS.default}
-      {...demoProps(isDemo)}
       initialValue
       renderBody={({ value, setValue, isPending }) => (
         <label className="flex cursor-pointer items-center gap-2.5 text-sm text-(--ink)">
@@ -712,7 +674,7 @@ export function AdminBanUserButton({ userId, isDemo }: AdminUserIdProps) {
   );
 }
 
-export function AdminUnbanUserButton({ userId, isDemo }: AdminUserIdProps) {
+export function AdminUnbanUserButton({ userId }: AdminUserIdProps) {
   return (
     <ConfirmActionButton
       title="Unban user?"
@@ -724,13 +686,12 @@ export function AdminUnbanUserButton({ userId, isDemo }: AdminUserIdProps) {
       icon={UserCheck}
       successMessage="User unbanned"
       triggerClassName={TRIGGER_CLASS.default}
-      {...demoProps(isDemo)}
       onConfirm={() => adminUnbanUser(userId)}
     />
   );
 }
 
-export function AdminDeleteUserButton({ userId, isDemo }: AdminUserIdProps) {
+export function AdminDeleteUserButton({ userId }: AdminUserIdProps) {
   return (
     <ConfirmActionButton
       title="Delete account?"
@@ -743,19 +704,17 @@ export function AdminDeleteUserButton({ userId, isDemo }: AdminUserIdProps) {
       confirmVariant="destructive"
       successMessage="Account deleted"
       triggerClassName={TRIGGER_CLASS.default}
-      {...demoProps(isDemo)}
       onConfirm={() => adminDeleteUser(userId)}
     />
   );
 }
 
-type AdminRescuePaymentButtonProps = AdminWriteControlProps & {
+type AdminRescuePaymentButtonProps = {
   paymentId: string;
 };
 
 export function AdminRescuePaymentButton({
   paymentId,
-  isDemo,
 }: AdminRescuePaymentButtonProps) {
   return (
     <ConfirmActionButton
@@ -768,7 +727,6 @@ export function AdminRescuePaymentButton({
       icon={LifeBuoy}
       successMessage="Listing activated"
       triggerClassName={TRIGGER_CLASS.compact}
-      {...demoProps(isDemo)}
       onConfirm={() => adminRescuePayment(paymentId)}
     />
   );
