@@ -1062,8 +1062,15 @@ describe("getAdminOverview", () => {
   });
 
   it("waits for a request before reading the clock, so the build never prerenders it", async () => {
-    await getAdminOverview();
-    expect(connection).toHaveBeenCalled();
+    const toIsoString = vi.spyOn(Date.prototype, "toISOString");
+    try {
+      await getAdminOverview();
+      expect(vi.mocked(connection).mock.invocationCallOrder[0]).toBeLessThan(
+        toIsoString.mock.invocationCallOrder[0],
+      );
+    } finally {
+      toIsoString.mockRestore();
+    }
   });
 
   it("throws when the stats RPC fails", async () => {
