@@ -7,7 +7,7 @@ import { TextareaField } from "@/components/form/TextareaField";
 import { Button } from "@/components/ui/button";
 import { FieldGroup } from "@/components/ui/field";
 import { submitContactMessage } from "@/lib/actions/contact";
-import { captureEvent } from "@/lib/analytics/client";
+import { captureClientException, captureEvent } from "@/lib/analytics/client";
 import { SITE_EVENTS } from "@/lib/analytics/events";
 import {
   contactSchema,
@@ -64,7 +64,10 @@ export default function ContactForm() {
       } else {
         toast.error("Failed to send message", { description: result.error });
       }
-    } catch {
+    } catch (error) {
+      captureClientException(error, "contact.contactForm.submit", undefined, {
+        log: false,
+      });
       captureEvent(SITE_EVENTS.contactFormSubmitted, {
         succeeded: false,
         error_kind: "network",

@@ -1,9 +1,8 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { unstable_rethrow } from 'next/navigation';
 import { optimizeListingPhoto } from '@/lib/actions/images';
-import { captureEvent } from '@/lib/analytics/client';
+import { captureClientException, captureEvent } from '@/lib/analytics/client';
 import { SELLER_EVENTS } from '@/lib/analytics/events';
 import {
   exportEditedImage,
@@ -164,7 +163,9 @@ export function useListingImageSlots({
     try {
       result = await optimizeListingPhoto(optimizeForm);
     } catch (e) {
-      unstable_rethrow(e);
+      captureClientException(e, 'sell.listingImages.optimize', undefined, {
+        log: false,
+      });
       result = {
         error:
           e instanceof Error && e.message ? e.message : 'The upload failed.',

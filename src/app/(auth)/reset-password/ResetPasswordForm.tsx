@@ -1,9 +1,9 @@
 'use client';
 
 import { useState, useLayoutEffect } from 'react';
-import { unstable_rethrow } from 'next/navigation';
 
 import { updatePassword } from '@/lib/actions/auth';
+import { captureClientException } from '@/lib/analytics/client';
 import { FieldError, FieldGroup } from '@/components/ui/field';
 
 import { AuthAltLink, AuthPasswordField, AuthSubmitButton } from '../auth-form';
@@ -26,7 +26,7 @@ export default function ResetPasswordForm({ next }: ResetPasswordFormProps) {
       const result = await updatePassword({ password, next });
       if (result?.error) setError(result.error);
     } catch (err) {
-      unstable_rethrow(err);
+      captureClientException(err, 'auth.resetPasswordForm.submit', undefined, { log: false });
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);

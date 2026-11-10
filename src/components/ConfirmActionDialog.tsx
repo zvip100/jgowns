@@ -14,6 +14,7 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { captureClientException } from '@/lib/analytics/client';
 import { toast } from '@/lib/toast';
 import { PRIMARY_CTA_CLASS } from '@/lib/styles';
 
@@ -134,7 +135,7 @@ export default function ConfirmActionDialog<TValue = void>({
       const outcome = result?.notice ?? successMessage;
       if (outcome) toast.success(outcome);
     } catch (actionError: unknown) {
-      console.error('Confirmed action failed:', actionError);
+      captureClientException(actionError, 'confirmActionDialog.confirm', { title });
       setError('Something went wrong. Please try again.');
     } finally {
       setIsPending(false);

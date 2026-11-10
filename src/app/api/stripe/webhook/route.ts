@@ -7,6 +7,44 @@ import { createServiceClient } from "@/lib/supabase/service";
 
 import type Stripe from "stripe";
 
+const SIGNATURE_FAILURE_WINDOW_MS = 24 * 60 * 60 * 1000;
+const SIGNATURE_FAILURE_THRESHOLD = 3;
+
+let signatureFailureWindowStart = 0;
+let signatureFailureCount = 0;
+let hasReportedSignatureFailures = false;
+
+/**
+ * A lone failure is usually a forged or stray request, so it is only logged. A
+ * wrong signing secret fails every event while Stripe keeps retrying, so the
+ * threshold within one window is the config signal, reported at most once per
+ * window per server instance.
+ */
+async function recordSignatureFailure(error: unknown): Promise<void> {
+  const now = Date.now();
+  if (now - signatureFailureWindowStart >= SIGNATURE_FAILURE_WINDOW_MS) {
+    signatureFailureWindowStart = now;
+    signatureFailureCount = 0;
+    hasReportedSignatureFailures = false;
+  }
+  signatureFailureCount += 1;
+
+  if (hasReportedSignatureFailures || signatureFailureCount < SIGNATURE_FAILURE_THRESHOLD) {
+    console.error("[stripe.webhook.signature]", error);
+    return;
+  }
+
+  hasReportedSignatureFailures = true;
+  await captureServerError(
+    {
+      scope: "stripe.webhook.signature",
+      kind: "config",
+      properties: { failures_in_window: signatureFailureCount },
+    },
+    error,
+  );
+}
+
 /**
  * Flips a payment row to 'expired' on a failed/expired Checkout session. A DB
  * error returns 500 so Stripe retries the event (the status='pending' predicate
@@ -71,7 +109,9 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
       process.env.STRIPE_WEBHOOK_SECRET!,
     );
   } catch (e) {
-    console.error("Stripe webhook signature verification failed:", e);
+    // A wrong signing secret is otherwise invisible: the Checkout-success route
+    // keeps confirming payments.
+    await recordSignatureFailure(e);
     return NextResponse.json({ error: "Invalid signature." }, { status: 400 });
   }
 

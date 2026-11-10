@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect } from 'react'
-
 import ErrorStateCard from '@/components/ErrorStateCard'
+import { useReportBoundaryError } from '@/hooks/useReportBoundaryError'
 
 type MainErrorProps = {
   error: Error & { digest?: string }
@@ -13,9 +12,7 @@ export default function MainError({
   error,
   unstable_retry,
 }: MainErrorProps) {
-  useEffect(() => {
-    console.error(error)
-  }, [error])
+  useReportBoundaryError(error, 'errorBoundary.main')
 
   return (
     <div className='flex min-h-[60vh] items-center justify-center px-4 py-10' role='alert'>

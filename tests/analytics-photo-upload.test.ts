@@ -2,7 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { EditableImage, ImageSlotState, PhotoEdits, PhotoStudioItem } from "@/lib/types";
 
-const { hookState, mockCaptureEvent, mockOptimizeListingPhoto, mockExport } = vi.hoisted(
+const {
+  hookState,
+  mockCaptureClientException,
+  mockCaptureEvent,
+  mockOptimizeListingPhoto,
+  mockExport,
+} = vi.hoisted(
   () => ({
     hookState: {
       refCallCount: 0,
@@ -10,6 +16,7 @@ const { hookState, mockCaptureEvent, mockOptimizeListingPhoto, mockExport } = vi
       slots: [] as ImageSlotState[],
       isRerender: false,
     },
+    mockCaptureClientException: vi.fn(),
     mockCaptureEvent: vi.fn(),
     mockOptimizeListingPhoto: vi.fn(),
     mockExport: vi.fn(),
@@ -59,7 +66,10 @@ vi.mock("react", async () => {
 vi.mock("@/lib/actions/images", () => ({
   optimizeListingPhoto: mockOptimizeListingPhoto,
 }));
-vi.mock("@/lib/analytics/client", () => ({ captureEvent: mockCaptureEvent }));
+vi.mock("@/lib/analytics/client", () => ({
+  captureClientException: mockCaptureClientException,
+  captureEvent: mockCaptureEvent,
+}));
 vi.mock("@/lib/image-upload", () => ({
   generateBlurDataUrl: vi.fn().mockResolvedValue(null),
   dataUrlToFile: vi.fn(),
@@ -121,6 +131,7 @@ function eventNames(): string[] {
 
 beforeEach(() => {
   mockCaptureEvent.mockReset();
+  mockCaptureClientException.mockReset();
   mockOptimizeListingPhoto.mockReset();
   mockExport.mockReset();
   mockExport.mockResolvedValue(exported(2048));
@@ -202,6 +213,7 @@ describe("photo upload events", () => {
     await settle();
 
     expect(mockCaptureEvent.mock.calls[1][1].reason).toHaveLength(120);
+    expect(mockCaptureClientException).not.toHaveBeenCalled();
   });
 
   it("fails a photo whose export failed without uploading it", async () => {
@@ -298,13 +310,20 @@ describe("photo upload events", () => {
   // The action always returns, so this is the request itself failing. Without
   // a terminal event the attempt vanishes and the slot spins forever.
   it("terminates an attempt whose request never completed", async () => {
-    mockOptimizeListingPhoto.mockRejectedValue(new TypeError("Failed to fetch"));
+    const failure = new TypeError("Failed to fetch");
+    mockOptimizeListingPhoto.mockRejectedValue(failure);
 
     mountHook().applyStudio([newItem("a")]);
     await settle();
 
     expect(eventNames()).toEqual(["photo_upload_started", "photo_upload_failed"]);
     expect(mockCaptureEvent.mock.calls[1][1].reason).toBe("Failed to fetch");
+    expect(mockCaptureClientException).toHaveBeenCalledWith(
+      failure,
+      "sell.listingImages.optimize",
+      undefined,
+      { log: false },
+    );
 
     const slot = hookState.slots[0];
     expect(slot.optimizing).toBe(false);

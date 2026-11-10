@@ -1,11 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { unstable_rethrow } from "next/navigation";
 import { ImageOff } from "lucide-react";
 
 import { useSizeRows } from "@/hooks/useSizeRows";
 import { adminUpdateListing } from "@/lib/actions/admin/listings";
+import { captureClientException } from "@/lib/analytics/client";
 import { isValidSizePair } from "@/lib/gown-sizes";
 import {
   EMPTY_LISTING_ERRORS,
@@ -225,8 +225,7 @@ export function AdminListingEditForm({
       }
       toast.success("Listing updated");
     } catch (e: unknown) {
-      unstable_rethrow(e);
-      console.error("Admin listing edit failed:", e);
+      captureClientException(e, "admin.listingEditForm.submit");
       toast.error("Something went wrong. Please try again.");
     } finally {
       setIsPending(false);

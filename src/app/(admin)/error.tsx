@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-
 import ErrorStateCard from "@/components/ErrorStateCard";
+import { useReportBoundaryError } from "@/hooks/useReportBoundaryError";
 
 type AdminErrorProps = {
   error: Error & { digest?: string };
@@ -10,9 +9,7 @@ type AdminErrorProps = {
 };
 
 export default function AdminError({ error, unstable_retry }: AdminErrorProps) {
-  useEffect(() => {
-    console.error(error);
-  }, [error]);
+  useReportBoundaryError(error, "errorBoundary.admin");
 
   return (
     <div

@@ -5,6 +5,7 @@ import type { CaptureResult } from "posthog-js";
 const posthogMock = {
   __loaded: false,
   capture: vi.fn(),
+  captureException: vi.fn(),
   init: vi.fn(),
   startSessionRecording: vi.fn(),
   stopSessionRecording: vi.fn(),
@@ -32,9 +33,20 @@ function captureResult(event: string, currentUrl?: string): CaptureResult {
   };
 }
 
+/** The `$exception_list` shape posthog-js builds: thrown error first, causes after. */
+function exceptionResult(
+  messages: string[],
+  currentUrl = "http://localhost:3000/login",
+): CaptureResult {
+  const cr = captureResult("$exception", currentUrl);
+  cr.properties.$exception_list = messages.map((value) => ({ type: "Error", value }));
+  return cr;
+}
+
 beforeEach(() => {
   posthogMock.__loaded = false;
   posthogMock.capture.mockClear();
+  posthogMock.captureException.mockClear();
   posthogMock.init.mockClear();
   posthogMock.startSessionRecording.mockClear();
   posthogMock.stopSessionRecording.mockClear();
@@ -72,37 +84,75 @@ describe("isAdminAnalyticsUrl", () => {
   });
 });
 
-describe("dropAdminAnalytics", () => {
+describe("filterOutgoingEvent", () => {
   it("drops an analytics event captured on an admin page", async () => {
-    const { dropAdminAnalytics } = await importFresh();
+    const { filterOutgoingEvent } = await importFresh();
     expect(
-      dropAdminAnalytics(
+      filterOutgoingEvent(
         captureResult("$pageview", "http://localhost:3000/admin/listings"),
       ),
     ).toBeNull();
   });
 
   it("keeps an exception captured on an admin page", async () => {
-    const { dropAdminAnalytics } = await importFresh();
+    const { filterOutgoingEvent } = await importFresh();
     const cr = captureResult("$exception", "http://localhost:3000/admin");
-    expect(dropAdminAnalytics(cr)).toBe(cr);
+    expect(filterOutgoingEvent(cr)).toBe(cr);
   });
 
   it("keeps events from every other page", async () => {
-    const { dropAdminAnalytics } = await importFresh();
+    const { filterOutgoingEvent } = await importFresh();
     const cr = captureResult("listing_viewed", "http://localhost:3000/browse/1");
-    expect(dropAdminAnalytics(cr)).toBe(cr);
+    expect(filterOutgoingEvent(cr)).toBe(cr);
   });
 
   it("keeps an event whose url cannot be judged", async () => {
-    const { dropAdminAnalytics } = await importFresh();
+    const { filterOutgoingEvent } = await importFresh();
     const cr = captureResult("$autocapture");
-    expect(dropAdminAnalytics(cr)).toBe(cr);
+    expect(filterOutgoingEvent(cr)).toBe(cr);
   });
 
   it("passes a null capture result straight through", async () => {
-    const { dropAdminAnalytics } = await importFresh();
-    expect(dropAdminAnalytics(null)).toBeNull();
+    const { filterOutgoingEvent } = await importFresh();
+    expect(filterOutgoingEvent(null)).toBeNull();
+  });
+
+  it("drops Next's redirect signal", async () => {
+    const { filterOutgoingEvent } = await importFresh();
+    expect(filterOutgoingEvent(exceptionResult(["NEXT_REDIRECT"]))).toBeNull();
+  });
+
+  it("keeps an ordinary exception", async () => {
+    const { filterOutgoingEvent } = await importFresh();
+    const cr = exceptionResult(["Load failed"]);
+    expect(filterOutgoingEvent(cr)).toBe(cr);
+  });
+
+  it("keeps an ordinary exception on an admin page", async () => {
+    const { filterOutgoingEvent } = await importFresh();
+    const cr = exceptionResult(["Load failed"], "http://localhost:3000/admin/listings");
+    expect(filterOutgoingEvent(cr)).toBe(cr);
+  });
+
+  it("matches the redirect message exactly, never as a substring", async () => {
+    const { filterOutgoingEvent } = await importFresh();
+    const cr = exceptionResult(["NEXT_REDIRECT failed to resolve"]);
+    expect(filterOutgoingEvent(cr)).toBe(cr);
+  });
+
+  it("judges only the thrown error, not a cause behind it", async () => {
+    const { filterOutgoingEvent } = await importFresh();
+    const cr = exceptionResult(["Wrapped failure", "NEXT_REDIRECT"]);
+    expect(filterOutgoingEvent(cr)).toBe(cr);
+  });
+
+  it("keeps an exception whose list is missing or malformed", async () => {
+    const { filterOutgoingEvent } = await importFresh();
+    const missing = captureResult("$exception");
+    const malformed = captureResult("$exception");
+    malformed.properties.$exception_list = [null];
+    expect(filterOutgoingEvent(missing)).toBe(missing);
+    expect(filterOutgoingEvent(malformed)).toBe(malformed);
   });
 });
 
@@ -114,7 +164,7 @@ describe("initAnalytics", () => {
   };
 
   it("initializes with the spec's configuration", async () => {
-    const { initAnalytics, dropAdminAnalytics } = await importFresh(CONFIGURED);
+    const { initAnalytics, filterOutgoingEvent } = await importFresh(CONFIGURED);
     initAnalytics();
 
     expect(posthogMock.init).toHaveBeenCalledTimes(1);
@@ -129,7 +179,7 @@ describe("initAnalytics", () => {
       capture_exceptions: true,
       capture_performance: true,
       disable_session_recording: false,
-      before_send: dropAdminAnalytics,
+      before_send: filterOutgoingEvent,
     });
   });
 
@@ -292,5 +342,134 @@ describe("captureEvent", () => {
 
     expect(() => captureEvent("contact_copied", { listing_id: "l1" })).not.toThrow();
     expect(errors).toHaveBeenCalled();
+  });
+});
+
+describe("captureClientException", () => {
+  /** A real signal from Next, thrown by the API the app itself calls. */
+  async function navigationSignal(
+    trigger: (navigation: typeof import("next/navigation")) => never,
+  ): Promise<unknown> {
+    const navigation = await import("next/navigation");
+    try {
+      return trigger(navigation);
+    } catch (signal) {
+      return signal;
+    }
+  }
+
+  beforeEach(() => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+  });
+
+  it("reports the error with its scope and properties once the SDK is loaded", async () => {
+    const { captureClientException } = await importFresh();
+    posthogMock.__loaded = true;
+    const failure = new Error("Load failed");
+
+    captureClientException(failure, "sell.listingForm.submit", { mode: "create" });
+
+    expect(posthogMock.captureException).toHaveBeenCalledTimes(1);
+    expect(posthogMock.captureException).toHaveBeenCalledWith(failure, {
+      mode: "create",
+      scope: "sell.listingForm.submit",
+    });
+  });
+
+  it("reports with only the scope when no properties are given", async () => {
+    const { captureClientException } = await importFresh();
+    posthogMock.__loaded = true;
+
+    captureClientException("kaboom", "wishlist.refreshStatus");
+
+    expect(posthogMock.captureException).toHaveBeenCalledWith("kaboom", {
+      scope: "wishlist.refreshStatus",
+    });
+  });
+
+  it("never lets a property override the scope", async () => {
+    const { captureClientException } = await importFresh();
+    posthogMock.__loaded = true;
+
+    captureClientException(new Error("x"), "auth.loginForm.submit", { scope: "other" });
+
+    expect(posthogMock.captureException.mock.calls[0][1]).toEqual({
+      scope: "auth.loginForm.submit",
+    });
+  });
+
+  it("reports without logging when logging is turned off", async () => {
+    const { captureClientException } = await importFresh();
+    posthogMock.__loaded = true;
+    const failure = new Error("x");
+
+    captureClientException(failure, "auth.loginForm.submit", undefined, { log: false });
+
+    expect(console.error).not.toHaveBeenCalled();
+    expect(posthogMock.captureException).toHaveBeenCalledWith(failure, {
+      scope: "auth.loginForm.submit",
+    });
+  });
+
+  it("still rethrows a signal when logging is turned off", async () => {
+    const { captureClientException } = await importFresh();
+    posthogMock.__loaded = true;
+    const signal = await navigationSignal((nav) => nav.redirect("/dashboard"));
+
+    expect(() =>
+      captureClientException(signal, "auth.loginForm.submit", undefined, { log: false }),
+    ).toThrow(signal as Error);
+    expect(posthogMock.captureException).not.toHaveBeenCalled();
+  });
+
+  it("logs under its scope but sends nothing while the SDK is not loaded", async () => {
+    const { captureClientException } = await importFresh();
+    const failure = new Error("x");
+
+    captureClientException(failure, "auth.loginForm.submit");
+
+    expect(console.error).toHaveBeenCalledWith("[auth.loginForm.submit]", failure);
+    expect(posthogMock.captureException).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a redirect", (nav: typeof import("next/navigation")) => nav.redirect("/dashboard")],
+    ["a notFound", (nav: typeof import("next/navigation")) => nav.notFound()],
+  ])("rethrows %s without logging or reporting it", async (_name, trigger) => {
+    const { captureClientException } = await importFresh();
+    posthogMock.__loaded = true;
+    const signal = await navigationSignal(trigger);
+
+    expect(() => captureClientException(signal, "sell.listingForm.submit")).toThrow(
+      signal as Error,
+    );
+
+    expect(console.error).not.toHaveBeenCalled();
+    expect(posthogMock.captureException).not.toHaveBeenCalled();
+  });
+
+  it("rethrows a signal wrapped as an error's cause", async () => {
+    const { captureClientException } = await importFresh();
+    posthogMock.__loaded = true;
+    const signal = await navigationSignal((nav) => nav.redirect("/dashboard"));
+    const wrapped = new Error("wrapper", { cause: signal });
+
+    expect(() => captureClientException(wrapped, "auth.loginForm.submit")).toThrow(
+      signal as Error,
+    );
+    expect(posthogMock.captureException).not.toHaveBeenCalled();
+  });
+
+  it("swallows a reporting failure instead of throwing into the caller", async () => {
+    const { captureClientException } = await importFresh();
+    posthogMock.__loaded = true;
+    posthogMock.captureException.mockImplementationOnce(() => {
+      throw new Error("transport down");
+    });
+
+    expect(() =>
+      captureClientException(new Error("x"), "contact.contactForm.submit"),
+    ).not.toThrow();
+    expect(console.error).toHaveBeenCalledTimes(2);
   });
 });

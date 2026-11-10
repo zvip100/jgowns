@@ -1,3 +1,4 @@
+import { unstable_rethrow } from "next/navigation";
 import posthog from "posthog-js";
 
 import { POSTHOG_UI_HOST } from "@/lib/site";
@@ -25,15 +26,38 @@ export function isAdminAnalyticsUrl(url: unknown): boolean {
   }
 }
 
+/** The exact message of the error Next throws for `redirect()`. */
+const NEXT_REDIRECT_MESSAGE = "NEXT_REDIRECT";
+
 /**
- * No analytics events on `/admin`, but exceptions still report (spec §2.6).
- * The path comes off the event, never `window.location`: a queued event can be
- * sent after a client-side navigation has already changed the URL, which would
- * judge it against the wrong page in both directions.
+ * Next's router has already navigated by the time a server action's redirect
+ * rejects, so that rejection is control flow, not a fault. Only the thrown error
+ * itself (the list's first entry, causes follow it) is judged.
  */
-export const dropAdminAnalytics: BeforeSendFn = (cr) => {
+function isNextRedirectException(exceptionList: unknown): boolean {
+  if (!Array.isArray(exceptionList)) return false;
+
+  const thrown: unknown = exceptionList[0];
+  return (
+    typeof thrown === "object" &&
+    thrown !== null &&
+    "value" in thrown &&
+    thrown.value === NEXT_REDIRECT_MESSAGE
+  );
+}
+
+/**
+ * Drops Next's redirect signal, and every analytics event on `/admin` while
+ * exceptions there still report (spec §2.6). The path comes off the event,
+ * never `window.location`: a queued event can be sent after a client-side
+ * navigation has already changed the URL, which would judge it against the
+ * wrong page in both directions.
+ */
+export const filterOutgoingEvent: BeforeSendFn = (cr) => {
   if (!cr) return cr;
-  if (cr.event === "$exception") return cr;
+  if (cr.event === "$exception") {
+    return isNextRedirectException(cr.properties?.$exception_list) ? null : cr;
+  }
 
   return isAdminAnalyticsUrl(cr.properties?.$current_url) ? null : cr;
 };
@@ -83,7 +107,7 @@ export function initAnalytics(): void {
       // before_send does not see replay data, so a direct load of an admin URL
       // has to start with recording off rather than be filtered afterwards.
       disable_session_recording: isAdminAnalyticsUrl(window.location.href),
-      before_send: dropAdminAnalytics,
+      before_send: filterOutgoingEvent,
     });
   } catch (error) {
     console.error("[analytics] PostHog failed to initialize:", error);
@@ -105,6 +129,30 @@ export function captureEvent(
     posthog.capture(event, properties);
   } catch (error) {
     console.error(`[analytics] failed to capture ${event}:`, error);
+  }
+}
+
+/**
+ * What a `catch` or error boundary calls with the error it absorbed, which
+ * autocapture never sees. A Next navigation signal is rethrown untouched, since
+ * it is not an error. Anything else is logged unless `log` is off, then reported
+ * once PostHog is loaded; a reporting failure never reaches the caller.
+ */
+export function captureClientException(
+  error: unknown,
+  scope: string,
+  properties?: AnalyticsProperties,
+  { log = true }: { log?: boolean } = {},
+): void {
+  unstable_rethrow(error);
+  if (log) console.error(`[${scope}]`, error);
+
+  if (!isAnalyticsEnabled()) return;
+
+  try {
+    posthog.captureException(error, { ...properties, scope });
+  } catch (captureError) {
+    console.error(`[analytics] failed to report a ${scope} exception:`, captureError);
   }
 }
 

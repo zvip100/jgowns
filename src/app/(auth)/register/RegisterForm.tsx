@@ -3,7 +3,7 @@
 import { useState, useLayoutEffect } from 'react';
 
 import { signUp } from '@/lib/actions/auth';
-import { captureEvent } from '@/lib/analytics/client';
+import { captureClientException, captureEvent } from '@/lib/analytics/client';
 import { SELLER_EVENTS } from '@/lib/analytics/events';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { FieldError, FieldGroup } from '@/components/ui/field';
@@ -48,6 +48,7 @@ export default function RegisterForm({ next }: RegisterFormProps) {
         setMsg(result.message);
       }
     } catch (err) {
+      captureClientException(err, 'auth.registerForm.submit', undefined, { log: false });
       setIsError(true);
       setMsg(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {

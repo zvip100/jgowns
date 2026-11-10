@@ -16,6 +16,7 @@ import {
   removeFromWishlist,
   type WishlistActionResult,
 } from '@/lib/actions/wishlist';
+import { captureClientException } from '@/lib/analytics/client';
 import { toast } from '@/lib/toast';
 import {
   WISHLIST_MAX_ITEMS,
@@ -181,7 +182,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
           }
         })
         .catch((err) => {
-          console.error(`[wishlist] ${label} failed`, err);
+          captureClientException(err, 'wishlist.mirrorWrite', { action: label });
           flashWriteError(optimisticToastId);
         });
     },
@@ -322,7 +323,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
         }
       })
       .catch((err) => {
-        console.error('[wishlist] Merge on sign-in failed', err);
+        captureClientException(err, 'wishlist.mergeOnSignIn');
         flashWriteError();
       });
   }, [isHydrated, serverPayload, flashWriteError, mirrorWrite]);
@@ -433,7 +434,7 @@ export function WishlistProvider({ children }: WishlistProviderProps) {
           );
         })
         .catch((error) => {
-          console.error('[wishlist] Failed to refresh status', error);
+          captureClientException(error, 'wishlist.refreshStatus');
         });
     }
   }, []);
