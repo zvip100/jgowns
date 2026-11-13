@@ -1,9 +1,9 @@
 'use client';
 
 import { useLayoutEffect, useState } from 'react';
-import { unstable_rethrow } from 'next/navigation';
 
 import { signIn } from '@/lib/actions/auth';
+import { captureClientException } from '@/lib/analytics/client';
 import { FieldError, FieldGroup } from '@/components/ui/field';
 
 import {
@@ -32,7 +32,7 @@ export default function LoginForm({ next }: LoginFormProps) {
       const result = await signIn({ email, password, next });
       if (result?.error) setError(result.error);
     } catch (err) {
-      unstable_rethrow(err);
+      captureClientException(err, 'auth.loginForm.submit', undefined, { log: false });
       setError(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);

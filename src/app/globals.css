@@ -515,6 +515,51 @@
       background-position: 100% center;
     }
   }
+
+  /* Top loading bar for client-side navigations: a gold segment loops left to
+     right while a page change is pending. The 300ms delay keeps it off screen
+     when the page arrives quickly, and pausing rather than removing the
+     animation lets the segment fade out where it stands. */
+  .navigation-progress {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 100;
+    height: 2px;
+    overflow: hidden;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 200ms ease-out;
+    view-transition-name: navigation-progress;
+  }
+
+  .navigation-progress[data-pending="true"] {
+    opacity: 1;
+    transition: none;
+  }
+
+  .navigation-progress > span {
+    display: block;
+    width: 38%;
+    height: 100%;
+    border-radius: 9999px;
+    background: var(--accent);
+    transform: translateX(-100%);
+    animation: navigationSweep 1.25s cubic-bezier(0.4, 0, 0.2, 1) 300ms infinite paused;
+  }
+
+  .navigation-progress[data-pending="true"] > span {
+    animation-play-state: running;
+  }
+
+  @keyframes navigationSweep {
+    from {
+      transform: translateX(-100%);
+    }
+
+    to {
+      transform: translateX(265%);
+    }
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -577,6 +622,10 @@
 ::view-transition-group(site-nav),
 ::view-transition-group(browse-subnav) {
   z-index: 1;
+}
+
+::view-transition-group(navigation-progress) {
+  z-index: 2;
 }
 
 ::view-transition-new(filter-rail):only-child {

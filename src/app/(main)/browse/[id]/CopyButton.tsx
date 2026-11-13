@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { Check, Copy } from 'lucide-react';
 
-import { captureEvent } from '@/lib/analytics/client';
+import { captureClientException, captureEvent } from '@/lib/analytics/client';
 import { BUYER_EVENTS } from '@/lib/analytics/events';
 import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
@@ -36,7 +36,7 @@ export function CopyButton({
       toast.success('Link copied');
       setTimeout(() => setCopied(false), 1500);
     } catch (error) {
-      console.error('Copy to clipboard failed:', error);
+      captureClientException(error, 'browse.copyButton.copy');
       toast.error("Couldn't copy link");
     }
   };

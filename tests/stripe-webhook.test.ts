@@ -2,12 +2,14 @@ import { NextRequest } from "next/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
+  mockCaptureServerError,
   mockConfirmListingPayment,
   mockConstructEvent,
   mockEq,
   mockStatusEq,
   mockUpdate,
 } = vi.hoisted(() => ({
+  mockCaptureServerError: vi.fn(),
   mockConfirmListingPayment: vi.fn(),
   mockConstructEvent: vi.fn(),
   mockEq: vi.fn(),
@@ -15,6 +17,9 @@ const {
   mockUpdate: vi.fn(),
 }));
 
+vi.mock("@/lib/analytics/server", () => ({
+  captureServerError: mockCaptureServerError,
+}));
 vi.mock("@/lib/actions/payments", () => ({
   confirmListingPayment: mockConfirmListingPayment,
 }));
@@ -27,7 +32,11 @@ vi.mock("@/lib/supabase/service", () => ({
   }),
 }));
 
-import { POST } from "@/app/api/stripe/webhook/route";
+type WebhookPost = typeof import("@/app/api/stripe/webhook/route").POST;
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+let POST: WebhookPost;
 
 function webhookRequest(body: string, signature?: string): NextRequest {
   return new NextRequest("https://jgowns.test/api/stripe/webhook", {
@@ -41,7 +50,19 @@ function stripeEvent(type: string, session: Record<string, unknown>) {
   return { type, data: { object: session } };
 }
 
-beforeEach(() => {
+function failSignatureVerification(): Error {
+  const signatureError = new Error("bad signature");
+  mockConstructEvent.mockImplementation(() => {
+    throw signatureError;
+  });
+  return signatureError;
+}
+
+beforeEach(async () => {
+  // A fresh module per test resets the signature-failure window.
+  vi.resetModules();
+  ({ POST } = await import("@/app/api/stripe/webhook/route"));
+  mockCaptureServerError.mockReset();
   mockConfirmListingPayment.mockReset();
   mockConfirmListingPayment.mockResolvedValue({ paid: true, listingId: "l1", userId: "u1" });
   mockConstructEvent.mockReset();
@@ -59,17 +80,58 @@ describe("POST /api/stripe/webhook", () => {
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "Missing Stripe signature." });
     expect(mockConstructEvent).not.toHaveBeenCalled();
+    // A bare POST is internet noise, not a misconfigured secret.
+    expect(mockCaptureServerError).not.toHaveBeenCalled();
   });
 
-  it("rejects a request whose signature fails verification", async () => {
-    mockConstructEvent.mockImplementation(() => {
-      throw new Error("bad signature");
-    });
+  it("rejects and logs, but does not report, a single failed signature", async () => {
+    const errorSpy = vi.spyOn(console, "error");
+    const signatureError = failSignatureVerification();
 
     const response = await POST(webhookRequest("{}", "sig_bad"));
 
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: "Invalid signature." });
+    expect(errorSpy).toHaveBeenCalledWith("[stripe.webhook.signature]", signatureError);
+    expect(mockCaptureServerError).not.toHaveBeenCalled();
+  });
+
+  it("reports a config error once sustained failures cross the threshold, then stays quiet for the window", async () => {
+    const signatureError = failSignatureVerification();
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const response = await POST(webhookRequest("{}", "sig_bad"));
+      expect(response.status).toBe(400);
+    }
+
+    expect(mockCaptureServerError).toHaveBeenCalledTimes(1);
+    expect(mockCaptureServerError).toHaveBeenCalledWith(
+      {
+        scope: "stripe.webhook.signature",
+        kind: "config",
+        properties: { failures_in_window: 3 },
+      },
+      signatureError,
+    );
+  });
+
+  it("does not report failures split across windows, and counts afresh in the new one", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      failSignatureVerification();
+
+      await POST(webhookRequest("{}", "sig_bad"));
+      await POST(webhookRequest("{}", "sig_bad"));
+      vi.setSystemTime(Date.now() + DAY_MS);
+      await POST(webhookRequest("{}", "sig_bad"));
+      await POST(webhookRequest("{}", "sig_bad"));
+      expect(mockCaptureServerError).not.toHaveBeenCalled();
+
+      await POST(webhookRequest("{}", "sig_bad"));
+      expect(mockCaptureServerError).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("confirms payment on checkout.session.completed when payment_status is paid", async () => {

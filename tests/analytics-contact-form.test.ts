@@ -2,12 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const {
   hookState,
+  mockCaptureClientException,
   mockCaptureEvent,
   mockSubmitContactMessage,
   mockToastError,
   mockToastSuccess,
 } = vi.hoisted(() => ({
   hookState: { stateCallCount: 0 },
+  mockCaptureClientException: vi.fn(),
   mockCaptureEvent: vi.fn(),
   mockSubmitContactMessage: vi.fn(),
   mockToastError: vi.fn(),
@@ -29,7 +31,10 @@ vi.mock("react", async () => {
 vi.mock("@/lib/actions/contact", () => ({
   submitContactMessage: mockSubmitContactMessage,
 }));
-vi.mock("@/lib/analytics/client", () => ({ captureEvent: mockCaptureEvent }));
+vi.mock("@/lib/analytics/client", () => ({
+  captureClientException: mockCaptureClientException,
+  captureEvent: mockCaptureEvent,
+}));
 vi.mock("@/lib/toast", () => ({
   toast: { error: mockToastError, success: mockToastSuccess },
 }));
@@ -38,6 +43,7 @@ import ContactForm from "@/app/(main)/contact/ContactForm";
 
 beforeEach(() => {
   mockCaptureEvent.mockReset();
+  mockCaptureClientException.mockReset();
   mockSubmitContactMessage.mockReset();
   mockToastError.mockReset();
   mockToastSuccess.mockReset();
@@ -85,10 +91,12 @@ describe("contact_form_submitted", () => {
       succeeded: false,
       error_kind: "server",
     });
+    expect(mockCaptureClientException).not.toHaveBeenCalled();
   });
 
-  it("reports a thrown network failure with error_kind", async () => {
-    mockSubmitContactMessage.mockRejectedValue(new Error("offline"));
+  it("reports a thrown network failure with error_kind and the exception", async () => {
+    const failure = new Error("offline");
+    mockSubmitContactMessage.mockRejectedValue(failure);
 
     await submitWithSeed({ email: "a@b.com", message: "A long enough message." });
 
@@ -96,6 +104,12 @@ describe("contact_form_submitted", () => {
       succeeded: false,
       error_kind: "network",
     });
+    expect(mockCaptureClientException).toHaveBeenCalledWith(
+      failure,
+      "contact.contactForm.submit",
+      undefined,
+      { log: false },
+    );
   });
 
   // Inline validation is not a submission; nothing reached the server.
@@ -104,6 +118,7 @@ describe("contact_form_submitted", () => {
 
     expect(mockSubmitContactMessage).not.toHaveBeenCalled();
     expect(mockCaptureEvent).not.toHaveBeenCalled();
+    expect(mockCaptureClientException).not.toHaveBeenCalled();
   });
 });
 

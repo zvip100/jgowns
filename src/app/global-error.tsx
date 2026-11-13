@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect } from 'react'
+import { useReportBoundaryError } from '@/hooks/useReportBoundaryError'
 
 type GlobalErrorProps = {
   error: Error & { digest?: string }
@@ -11,9 +11,7 @@ export default function GlobalError({
   error,
   unstable_retry,
 }: GlobalErrorProps) {
-  useEffect(() => {
-    console.error(error)
-  }, [error])
+  useReportBoundaryError(error, 'errorBoundary.global')
 
   return (
     <html lang='en'>

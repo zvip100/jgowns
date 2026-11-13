@@ -19,6 +19,7 @@ const {
   hookState,
   mockCreateListing,
   mockOnListingCreated,
+  mockPosthogCaptureException,
   mockPush,
   mockToastError,
   mockUnstableRethrow,
@@ -33,6 +34,7 @@ const {
     setterCalls: [] as StateSetterCall[],
   },
   mockCreateListing: vi.fn(),
+  mockPosthogCaptureException: vi.fn(),
   mockPush: vi.fn(),
   mockToastError: vi.fn(),
   mockUnstableRethrow: vi.fn(),
@@ -75,6 +77,14 @@ vi.mock("react", async () => {
 vi.mock("next/navigation", () => ({
   unstable_rethrow: mockUnstableRethrow,
   useRouter: () => ({ push: mockPush }),
+}));
+
+vi.mock("posthog-js", () => ({
+  default: {
+    __loaded: true,
+    capture: vi.fn(),
+    captureException: mockPosthogCaptureException,
+  },
 }));
 
 vi.mock("@/lib/actions/sell", () => ({
@@ -418,6 +428,7 @@ describe("useListingFormSubmit", () => {
     hookState.refCallCount = 0;
     hookState.refOverrides.clear();
     hookState.setterCalls.length = 0;
+    mockPosthogCaptureException.mockReset();
     mockCreateListing.mockReset();
     mockCreateListing.mockResolvedValue({});
     mockOnListingCreated.mockReset();
@@ -589,8 +600,42 @@ describe("useListingFormSubmit", () => {
     expect(mockUnstableRethrow).toHaveBeenCalledOnce();
     expect(mockUnstableRethrow).toHaveBeenCalledWith(redirectError);
     expect(mockOnListingCreated).not.toHaveBeenCalled();
+    expect(mockPosthogCaptureException).not.toHaveBeenCalled();
     expect(errorSetterValues()).toEqual([EMPTY_LISTING_ERRORS]);
     expect(loadingSetterValues()).toEqual([true, false]);
+  });
+
+  it("logs and reports a thrown updateListing failure as an edit", async () => {
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const initial = makeInitialForm();
+    const failure = new Error("Load failed");
+    hookState.refOverrides.set(REF_INITIAL_FORM, {
+      ...initial,
+      contact_phone: "5551112222",
+    });
+    hookState.overrides.set(STATE_FORM, {
+      ...initial,
+      title: "Updated Gown",
+      contact_phone: "5551112222",
+    });
+    mockUpdateListing.mockRejectedValue(failure);
+
+    const submit = useListingFormSubmit({
+      initial,
+      listingId: LISTING_ID,
+      slots: [makeSlot()],
+      resolveUploadFile: vi.fn(),
+    });
+
+    await submit.handleSubmit();
+
+    expect(errors).toHaveBeenCalledWith("[sell.listingForm.submit]", failure);
+    expect(mockPosthogCaptureException).toHaveBeenCalledWith(failure, {
+      mode: "edit",
+      scope: "sell.listingForm.submit",
+    });
+    expect(mockToastError).toHaveBeenCalledWith("Something went wrong.");
+    errors.mockRestore();
   });
 
   describe("create (no listingId)", () => {
@@ -705,6 +750,7 @@ describe("useListingFormSubmit", () => {
     });
 
     it("toasts a generic message when the action rejects with a non-Error, staying off the inline surface", async () => {
+      const errors = vi.spyOn(console, "error").mockImplementation(() => {});
       setValidCreateState();
       mockCreateListing.mockRejectedValue("kaboom");
 
@@ -717,7 +763,13 @@ describe("useListingFormSubmit", () => {
 
       expect(mockUnstableRethrow).toHaveBeenCalledWith("kaboom");
       expect(mockOnListingCreated).not.toHaveBeenCalled();
+      expect(errors).toHaveBeenCalledWith("[sell.listingForm.submit]", "kaboom");
+      expect(mockPosthogCaptureException).toHaveBeenCalledWith("kaboom", {
+        mode: "create",
+        scope: "sell.listingForm.submit",
+      });
       expect(mockToastError).toHaveBeenCalledWith("Something went wrong.");
+      errors.mockRestore();
       // A thrown failure is a submit outcome, not field validation: only the
       // initial reset touches inline errors.
       expect(errorSetterValues()).toEqual([EMPTY_LISTING_ERRORS]);
@@ -740,6 +792,7 @@ describe("useListingFormSubmit", () => {
       await expect(submit.handleSubmit()).rejects.toBe(redirectError);
 
       expect(mockOnListingCreated).toHaveBeenCalledOnce();
+      expect(mockPosthogCaptureException).not.toHaveBeenCalled();
       expect(mockToastError).not.toHaveBeenCalled();
     });
 

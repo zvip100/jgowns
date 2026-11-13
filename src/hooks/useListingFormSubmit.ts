@@ -6,7 +6,7 @@ import { unstable_rethrow, useRouter } from "next/navigation";
 import { useSizeRows } from "@/hooks/useSizeRows";
 import { isValidSizePair } from "@/lib/gown-sizes";
 import { createListing, updateListing } from "@/lib/actions/sell";
-import { captureEvent } from "@/lib/analytics/client";
+import { captureClientException, captureEvent } from "@/lib/analytics/client";
 import { SELLER_EVENTS } from "@/lib/analytics/events";
 import {
   EMPTY_LISTING_ERRORS,
@@ -565,7 +565,9 @@ export function useListingFormSubmit({
     } catch (e: unknown) {
       // createListing only redirects once the listing is committed.
       if (!listingId && isNavigationSignal(e)) onListingCreated();
-      unstable_rethrow(e);
+      captureClientException(e, "sell.listingForm.submit", {
+        mode: listingId ? "edit" : "create",
+      });
       toast.error("Something went wrong.");
     } finally {
       setLoading(false);

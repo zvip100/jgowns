@@ -3,6 +3,7 @@
 import { useState, useLayoutEffect } from 'react';
 
 import { requestPasswordReset } from '@/lib/actions/auth';
+import { captureClientException } from '@/lib/analytics/client';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { FieldError, FieldGroup } from '@/components/ui/field';
 
@@ -37,6 +38,7 @@ export default function ForgotPasswordForm({ next }: ForgotPasswordFormProps) {
         setMsg(result.message);
       }
     } catch (err) {
+      captureClientException(err, 'auth.forgotPasswordForm.submit', undefined, { log: false });
       setIsError(true);
       setMsg(err instanceof Error ? err.message : 'Something went wrong. Please try again.');
     } finally {
