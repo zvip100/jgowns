@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Manrope } from "next/font/google";
 
+import NavigationProgress from "@/components/NavigationProgress";
 import { Toaster } from "@/components/ui/sonner";
 import { SITE_URL } from "@/lib/site";
 
@@ -46,6 +47,7 @@ export default function RootLayout({
   return (
     <html lang='en' className={`${fraunces.variable} ${manrope.variable}`}>
       <body className='font-body min-h-screen antialiased'>
+        <NavigationProgress />
         {children}
         <Toaster />
       </body>
