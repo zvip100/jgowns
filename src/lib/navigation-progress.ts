@@ -24,7 +24,9 @@ function getNavigationKey(pathname: string, search: string): string {
 
 /** Marks a client-side navigation as pending. A navigation to the URL already on screen commits nothing, so it ends the bar instead. */
 export function startNavigationProgress(url: string): void {
-  const target = new URL(url, window.location.href);
+  const current = new URL(window.location.href);
+  committedKey ??= getNavigationKey(current.pathname, current.search);
+  const target = new URL(url, current);
   if (getNavigationKey(target.pathname, target.search) === committedKey) {
     stopNavigationProgress();
     return;
@@ -43,9 +45,11 @@ export function stopNavigationProgress(): void {
   setSnapshot({ id: snapshot.id, isPending: false });
 }
 
-/** Records the URL the router just committed, which is what ends a pending navigation. */
+/** Records the URL the router just committed. Only a changed URL ends a pending navigation. */
 export function commitNavigationProgress(pathname: string, search: string): void {
-  committedKey = getNavigationKey(pathname, search);
+  const key = getNavigationKey(pathname, search);
+  if (key === committedKey) return;
+  committedKey = key;
   stopNavigationProgress();
 }
 

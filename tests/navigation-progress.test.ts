@@ -287,6 +287,28 @@ describe("commitNavigationProgress", () => {
     expect(store.getNavigationProgress().isPending).toBe(false);
   });
 
+  it("keeps a bar that started before the first commit recorded the current page", async () => {
+    const store = await loadStore();
+    window.location.href = "http://localhost:3000/browse";
+    store.startNavigationProgress("/browse/abc");
+
+    store.commitNavigationProgress("/browse", "");
+    expect(store.getNavigationProgress().isPending).toBe(true);
+
+    store.commitNavigationProgress("/browse/abc", "");
+    expect(store.getNavigationProgress().isPending).toBe(false);
+  });
+
+  it("ends a bar when the first commit already shows a redirected destination", async () => {
+    const store = await loadStore();
+    window.location.href = "http://localhost:3000/";
+    store.startNavigationProgress("/dashboard");
+
+    store.commitNavigationProgress("/login", "next=%2Fdashboard");
+
+    expect(store.getNavigationProgress().isPending).toBe(false);
+  });
+
   it("replaces the URL later navigations are compared against", async () => {
     const store = await loadStore();
     store.commitNavigationProgress("/browse", "");
