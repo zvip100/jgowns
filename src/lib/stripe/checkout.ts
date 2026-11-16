@@ -2,10 +2,12 @@ import "server-only";
 
 import Stripe from "stripe";
 
+import { rpcError } from "@/lib/action-errors";
 import { captureServerError } from "@/lib/analytics/server";
 import { getStripe } from "@/lib/stripe/client";
 import { createServiceClient } from "@/lib/supabase/service";
 
+import type { PostgrestLikeError } from "@/lib/action-errors";
 import type { SupabaseServer } from "@/lib/actions/auth";
 
 const CHECKOUT_CANCEL_ERROR =
@@ -82,14 +84,14 @@ function isMissingSessionError(e: unknown): boolean {
 async function expirePaymentRow(
   service: ReturnType<typeof createServiceClient>,
   sessionId: string,
-): Promise<string | null> {
+): Promise<PostgrestLikeError | null> {
   const { error } = await service
     .from("listing_payments")
     .update({ status: "expired" })
     .eq("stripe_session_id", sessionId)
     .eq("status", "pending");
 
-  return error ? error.message : null;
+  return error;
 }
 
 /**
@@ -115,7 +117,9 @@ export async function retireOpenListingCheckout(
     .eq("listing_id", listingId)
     .eq("status", "pending");
 
-  if (pendingError) return { error: pendingError.message };
+  if (pendingError) {
+    return rpcError("stripe.retireOpenListingCheckout.pendingLookup", pendingError);
+  }
   if (!pendingPayments?.length) return { ok: true };
 
   const stripe = getStripe();
@@ -135,7 +139,9 @@ export async function retireOpenListingCheckout(
       }
 
       const forgedError = await expirePaymentRow(service, row.stripe_session_id);
-      if (forgedError) return { error: forgedError };
+      if (forgedError) {
+        return rpcError("stripe.retireOpenListingCheckout.expireRow", forgedError);
+      }
       continue;
     }
 
@@ -159,7 +165,9 @@ export async function retireOpenListingCheckout(
     }
 
     const expireError = await expirePaymentRow(service, row.stripe_session_id);
-    if (expireError) return { error: expireError };
+    if (expireError) {
+      return rpcError("stripe.retireOpenListingCheckout.expireRow", expireError);
+    }
   }
 
   return { ok: true };

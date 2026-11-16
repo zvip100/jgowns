@@ -7,10 +7,14 @@ import { rpcError } from "@/lib/action-errors";
 import { SELLER_EVENTS, SERVER_EVENTS } from "@/lib/analytics/events";
 import { captureServerError, captureServerEvent } from "@/lib/analytics/server";
 import { getAuthClient } from "@/lib/actions/auth";
+import { isAdmin } from "@/lib/admin/is-admin";
 import { getListingFeeCents, isListingFeeActive } from "@/lib/listing-fee";
 import { getSessionContact } from "@/lib/queries/auth";
 import { SITE_URL } from "@/lib/site";
-import { isCheckoutSettling } from "@/lib/stripe/checkout";
+import {
+  isCheckoutSettling,
+  retireOpenListingCheckout,
+} from "@/lib/stripe/checkout";
 import { getStripe } from "@/lib/stripe/client";
 import { createServiceClient } from "@/lib/supabase/service";
 
@@ -43,9 +47,11 @@ const CHECKOUT_UNAVAILABLE_ERROR: ServerActionErrorResult = {
  * Independently callable endpoint: re-verifies auth/ownership/status itself,
  * so it's safe both as the dashboard's "Complete Payment" form action and as
  * a direct in-process call from createListing right after the listing commits.
+ * `isWaiverRequested` publishes free while the fee is on, honored for admins only.
  */
 export async function createListingCheckout(
   listingId: string,
+  isWaiverRequested: boolean = false,
 ): Promise<ServerActionErrorResult> {
   if (!listingId || typeof listingId !== "string") {
     return { error: "Invalid listing id" };
@@ -68,16 +74,26 @@ export async function createListingCheckout(
   if (!listing) return { error: "Listing not found" };
   if (listing.status !== "pending_payment") return NOT_PENDING_ERROR;
 
-  if (!isListingFeeActive()) {
-    // Suspended or fee 0/unset: publish for free instead of minting a session.
-    // The status=pending_payment predicate keeps this safe as an
-    // independently-callable endpoint — it can only ever promote a pending
-    // listing, never a sold/removed one.
+  // The admin check lives here, not in the UI: a seller who sends the flag
+  // simply goes to Checkout.
+  const isFeeWaived = isWaiverRequested === true && isAdmin(user);
+
+  if (!isListingFeeActive() || isFeeWaived) {
+    // Suspended, fee 0/unset, or waived by an admin: publish for free instead
+    // of minting a session. The status=pending_payment predicate keeps this
+    // safe as an independently-callable endpoint — it can only ever promote a
+    // pending listing, never a sold/removed one.
     //
+    // Any Checkout already opened for this listing is closed first, or the
+    // listing goes live free with a payable link still out. Refuses while a
+    // payment is paid or settling, which confirmation will publish instead.
+    const retired = await retireOpenListingCheckout(supabase, listingId);
+    if ("error" in retired) return { error: retired.error };
+
     // Service role, not the seller's client: guard_listing_status_write()
     // refuses a seller-driven pending_payment -> active, which is exactly the
-    // fee bypass. Whether the fee is off lives in env and cannot be expressed
-    // in the database, so the authority has to be this action. The user_id and
+    // fee bypass. Whether the fee is off or waived cannot be expressed in the
+    // database, so the authority has to be this action. The user_id and
     // status predicates below carry the ownership check that RLS would have,
     // and ownership was already verified against `listing` above.
     const { data: updated, error } = await createServiceClient()

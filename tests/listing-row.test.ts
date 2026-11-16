@@ -20,8 +20,9 @@ vi.mock("next/image", () => ({
 const { stub } = vi.hoisted(() => ({
   stub: (name: string) => () => name,
 }));
-vi.mock("@/components/CompletePaymentButton", () => ({
-  default: stub("complete-payment"),
+vi.mock("@/components/PublishListingButton", () => ({
+  default: ({ label, isFeeWaived }: { label: string; isFeeWaived?: boolean }) =>
+    `publish-listing:${label}:${isFeeWaived ? "waived" : "charged"}`,
 }));
 vi.mock("@/components/MarkSizeSoldButton", () => ({
   default: stub("mark-size-sold"),
@@ -82,11 +83,16 @@ function makeListing(
   } as unknown as ListingWithSizes;
 }
 
-function render(status: ListingStatus, extra: Partial<ListingWithSizes> = {}) {
+function render(
+  status: ListingStatus,
+  extra: Partial<ListingWithSizes> = {},
+  isFeeWaivable = false,
+) {
   return renderToStaticMarkup(
     React.createElement(ListingRow, {
       listing: makeListing({ status, ...extra }),
       listingFeeActive: true,
+      isFeeWaivable,
     }),
   );
 }
@@ -118,6 +124,26 @@ describe("ListingRow: where the thumbnail and title point", () => {
     });
     expect(primaryHref(html)).toBe(EDIT_HREF);
     expect(html).not.toContain(BROWSE_HREF);
+  });
+});
+
+describe("ListingRow: Publish for free", () => {
+  it("sits beside Complete Payment on a pending row when the fee is waivable", () => {
+    const html = render("pending_payment", {}, true);
+    expect(html).toContain("publish-listing:Complete Payment:charged");
+    expect(html).toContain("publish-listing:Publish for free:waived");
+  });
+
+  it("stays hidden from anyone who cannot waive the fee", () => {
+    const html = render("pending_payment");
+    expect(html).toContain("publish-listing:Complete Payment:charged");
+    expect(html).not.toContain("Publish for free");
+  });
+
+  it("never shows on a listing that is not pending payment", () => {
+    for (const status of ["active", "sold", "suspended"] as ListingStatus[]) {
+      expect(render(status, {}, true), status).not.toContain("Publish for free");
+    }
   });
 });
 

@@ -2,9 +2,7 @@
 
 import { CONTACT_METHODS, CONTACT_METHOD_LABELS } from '@/lib/types';
 import { FORM_LABEL_CLASS } from '@/components/form/constants';
-import { CHECKBOX_GOLD_CLASS } from '@/lib/styles';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Label } from '@/components/ui/label';
+import { LabeledCheckbox } from '@/components/form/LabeledCheckbox';
 
 import type { ContactMethod } from '@/lib/types';
 
@@ -25,18 +23,14 @@ export function ContactMethodsField({
     <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
       <span className={FORM_LABEL_CLASS}>Buyers can</span>
       {CONTACT_METHODS.map((method) => (
-        <div key={method} className="flex items-center gap-2">
-          <Checkbox
-            id={`contact-method-${method}`}
-            checked={value.includes(method)}
-            disabled={disabled}
-            className={CHECKBOX_GOLD_CLASS}
-            onCheckedChange={(checked) => onToggle(method, checked === true)}
-          />
-          <Label htmlFor={`contact-method-${method}`} className="font-normal">
-            {CONTACT_METHOD_LABELS[method]}
-          </Label>
-        </div>
+        <LabeledCheckbox
+          key={method}
+          id={`contact-method-${method}`}
+          label={CONTACT_METHOD_LABELS[method]}
+          checked={value.includes(method)}
+          disabled={disabled}
+          onCheckedChange={(checked) => onToggle(method, checked)}
+        />
       ))}
     </div>
   );

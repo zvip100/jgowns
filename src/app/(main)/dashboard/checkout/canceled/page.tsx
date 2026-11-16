@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { CircleSlash } from 'lucide-react';
 
-import CompletePaymentButton from '@/components/CompletePaymentButton';
+import PublishListingButton from '@/components/PublishListingButton';
 import { isValidUUID } from '@/lib/utils';
 
 import type { Metadata } from 'next';
@@ -31,7 +31,7 @@ export default async function CheckoutCanceledPage({
           Your listing is saved. Complete payment anytime from your dashboard to publish your listing.
         </p>
         {listingId && (
-          <CompletePaymentButton
+          <PublishListingButton
             listingId={listingId}
             label='Complete Payment'
             variant='cta'

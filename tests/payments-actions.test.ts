@@ -113,6 +113,10 @@ import { createListingCheckout, confirmListingPayment } from "@/lib/actions/paym
 
 const LISTING_ID = "11111111-1111-1111-1111-111111111111";
 const USER_ID = "user-123";
+const USER = { id: USER_ID };
+const ADMIN_USER = { id: USER_ID, app_metadata: { role: "admin" } };
+const PAYMENT_COMPLETING = { error: "Payment is completing. Refresh and try again." };
+const PRIOR_SESSION_ID = "cs_prior";
 // Mirrors the module-local constant in payments.ts; a "use server" file can
 // only export async functions, so it can't be imported.
 const CHECKOUT_UNAVAILABLE_ERROR = {
@@ -191,6 +195,8 @@ type CheckoutSupabaseOpts = {
   updateResult?: { data: unknown; error: unknown };
   paymentInsertResult?: { error: unknown };
   priorPaymentResult?: { data: unknown; error: unknown };
+  /** Pending rows retireOpenListingCheckout reads before a free publish. */
+  pendingPaymentsResult?: { data: unknown; error: unknown };
 };
 
 function makeCheckoutSupabase(opts: CheckoutSupabaseOpts = {}) {
@@ -203,8 +209,13 @@ function makeCheckoutSupabase(opts: CheckoutSupabaseOpts = {}) {
   const updateChain = makeUpdateChain(
     opts.updateResult ?? { data: [{ id: LISTING_ID }], error: null },
   );
-  const priorPaymentChain = makePriorPaymentChain(
-    opts.priorPaymentResult ?? { data: null, error: null },
+  const priorPaymentChain = Object.assign(
+    makePriorPaymentChain(opts.priorPaymentResult ?? { data: null, error: null }),
+    {
+      // The free-publish lookup awaits the filtered chain itself.
+      then: (resolve: (value: unknown) => unknown) =>
+        resolve(opts.pendingPaymentsResult ?? { data: [], error: null }),
+    },
   );
   const paymentInsert = vi
     .fn()
@@ -228,6 +239,41 @@ function makeCheckoutSupabase(opts: CheckoutSupabaseOpts = {}) {
   });
 
   return { from, _paymentInsert: paymentInsert, _updateChain: updateChain };
+}
+
+type SessionUser = { id: string; app_metadata?: Record<string, unknown> };
+
+/** One pending payment row whose Stripe session reads back as `session`. */
+function withPriorSession(user: SessionUser, session: Record<string, unknown>): void {
+  const supabase = makeCheckoutSupabase({
+    pendingPaymentsResult: { data: [{ stripe_session_id: PRIOR_SESSION_ID }], error: null },
+  });
+  mockGetAuthClient.mockResolvedValue({ ok: true, user, supabase });
+  mockCheckoutSessionsRetrieve.mockResolvedValue(session);
+}
+
+function withOpenPriorSession(user: SessionUser): void {
+  withPriorSession(user, { status: "open", payment_status: "unpaid" });
+}
+
+function expectExpiredThenPublished(): void {
+  expect(mockCheckoutSessionsExpire).toHaveBeenCalledWith(PRIOR_SESSION_ID);
+  expect(mockServiceUpdate).toHaveBeenCalledWith({ status: "expired" });
+  expect(mockServiceSessionEq).toHaveBeenCalledWith("stripe_session_id", PRIOR_SESSION_ID);
+  expect(mockCheckoutSessionsExpire.mock.invocationCallOrder[0]).toBeLessThan(
+    mockServiceListingsUpdate.mock.invocationCallOrder[0],
+  );
+  expect(mockServiceListingsUpdate).toHaveBeenCalledWith({ status: "active" });
+  expect(mockRedirect).toHaveBeenCalledWith("/dashboard");
+}
+
+function expectRefused(result: unknown): void {
+  expect(result).toEqual(PAYMENT_COMPLETING);
+  expect(mockCheckoutSessionsExpire).not.toHaveBeenCalled();
+  expect(mockServiceUpdate).not.toHaveBeenCalled();
+  expect(mockServiceListingsUpdate).not.toHaveBeenCalled();
+  expect(mockUpdateTag).not.toHaveBeenCalled();
+  expect(mockRedirect).not.toHaveBeenCalled();
 }
 
 describe("createListingCheckout", () => {
@@ -254,6 +300,8 @@ describe("createListingCheckout", () => {
     mockServiceStatusEq.mockReset().mockResolvedValue({ error: null });
     mockServiceSessionEq.mockReset().mockReturnValue({ eq: mockServiceStatusEq });
     mockServiceUpdate.mockReset().mockReturnValue({ eq: mockServiceSessionEq });
+    mockServiceListingsUpdate.mockReset();
+    mockCheckoutSessionsRetrieve.mockReset();
   });
 
   it("rejects an invalid listing id", async () => {
@@ -327,6 +375,24 @@ describe("createListingCheckout", () => {
       expect(mockUpdateTag).toHaveBeenCalledWith(`listing:${LISTING_ID}`);
       expect(mockRedirect).toHaveBeenCalledWith("/dashboard");
       expect(mockCheckoutSessionsCreate).not.toHaveBeenCalled();
+    });
+
+    // Payments suspended while a Checkout was still open: going live free
+    // must not leave that link payable.
+    it("expires an open Checkout at Stripe before publishing for free", async () => {
+      withOpenPriorSession(USER);
+
+      await expect(createListingCheckout(LISTING_ID)).rejects.toThrow("NEXT_REDIRECT");
+
+      expectExpiredThenPublished();
+    });
+
+    it("refuses to publish while a prior payment is already paid", async () => {
+      withPriorSession(USER, { status: "complete", payment_status: "paid" });
+
+      const result = await createListingCheckout(LISTING_ID);
+
+      expectRefused(result);
     });
 
     it("returns a typed error with no tag invalidation when the scoped update matches no row", async () => {
@@ -447,6 +513,113 @@ describe("createListingCheckout", () => {
       expect(result).toEqual(CHECKOUT_UNAVAILABLE_ERROR);
       expect(mockRedirect).not.toHaveBeenCalled();
       consoleError.mockRestore();
+    });
+
+    describe("admin fee waiver", () => {
+      it("publishes an admin's listing free, with no Checkout of its own", async () => {
+        const supabase = makeCheckoutSupabase();
+        mockGetAuthClient.mockResolvedValue({ ok: true, user: ADMIN_USER, supabase });
+
+        await expect(createListingCheckout(LISTING_ID, true)).rejects.toThrow(
+          "NEXT_REDIRECT",
+        );
+
+        expect(mockServiceListingsUpdate).toHaveBeenCalledWith({ status: "active" });
+        expect(supabase._updateChain.eq).toHaveBeenCalledWith("status", "pending_payment");
+        expect(mockUpdateTag).toHaveBeenCalledWith("listings");
+        expect(mockUpdateTag).toHaveBeenCalledWith(`listing:${LISTING_ID}`);
+        expect(mockRedirect).toHaveBeenCalledWith("/dashboard");
+        expect(mockCheckoutSessionsRetrieve).not.toHaveBeenCalled();
+        expect(mockCheckoutSessionsCreate).not.toHaveBeenCalled();
+        expect(supabase._paymentInsert).not.toHaveBeenCalled();
+      });
+
+      // The abandoned-Checkout case the dashboard row button exists for.
+      it("expires the abandoned Checkout at Stripe before publishing free", async () => {
+        withOpenPriorSession(ADMIN_USER);
+
+        await expect(createListingCheckout(LISTING_ID, true)).rejects.toThrow(
+          "NEXT_REDIRECT",
+        );
+
+        expectExpiredThenPublished();
+        expect(mockCheckoutSessionsCreate).not.toHaveBeenCalled();
+      });
+
+      it("refuses a waived publish while the prior payment is already paid", async () => {
+        withPriorSession(ADMIN_USER, { status: "complete", payment_status: "paid" });
+
+        const result = await createListingCheckout(LISTING_ID, true);
+
+        expectRefused(result);
+        expect(mockCheckoutSessionsCreate).not.toHaveBeenCalled();
+      });
+
+      it("refuses a waived publish while an asynchronous payment is still settling", async () => {
+        withPriorSession(ADMIN_USER, {
+          status: "complete",
+          payment_status: "unpaid",
+          payment_intent: "pi_prior",
+        });
+        mockPaymentIntentsRetrieve.mockResolvedValue({ status: "processing" });
+
+        const result = await createListingCheckout(LISTING_ID, true);
+
+        expectRefused(result);
+      });
+
+      it("publishes nothing when Stripe cannot expire the abandoned Checkout", async () => {
+        withOpenPriorSession(ADMIN_USER);
+        mockCheckoutSessionsExpire.mockRejectedValue(new Error("stripe down"));
+
+        const result = await createListingCheckout(LISTING_ID, true);
+
+        expect(result).toEqual({ error: "Couldn't cancel the open payment. Please try again." });
+        expect(mockServiceListingsUpdate).not.toHaveBeenCalled();
+        expect(mockRedirect).not.toHaveBeenCalled();
+      });
+
+      // An independently callable endpoint: the flag alone must buy nothing.
+      it("ignores the waiver for a seller and opens Checkout", async () => {
+        const supabase = makeCheckoutSupabase();
+        mockGetAuthClient.mockResolvedValue({
+          ok: true,
+          user: { id: USER_ID, app_metadata: { role: "seller" } },
+          supabase,
+        });
+
+        await expect(createListingCheckout(LISTING_ID, true)).rejects.toThrow(
+          "NEXT_REDIRECT",
+        );
+
+        expect(mockCheckoutSessionsCreate).toHaveBeenCalled();
+        expect(mockRedirect).toHaveBeenCalledWith("https://checkout.stripe.com/pay/cs_test_123");
+        expect(mockServiceListingsUpdate).not.toHaveBeenCalled();
+      });
+
+      it("charges an admin who did not ask for the waiver", async () => {
+        const supabase = makeCheckoutSupabase();
+        mockGetAuthClient.mockResolvedValue({ ok: true, user: ADMIN_USER, supabase });
+
+        await expect(createListingCheckout(LISTING_ID)).rejects.toThrow("NEXT_REDIRECT");
+
+        expect(mockCheckoutSessionsCreate).toHaveBeenCalled();
+        expect(mockServiceListingsUpdate).not.toHaveBeenCalled();
+      });
+
+      it("honors only a literal true from the client", async () => {
+        const supabase = makeCheckoutSupabase();
+        mockGetAuthClient.mockResolvedValue({ ok: true, user: ADMIN_USER, supabase });
+
+        // Server-action arguments arrive from the client untyped, so a truthy
+        // non-boolean is a real input this cast stands in for.
+        await expect(
+          createListingCheckout(LISTING_ID, "true" as unknown as boolean),
+        ).rejects.toThrow("NEXT_REDIRECT");
+
+        expect(mockCheckoutSessionsCreate).toHaveBeenCalled();
+        expect(mockServiceListingsUpdate).not.toHaveBeenCalled();
+      });
     });
 
     describe("double-charge guard on an existing pending payment", () => {

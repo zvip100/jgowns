@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { Mail, Phone } from 'lucide-react';
 import {
   GOWN_CATEGORIES,
@@ -15,6 +16,7 @@ import { ContactMethodsField } from '@/components/form/ContactMethodsField';
 import { FormFieldGrid } from '@/components/form/FormFieldGrid';
 import { FormSection } from '@/components/form/FormSection';
 import { InputGroupField } from '@/components/form/InputGroupField';
+import { LabeledCheckbox } from '@/components/form/LabeledCheckbox';
 import {
   SelectField,
   toSelectOptions,
@@ -33,13 +35,28 @@ type ListingFormProps = {
   initial?: Partial<ListingFormData>;
   listingId?: string;
   listingFeeCents?: number;
+  /** Admin with the fee on: offers "Publish for free". */
+  isFeeWaivable?: boolean;
 };
+
+function publishingFeeNote(
+  chargedFeeCents: number | undefined,
+  isFeeWaived: boolean,
+): string {
+  if (chargedFeeCents) return 'Pay securely with Stripe at checkout.';
+  if (isFeeWaived) return 'No charge for this listing.';
+  return 'Waived for a limited time.';
+}
 
 export default function ListingForm({
   initial,
   listingId,
   listingFeeCents,
+  isFeeWaivable = false,
 }: ListingFormProps) {
+  const [isFeeWaived, setIsFeeWaived] = useState(false);
+  const chargedFeeCents = isFeeWaived ? undefined : listingFeeCents;
+
   const { slots, applyStudio, onClear, resolveUploadFile } =
     useListingImageSlots({
       initialUrls: initial?.image_urls ?? [],
@@ -65,6 +82,7 @@ export default function ListingForm({
     listingId,
     slots,
     resolveUploadFile,
+    isFeeWaived,
   });
 
   const hasPhone = Boolean(form.contact_phone?.trim());
@@ -205,17 +223,25 @@ export default function ListingForm({
         {!isEdit && (
           <div className="flex items-center gap-4 rounded-2xl border border-[#b58d5f]/40 bg-(--bg-ivory) p-4 sm:p-5">
             <span className="flex shrink-0 items-center justify-center rounded-xl gold-gradient px-3.5 py-2 text-lg font-semibold text-white shadow-[0_8px_18px_rgba(106,74,39,0.22)]">
-              {listingFeeCents ? formatFeeDollars(listingFeeCents) : 'Free'}
+              {chargedFeeCents ? formatFeeDollars(chargedFeeCents) : 'Free'}
             </span>
             <div className="min-w-0">
               <p className="font-semibold tracking-tight text-(--ink)">
                 Publishing fee
               </p>
               <p className="text-sm text-(--muted-ink)">
-                {listingFeeCents
-                  ? 'Pay securely with Stripe at checkout.'
-                  : 'Waived for a limited time.'}
+                {publishingFeeNote(chargedFeeCents, isFeeWaived)}
               </p>
+              {isFeeWaivable && (
+                <LabeledCheckbox
+                  id="publish-for-free"
+                  label="Publish for free"
+                  checked={isFeeWaived}
+                  disabled={loading}
+                  className="mt-2.5"
+                  onCheckedChange={setIsFeeWaived}
+                />
+              )}
             </div>
           </div>
         )}

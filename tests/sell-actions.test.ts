@@ -335,7 +335,7 @@ describe("createListing", () => {
     try { await createListing(fd); } catch { /* redirect */ }
 
     expect(mockUpdateTag).not.toHaveBeenCalled();
-    expect(mockCreateListingCheckout).toHaveBeenCalledWith(CREATED_LISTING_ID);
+    expect(mockCreateListingCheckout).toHaveBeenCalledWith(CREATED_LISTING_ID, false);
   });
 
   it("cleans up the first uploaded URL when the second upload throws", async () => {
@@ -810,7 +810,7 @@ describe("createListing", () => {
     const payload = capture.payload as Record<string, unknown>;
     expect(payload.status).toBe("pending_payment");
     expect(mockUpdateTag).not.toHaveBeenCalled();
-    expect(mockCreateListingCheckout).toHaveBeenCalledWith(CREATED_LISTING_ID);
+    expect(mockCreateListingCheckout).toHaveBeenCalledWith(CREATED_LISTING_ID, false);
   });
 
   it("fee active: inserts status 'pending_payment', skips updateTag, and delegates to createListingCheckout", async () => {
@@ -831,8 +831,68 @@ describe("createListing", () => {
     const payload = capture.payload as Record<string, unknown>;
     expect(payload.status).toBe("pending_payment");
     expect(mockUpdateTag).not.toHaveBeenCalled();
-    expect(mockCreateListingCheckout).toHaveBeenCalledWith(CREATED_LISTING_ID);
+    expect(mockCreateListingCheckout).toHaveBeenCalledWith(CREATED_LISTING_ID, false);
     expect(mockRedirect).not.toHaveBeenCalledWith("/dashboard");
+  });
+
+  // createListingCheckout is the authority on who may waive; this only relays.
+  it("fee active: forwards the waiver request to createListingCheckout", async () => {
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase({ payload: {} }),
+    });
+    mockIsListingFeeActive.mockReturnValue(true);
+
+    const fd = baseFormData();
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+    fd.set("waive_fee", "true");
+
+    await createListing(fd);
+
+    expect(mockCreateListingCheckout).toHaveBeenCalledWith(CREATED_LISTING_ID, true);
+  });
+
+  it("fee active: treats any waive_fee value but 'true' as no request", async () => {
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase({ payload: {} }),
+    });
+    mockIsListingFeeActive.mockReturnValue(true);
+
+    const fd = baseFormData();
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+    fd.set("waive_fee", "yes");
+
+    await createListing(fd);
+
+    expect(mockCreateListingCheckout).toHaveBeenCalledWith(CREATED_LISTING_ID, false);
+  });
+
+  it("fee active: redirects with the publish flag when a waived publish fails", async () => {
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      user: { id: "user-123" },
+      supabase: makeCreateSupabase({ payload: {} }),
+    });
+    mockIsListingFeeActive.mockReturnValue(true);
+    mockCreateListingCheckout.mockResolvedValue({
+      error: "Something went wrong. Please try again.",
+    });
+
+    const fd = baseFormData();
+    fd.set("image_file_0", makeFile());
+    fd.set("blur_0", makeBlur("blur0"));
+    fd.set("waive_fee", "true");
+
+    await expect(createListing(fd)).rejects.toThrow("NEXT_REDIRECT");
+
+    // The dashboard must not tell an admin who chose free to retry payment.
+    expect(mockRedirect).toHaveBeenCalledWith("/dashboard?toast=publish-unavailable");
+    expect(mockDeleteListingImages).not.toHaveBeenCalled();
   });
 
   it("fee active: redirects with the toast flag when checkout returns an error, leaving the form behind", async () => {

@@ -39,6 +39,7 @@ vi.mock("@/lib/supabase/service", () => ({
   createServiceClient: () => ({ from: mockServiceFrom }),
 }));
 
+import { GENERIC_ACTION_ERROR } from "@/lib/action-errors";
 import {
   markListingSold,
   markSizeSold,
@@ -442,6 +443,52 @@ describe("removeListing", () => {
       error: "Couldn't cancel the open payment. Please try again.",
     });
     expect(supabase._listingsChain.update).not.toHaveBeenCalled();
+  });
+
+  it("never leaks the raw database message when the pending-payment lookup fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const supabase = makeSupabase(undefined, undefined, undefined, {
+      data: null,
+      error: { message: "canceling statement due to statement timeout" },
+    });
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+
+    const result = await removeListing(LISTING_ID);
+
+    expect(result).toEqual({ error: GENERIC_ACTION_ERROR });
+    expect(consoleError).toHaveBeenCalled();
+    expect(mockRetrieveSession).not.toHaveBeenCalled();
+    expect(supabase._rpc).not.toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
+  it("never leaks the raw database message when retiring the payment row fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {});
+    const supabase = makeSupabase(undefined, undefined, undefined, {
+      data: [{ stripe_session_id: SESSION_ID }],
+      error: null,
+    });
+    mockGetAuthClient.mockResolvedValue({
+      ok: true,
+      supabase,
+      user: { id: "user-1" },
+    });
+    mockRetrieveSession.mockResolvedValue({
+      payment_status: "unpaid",
+      status: "expired",
+    });
+    mockServiceExpireUpdate({ error: { message: 'permission denied for table "listing_payments"' } });
+
+    const result = await removeListing(LISTING_ID);
+
+    expect(result).toEqual({ error: GENERIC_ACTION_ERROR });
+    expect(consoleError).toHaveBeenCalled();
+    expect(supabase._rpc).not.toHaveBeenCalled();
+    consoleError.mockRestore();
   });
 
   it("returns an error for a blank id without touching the database", async () => {
