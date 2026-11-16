@@ -4,6 +4,7 @@ import { RotateCcw } from 'lucide-react';
 
 import ConfirmActionButton from '@/components/ConfirmActionButton';
 import { reactivateListing } from '@/lib/actions/listings';
+import { ROW_ACCENT_ACTION_CLASS } from '@/lib/styles';
 
 import type { Listing } from '@/lib/types';
 
@@ -34,7 +35,7 @@ export default function ReactivateListingButton({
       buttonLabel="Reactivate"
       icon={RotateCcw}
       successMessage="Listing reactivated"
-      triggerClassName="text-(--accent-deep) hover:bg-(--accent-deep)/10 hover:text-(--accent-deep)"
+      triggerClassName={ROW_ACCENT_ACTION_CLASS}
       onConfirm={() => reactivateListing(id)}
     />
   );

@@ -3,6 +3,7 @@ import { PackageOpen, Plus, Sparkles } from 'lucide-react';
 
 import { SellCtaLink } from '@/components/SellCtaLink';
 import { isListingFeeActive } from '@/lib/listing-fee';
+import { getCurrentUser } from '@/lib/queries/auth';
 import { createClient } from '@/lib/supabase/server';
 import { PRIMARY_CTA_PILL_CLASS } from '@/lib/styles';
 import { Button } from '@/components/ui/button';
@@ -50,9 +51,13 @@ async function DashboardCollectionSummary({
 async function DashboardContent({
   listingsPromise,
 }: DashboardContentProps) {
-  const listings = await listingsPromise;
+  const [listings, user] = await Promise.all([
+    listingsPromise,
+    getCurrentUser(),
+  ]);
   const hasListings = listings.length > 0;
   const listingFeeActive = isListingFeeActive();
+  const isFeeWaivable = listingFeeActive && Boolean(user?.isAdmin);
 
   return (
     <>
@@ -61,7 +66,12 @@ async function DashboardContent({
           <DashboardStats listings={listings} />
           <div className="flex flex-col gap-3">
             {listings.map((l) => (
-              <ListingRow key={l.id} listing={l} listingFeeActive={listingFeeActive} />
+              <ListingRow
+                key={l.id}
+                listing={l}
+                listingFeeActive={listingFeeActive}
+                isFeeWaivable={isFeeWaivable}
+              />
             ))}
           </div>
         </>

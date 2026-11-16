@@ -1,7 +1,7 @@
 import { Suspense } from 'react';
 
 import { getListingFeeCents, isListingFeeActive } from '@/lib/listing-fee';
-import { getSessionContact } from '@/lib/queries/auth';
+import { getCurrentUser, getSessionContact } from '@/lib/queries/auth';
 import ListingForm from '@/components/ListingForm';
 
 import ListingAgreementGate from './ListingAgreementGate';
@@ -16,14 +16,24 @@ export const metadata: Metadata = {
 };
 
 async function PrefilledListingForm() {
-  const contact = await getSessionContact();
+  const [contact, user] = await Promise.all([
+    getSessionContact(),
+    getCurrentUser(),
+  ]);
   const initial: Partial<ListingFormData> = {
     contact_email: contact?.email ?? '',
     contact_phone: contact?.phone ?? '',
   };
-  const listingFeeCents = isListingFeeActive() ? getListingFeeCents() : undefined;
+  const isFeeActive = isListingFeeActive();
+  const listingFeeCents = isFeeActive ? getListingFeeCents() : undefined;
 
-  return <ListingForm initial={initial} listingFeeCents={listingFeeCents} />;
+  return (
+    <ListingForm
+      initial={initial}
+      listingFeeCents={listingFeeCents}
+      isFeeWaivable={isFeeActive && Boolean(user?.isAdmin)}
+    />
+  );
 }
 
 export default function NewListingPage() {

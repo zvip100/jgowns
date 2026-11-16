@@ -19,6 +19,10 @@ export const NOTICE_PANEL_PRIMARY_ACTION_CLASS =
 export const NOTICE_PANEL_SECONDARY_ACTION_CLASS =
   "mt-4 inline-flex w-full items-center justify-center text-xs font-semibold uppercase tracking-[0.12em] text-(--accent-deep) transition hover:text-[#2f241b]";
 
+/** Gold-text ghost action on a dashboard listing row (Mark Sold, Reactivate, Publish for free). */
+export const ROW_ACCENT_ACTION_CLASS =
+  "text-(--accent-deep) hover:bg-(--accent-deep)/10 hover:text-(--accent-deep)";
+
 /**
  * Overrides the shadcn Checkbox checked fill (default --primary, a dark brown)
  * with the brand gold gradient. Applied per-instance because the primitive in

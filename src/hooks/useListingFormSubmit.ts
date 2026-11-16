@@ -260,6 +260,8 @@ type UseListingFormSubmitOptions = {
   listingId?: string;
   slots: ImageSlotState[];
   resolveUploadFile: (slot: ImageSlotState) => Promise<File | null>;
+  /** Admin's "Publish for free" choice; the server ignores it for everyone else. */
+  isFeeWaived?: boolean;
 };
 
 export function useListingFormSubmit({
@@ -267,6 +269,7 @@ export function useListingFormSubmit({
   listingId,
   slots,
   resolveUploadFile,
+  isFeeWaived = false,
 }: UseListingFormSubmitOptions) {
   const router = useRouter();
   const onListingCreated = use(ListingCreatedContext);
@@ -528,6 +531,7 @@ export function useListingFormSubmit({
       formData.set("contact_email", form.contact_email?.trim() || "");
       formData.set("contact_phone", form.contact_phone?.trim() || "");
       formData.set("contact_methods", JSON.stringify(contactMethods));
+      if (!listingId && isFeeWaived) formData.set("waive_fee", "true");
 
       const slotPayloads = await Promise.all(
         activeSlots.map(async (slot) => {
@@ -581,6 +585,7 @@ export function useListingFormSubmit({
     contactMethods,
     slots,
     resolveUploadFile,
+    isFeeWaived,
     router,
     onListingCreated,
   ]);

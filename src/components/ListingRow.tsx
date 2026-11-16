@@ -8,7 +8,7 @@ import { FormInfoBanner } from '@/components/form/FormInfoBanner';
 import { LISTING_STATUS_TONE, PILL_TONE_CLASS } from '@/lib/styles';
 import { IMAGE_QUALITY } from '@/lib/types';
 import { sellerSuspensionMessage } from '@/lib/suspension';
-import CompletePaymentButton from '@/components/CompletePaymentButton';
+import PublishListingButton from '@/components/PublishListingButton';
 import MarkSizeSoldButton from '@/components/MarkSizeSoldButton';
 import MarkSoldButton from '@/components/MarkSoldButton';
 import ReactivateListingButton from '@/components/ReactivateListingButton';
@@ -29,11 +29,14 @@ const statusLabels: Record<Listing['status'], string> = {
 type ListingRowProps = {
   listing: ListingWithSizes;
   listingFeeActive: boolean;
+  /** Admin with the fee on: a pending row also offers "Publish for free". */
+  isFeeWaivable: boolean;
 };
 
 export default function ListingRow({
   listing,
   listingFeeActive,
+  isFeeWaivable,
 }: ListingRowProps) {
   const sizes = sortListingSizes(listing.sizes);
   const isSetOnly = listing.sell_mode === 'set_only';
@@ -152,9 +155,16 @@ export default function ListingRow({
           </Button>
         )}
         {isPendingPayment && (
-          <CompletePaymentButton
+          <PublishListingButton
             listingId={listing.id}
             label={listingFeeActive ? 'Complete Payment' : 'Publish'}
+          />
+        )}
+        {isPendingPayment && isFeeWaivable && (
+          <PublishListingButton
+            listingId={listing.id}
+            label="Publish for free"
+            isFeeWaived
           />
         )}
         {(listing.status === 'active' || isPendingPayment) && (

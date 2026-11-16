@@ -21,6 +21,11 @@ const FLASH_TOASTS: Record<string, FlashToast> = {
     message: "Couldn't start checkout",
     description: 'Your listing is saved. Please retry payment.',
   },
+  'publish-unavailable': {
+    variant: 'error',
+    message: "Couldn't publish listing",
+    description: 'Your listing is saved. Try publishing again.',
+  },
 };
 
 export function DashboardFlashToast() {

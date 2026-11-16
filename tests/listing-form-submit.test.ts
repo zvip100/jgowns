@@ -506,6 +506,36 @@ describe("useListingFormSubmit", () => {
     expect(loadingSetterValues()).toEqual([true, false]);
   });
 
+  // The fee is charged once, at creation; an edit has nothing to waive.
+  it("never sends the waiver request on an edit", async () => {
+    const initial = makeInitialForm();
+    hookState.refOverrides.set(REF_INITIAL_FORM, {
+      ...initial,
+      contact_phone: "5551112222",
+    });
+    hookState.overrides.set(STATE_FORM, {
+      ...initial,
+      title: "Updated Gown",
+      contact_phone: "5551112222",
+    });
+
+    const submit = useListingFormSubmit({
+      initial,
+      listingId: LISTING_ID,
+      slots: [makeSlot()],
+      resolveUploadFile: vi.fn(),
+      isFeeWaived: true,
+    });
+
+    await submit.handleSubmit();
+
+    const formData = mockUpdateListing.mock.calls[0]?.[1];
+    if (!(formData instanceof FormData)) {
+      throw new Error("Expected updateListing to receive FormData.");
+    }
+    expect(formData.get("waive_fee")).toBeNull();
+  });
+
   it("calls updateListing when only the size rows change", async () => {
     const initial = makeInitialForm();
     hookState.overrides.set(STATE_ROWS, [
@@ -673,6 +703,7 @@ describe("useListingFormSubmit", () => {
       // The server owns status (fee-active listings start pending_payment),
       // so the form never submits it.
       expect(formData.get("status")).toBeNull();
+      expect(formData.get("waive_fee")).toBeNull();
       expect(formData.get("existing_url_0")).toBe(EXISTING_URL);
       expect(formData.get("blur_0")).toBe(BLUR_DATA_URL);
       expect(formData.get("image_file_0")).toBeNull();
@@ -680,6 +711,24 @@ describe("useListingFormSubmit", () => {
       expect(mockPush).not.toHaveBeenCalled();
       expect(errorSetterValues()).toEqual([EMPTY_LISTING_ERRORS]);
       expect(loadingSetterValues()).toEqual([true, false]);
+    });
+
+    it("sends the waiver request when the admin chose Publish for free", async () => {
+      setValidCreateState();
+
+      const submit = useListingFormSubmit({
+        slots: [makeSlot()],
+        resolveUploadFile: vi.fn(),
+        isFeeWaived: true,
+      });
+
+      await submit.handleSubmit();
+
+      const formData = mockCreateListing.mock.calls[0]?.[0];
+      if (!(formData instanceof FormData)) {
+        throw new Error("Expected createListing to receive FormData.");
+      }
+      expect(formData.get("waive_fee")).toBe("true");
     });
 
     it("trims text fields and falls back to empty optional values", async () => {

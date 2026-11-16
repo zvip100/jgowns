@@ -7,10 +7,8 @@ import { FORM_HINT_CLASS } from '@/components/form/constants';
 import { FormInfoBanner } from '@/components/form/FormInfoBanner';
 import { FormSection } from '@/components/form/FormSection';
 import { InputGroupField } from '@/components/form/InputGroupField';
-import { Checkbox } from '@/components/ui/checkbox';
+import { LabeledCheckbox } from '@/components/form/LabeledCheckbox';
 import { FieldDescription } from '@/components/ui/field';
-import { Label } from '@/components/ui/label';
-import { CHECKBOX_GOLD_CLASS } from '@/lib/styles';
 import { cn } from '@/lib/utils';
 
 import type { ListingSizesController } from '@/hooks/useListingFormSubmit';
@@ -70,17 +68,13 @@ export function ListingSizesField({
 
         {hasMultipleSizes && (
           <div className="flex flex-col gap-4 rounded-xl border border-(--line) bg-(--bg-cream)/60 p-4">
-            <div className="flex items-center gap-2.5">
-              <Checkbox
-                id="sell-only-as-set"
-                checked={sellOnlyAsSet}
-                className={CHECKBOX_GOLD_CLASS}
-                onCheckedChange={(checked) => setSellOnlyAsSet(checked === true)}
-              />
-              <Label htmlFor="sell-only-as-set" className="font-normal">
-                Sell as a complete set only
-              </Label>
-            </div>
+            <LabeledCheckbox
+              id="sell-only-as-set"
+              label="Sell as a complete set only"
+              checked={sellOnlyAsSet}
+              className="gap-2.5"
+              onCheckedChange={setSellOnlyAsSet}
+            />
             <div>
               <InputGroupField
                 id="bundle-price"

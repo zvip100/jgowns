@@ -26,8 +26,9 @@ import { deleteListingImages } from "@/lib/actions/images";
 import { uploadListingImage } from "@/lib/images/storage";
 import { listingInputSchema } from "@/lib/validations/listing-schema";
 
-/** One-shot flag consumed by DashboardFlashToast, mirroring the edit flow. */
+/** One-shot flags consumed by DashboardFlashToast, mirroring the edit flow. */
 const CHECKOUT_UNAVAILABLE_REDIRECT = "/dashboard?toast=checkout-unavailable";
+const PUBLISH_UNAVAILABLE_REDIRECT = "/dashboard?toast=publish-unavailable";
 
 type ImageSlot = {
   file: File | null;
@@ -79,6 +80,8 @@ export async function createListing(
   const auth = await getAuthClient();
   if (!auth.ok) return { error: auth.error };
   const { supabase } = auth;
+  // Only a request; createListingCheckout honors it for admins alone.
+  const isWaiverRequested = formData.get("waive_fee") === "true";
 
   let shouldRedirect = false;
   let hasCommitted = false;
@@ -198,13 +201,22 @@ export async function createListing(
     // One door out of pending_payment for both modes: Stripe when the fee is
     // on, the service-role publish when it is off. A seller's own client cannot
     // make that transition at all now, so this action must not try.
-    const checkout = await createListingCheckout(createdListingId);
+    const checkout = await createListingCheckout(
+      createdListingId,
+      isWaiverRequested,
+    );
     // Only reachable when it failed; success redirects, to Stripe or to the
     // dashboard. The listing is committed, so leave the populated form behind
     // rather than returning the error into it and inviting a duplicate
     // submission. The flag carries the reason across the redirect
     // (DashboardFlashToast).
-    if (checkout?.error) redirect(CHECKOUT_UNAVAILABLE_REDIRECT);
+    if (checkout?.error) {
+      redirect(
+        isWaiverRequested
+          ? PUBLISH_UNAVAILABLE_REDIRECT
+          : CHECKOUT_UNAVAILABLE_REDIRECT,
+      );
+    }
     return checkout;
   }
   return {};
