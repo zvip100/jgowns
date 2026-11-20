@@ -33,7 +33,7 @@ export function CopyButton({
       if (contactProperties) {
         captureEvent(BUYER_EVENTS.contactCopied, contactProperties);
       }
-      toast.success('Link copied');
+      toast.success('Copied to clipboard');
       setTimeout(() => setCopied(false), 1500);
     } catch (error) {
       captureClientException(error, 'browse.copyButton.copy');

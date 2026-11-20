@@ -40,8 +40,8 @@ describe("toast helper", () => {
   });
 
   it("success forwards a bare message with no options", () => {
-    toast.success("Link copied");
-    expect(mockSuccess).toHaveBeenCalledWith("Link copied", undefined);
+    toast.success("Copied to clipboard");
+    expect(mockSuccess).toHaveBeenCalledWith("Copied to clipboard", undefined);
   });
 
   it("info forwards message and options", () => {
