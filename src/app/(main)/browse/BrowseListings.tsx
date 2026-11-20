@@ -10,6 +10,7 @@ import { fetchListingsPage } from "@/lib/queries/listings";
 import type { PageSearchParams } from "@/lib/types";
 
 import BrowsePagination from "./BrowsePagination";
+import BrowseScrollRestorer from "./BrowseScrollRestorer";
 import ListingsGrid from "./ListingsGrid";
 
 type BrowseListingsProps = {
@@ -59,6 +60,7 @@ export default async function BrowseListings({
           searchParams={resolved}
         />
       ) : null}
+      <BrowseScrollRestorer href={browseHref(filters, page)} />
     </>
   );
 }

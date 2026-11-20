@@ -1,7 +1,7 @@
 import type { ReactElement, ReactNode } from "react";
 
 type ReactModule = typeof import("react");
-type Effect = { run: () => void | (() => void); deps?: unknown[] };
+type Effect = { run: () => void | (() => void); deps?: unknown[]; isLayout: boolean };
 
 /** Hook state by call order, like React's own, so a test can render, act and render again. */
 export const harness = {
@@ -63,8 +63,11 @@ export function mockReact(actual: ReactModule): ReactModule {
       return harness.refs[index];
     }) as ReactModule["useRef"],
     useEffect: ((run: Effect["run"], deps?: unknown[]) => {
-      harness.effects.push({ run, deps });
+      harness.effects.push({ run, deps, isLayout: false });
     }) as ReactModule["useEffect"],
+    useLayoutEffect: ((run: Effect["run"], deps?: unknown[]) => {
+      harness.effects.push({ run, deps, isLayout: true });
+    }) as ReactModule["useLayoutEffect"],
     useMemo: ((factory: () => unknown) => factory()) as ReactModule["useMemo"],
     useCallback: ((callback: unknown) => callback) as ReactModule["useCallback"],
   };

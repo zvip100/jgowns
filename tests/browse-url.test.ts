@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import { parseBrowsePage } from "@/lib/browse-pagination";
 import { browseHref, browseHrefFromBack, browseQueryString } from "@/lib/browse-url";
 import type { BrowseFilters } from "@/lib/types";
 
@@ -145,6 +146,27 @@ describe("browse-url", () => {
     it("drops unknown params", () => {
       const href = browseHrefFromBack("category=bridal&foo=bar");
       expect(href).toBe("/browse?category=bridal");
+    });
+
+    it.each(["page=2junk", "page=0", "page=-1", "page=1.5", "page="])(
+      "resolves the malformed %s to page 1, as the list itself does",
+      (back) => {
+        expect(browseHrefFromBack(back)).toBe("/browse");
+        expect(browseHrefFromBack(`category=bridal&${back}`)).toBe("/browse?category=bridal");
+      },
+    );
+
+    it("caps the page at the list maximum", () => {
+      expect(browseHrefFromBack("page=10000")).toBe("/browse?page=10000");
+      expect(browseHrefFromBack("page=10001")).toBe("/browse?page=10000");
+      expect(browseHrefFromBack("page=99999999")).toBe("/browse?page=10000");
+    });
+
+    it("agrees with the page the list renders for every page value", () => {
+      for (const raw of ["2", "02", "2junk", "0", "-3", "10001", "abc", ""]) {
+        const rendered = browseHref({}, parseBrowsePage({ page: raw }));
+        expect(browseHrefFromBack(`page=${raw}`)).toBe(rendered);
+      }
     });
   });
 });
