@@ -3,10 +3,9 @@ import {
   formatBrowseParamList,
   toPageSearchParams,
 } from "@/lib/browse-params";
-import { formatBrowsePage } from "@/lib/browse-pagination";
+import { formatBrowsePage, parseBrowsePage } from "@/lib/browse-pagination";
 import { parseBrowseFilters } from "@/lib/browse-filters";
 import type { BrowseFilters } from "@/lib/types";
-import { firstParam } from "@/lib/utils";
 
 function filtersToSearchParams(
   filters: BrowseFilters,
@@ -54,9 +53,6 @@ export function browseHrefFromBack(back: string | undefined): string {
   }
 
   const params = toPageSearchParams(new URLSearchParams(trimmed));
-  const filters = parseBrowseFilters(params);
-  const pageRaw = firstParam(params.page);
-  const page = pageRaw ? Number.parseInt(pageRaw, 10) : 1;
 
-  return browseHref(filters, Number.isFinite(page) && page > 1 ? page : 1);
+  return browseHref(parseBrowseFilters(params), parseBrowsePage(params));
 }

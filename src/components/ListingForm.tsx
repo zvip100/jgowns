@@ -43,7 +43,7 @@ function publishingFeeNote(
   chargedFeeCents: number | undefined,
   isFeeWaived: boolean,
 ): string {
-  if (chargedFeeCents) return 'Pay securely with Stripe at checkout.';
+  if (chargedFeeCents) return 'Pay securely with Stripe.';
   if (isFeeWaived) return 'No charge for this listing.';
   return 'Waived for a limited time.';
 }

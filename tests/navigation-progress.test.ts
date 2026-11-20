@@ -5,13 +5,19 @@ import type { ReactElement, ReactNode } from "react";
 type Store = typeof import("@/lib/navigation-progress");
 type Props = Record<string, unknown>;
 
-const { effects, mockHandleRouterTransitionStart, mockInitAnalytics, routerState } =
-  vi.hoisted(() => ({
-    effects: [] as (() => void | (() => void))[],
-    mockHandleRouterTransitionStart: vi.fn(),
-    mockInitAnalytics: vi.fn(),
-    routerState: { pathname: "/", search: "" },
-  }));
+const {
+  effects,
+  mockHandleRouterTransitionStart,
+  mockInitAnalytics,
+  mockTrackBrowseReturn,
+  routerState,
+} = vi.hoisted(() => ({
+  effects: [] as (() => void | (() => void))[],
+  mockHandleRouterTransitionStart: vi.fn(),
+  mockInitAnalytics: vi.fn(),
+  mockTrackBrowseReturn: vi.fn(),
+  routerState: { pathname: "/", search: "" },
+}));
 
 vi.mock("react", async () => {
   const actual = await vi.importActual<typeof import("react")>("react");
@@ -36,6 +42,10 @@ vi.mock("next/navigation", () => ({
 vi.mock("@/lib/analytics/client", () => ({
   handleRouterTransitionStart: mockHandleRouterTransitionStart,
   initAnalytics: mockInitAnalytics,
+}));
+
+vi.mock("@/lib/browse-return", () => ({
+  trackBrowseReturn: mockTrackBrowseReturn,
 }));
 
 async function loadStore(): Promise<Store> {
@@ -86,6 +96,7 @@ beforeEach(() => {
   routerState.search = "";
   mockHandleRouterTransitionStart.mockClear();
   mockInitAnalytics.mockClear();
+  mockTrackBrowseReturn.mockClear();
 });
 
 afterEach(() => {
@@ -410,10 +421,22 @@ describe("onRouterTransitionStart", () => {
     const store = await loadStore();
     const { onRouterTransitionStart } = await import("@/instrumentation-client");
 
-    onRouterTransitionStart("/browse");
+    onRouterTransitionStart("/browse", "push");
 
     expect(mockInitAnalytics).toHaveBeenCalledTimes(1);
     expect(mockHandleRouterTransitionStart).toHaveBeenCalledWith("/browse");
     expect(store.getNavigationProgress().isPending).toBe(true);
   });
+
+  it.each(["push", "replace", "traverse"] as const)(
+    "hands a %s navigation to the list-position tracker with its type",
+    async (navigationType) => {
+      const { onRouterTransitionStart } = await import("@/instrumentation-client");
+
+      onRouterTransitionStart("/browse/abc", navigationType);
+
+      expect(mockTrackBrowseReturn).toHaveBeenCalledTimes(1);
+      expect(mockTrackBrowseReturn).toHaveBeenCalledWith("/browse/abc", navigationType);
+    },
+  );
 });

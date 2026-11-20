@@ -119,6 +119,15 @@
     scrollbar-gutter: stable;
   }
 
+  /* `scrollbar-gutter: stable` keeps the scrollbar's space reserved while a
+     dropdown, dialog or sheet locks scrolling, so the lock's own compensating
+     margin would move the page sideways. */
+  @supports (scrollbar-gutter: stable) {
+    html body[data-scroll-locked] {
+      margin-right: 0 !important;
+    }
+  }
+
   body {
     margin: 0;
     /* `overflow-x: clip` lets sticky/secondary-nav children safely use the
