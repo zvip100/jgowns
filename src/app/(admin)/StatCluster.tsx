@@ -39,7 +39,11 @@ export function statClusterCellsClass(count: number): string {
     // exists to avoid.
     count % 2 === 0 && "@min-[15rem]:grid-cols-2",
     count > 1 &&
+      count <= 4 &&
       "@min-[24rem]:auto-cols-fr @min-[24rem]:grid-flow-col @min-[24rem]:grid-cols-none",
+    // Past four cells one row needs twice the width, or each cell gets ~40px.
+    count > 4 &&
+      "@min-[48rem]:auto-cols-fr @min-[48rem]:grid-flow-col @min-[48rem]:grid-cols-none",
   );
 }
 

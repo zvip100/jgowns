@@ -237,6 +237,12 @@ describe("statClusterCellsClass", () => {
     expect(statClusterCellsClass(3)).toContain("@min-[24rem]:grid-flow-col");
     expect(statClusterCellsClass(1)).not.toContain("grid-flow-col");
   });
+
+  it("waits for a wider container before putting more than four cells in one row", () => {
+    expect(statClusterCellsClass(4)).toContain("@min-[24rem]:grid-flow-col");
+    expect(statClusterCellsClass(6)).toContain("@min-[48rem]:grid-flow-col");
+    expect(statClusterCellsClass(6)).not.toContain("@min-[24rem]");
+  });
 });
 
 describe("TrafficChart", () => {

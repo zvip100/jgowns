@@ -82,7 +82,7 @@ type TrafficConfig = { apiKey: string; projectId: string };
 const envelopeSchema = z.object({
   columns: z.array(z.string()),
   results: z.array(z.array(z.unknown())),
-  last_refresh: z.iso.datetime({ offset: true }).optional(),
+  last_refresh: z.iso.datetime({ offset: true }).nullish(),
   endpoint_version: z.number().int().optional(),
 });
 

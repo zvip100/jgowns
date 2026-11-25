@@ -1,5 +1,3 @@
-import React from "react";
-import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next/cache", () => ({ cacheLife: vi.fn(), cacheTag: vi.fn() }));
@@ -23,8 +21,7 @@ import {
 } from "@/app/(admin)/admin/traffic/traffic-format";
 import { formatDayLabel } from "@/lib/admin/list";
 
-import type { ReactElement } from "react";
-import type { TrafficResult, TrafficWeekly } from "@/lib/admin/types";
+import type { TrafficResult } from "@/lib/admin/types";
 
 const API_KEY = "phx_test_key_never_logged";
 const AS_OF = "2026-11-20";
@@ -169,8 +166,8 @@ describe("getTrafficWeekly", () => {
     expect(Object.values(result.data.lastWeek).every((value) => value === 0)).toBe(true);
   });
 
-  it("leaves freshness unknown when PostHog sends no last_refresh", async () => {
-    respond(envelope(WEEKLY_COLUMNS, [THIS_WEEK_ROW], { last_refresh: undefined }));
+  it.each([undefined, null])("leaves freshness unknown when last_refresh is %s", async (lastRefresh) => {
+    respond(envelope(WEEKLY_COLUMNS, [THIS_WEEK_ROW], { last_refresh: lastRefresh }));
 
     const result = await getTrafficWeekly(AS_OF);
 
