@@ -1,4 +1,5 @@
 import { ADMIN_METRICS_WEEKS } from "@/lib/admin/constants";
+import { formatDayLabel } from "@/lib/admin/list";
 import { createClient } from "@/lib/supabase/server";
 
 import { fetchStats } from "./overview";
@@ -23,20 +24,9 @@ type MetricsSeriesRow = {
   fees_collected_cents: number;
 };
 
-/**
- * Pinned to UTC on purpose. `week_start` arrives as a bare yyyy-mm-dd, which
- * parses as UTC midnight, so formatting it in a negative-offset zone would
- * label every bucket with the previous day.
- */
-const WEEK_LABEL_FORMAT = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  timeZone: "UTC",
-});
-
 function toMetricsPoint(row: MetricsSeriesRow): AdminMetricsPoint {
   return {
-    week: WEEK_LABEL_FORMAT.format(new Date(row.week_start)),
+    week: formatDayLabel(row.week_start),
     listings_created: Number(row.listings_created),
     listings_sold: Number(row.listings_sold),
     new_users: Number(row.new_users),

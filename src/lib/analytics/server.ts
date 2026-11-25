@@ -2,6 +2,8 @@ import { after } from "next/server";
 import { PostHog } from "posthog-node";
 import { z } from "zod";
 
+import { APP_ENVIRONMENT } from "@/lib/site";
+
 import type { AnalyticsEventName, AnalyticsProperties } from "./events";
 
 const PROJECT_TOKEN = process.env.NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN;
@@ -49,6 +51,14 @@ function toError(value: unknown): Error {
 }
 
 /**
+ * Every server event and exception carries `environment`, set last so a
+ * caller's properties can never drop or override it.
+ */
+function withEnvironment(properties?: AnalyticsProperties): AnalyticsProperties {
+  return { ...properties, environment: APP_ENVIRONMENT };
+}
+
+/**
  * Runs the work after the response is sent, so reporting never sits in front of
  * the user. Returns false outside a request scope (tests, scripts), where the
  * caller has to await instead.
@@ -79,7 +89,11 @@ export async function captureServerException(
 
     // No distinctId: §2.1 keeps everything anonymous, and posthog-node then
     // mints a throwaway id and sets $process_person_profile false itself.
-    await client.captureExceptionImmediate(toError(error), undefined, properties);
+    await client.captureExceptionImmediate(
+      toError(error),
+      undefined,
+      withEnvironment(properties),
+    );
   } catch (captureError) {
     console.error("[analytics] failed to report a server exception:", captureError);
   } finally {
@@ -127,7 +141,7 @@ async function sendServerEvent(
     client = createClient();
     if (!client) return;
 
-    await client.captureImmediate({ event, properties });
+    await client.captureImmediate({ event, properties: withEnvironment(properties) });
   } catch (captureError) {
     console.error(`[analytics] failed to capture ${event}:`, captureError);
   } finally {

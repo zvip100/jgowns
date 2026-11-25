@@ -32,6 +32,7 @@ const ORIGINAL_ENV = { ...process.env };
 const CONFIGURED = {
   NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: "phc_test",
   NEXT_PUBLIC_POSTHOG_HOST: "https://ph.jgowns.com",
+  NEXT_PUBLIC_SITE_URL: "https://jgowns.com",
 };
 
 async function importFresh(env: Record<string, string | undefined> = CONFIGURED) {
@@ -72,6 +73,7 @@ describe("captureServerException", () => {
     ]);
     expect(captureExceptionImmediate).toHaveBeenCalledWith(error, undefined, {
       scope: "test",
+      environment: "production",
     });
     expect(shutdown).toHaveBeenCalledTimes(1);
   });
@@ -159,6 +161,7 @@ describe("captureServerError", () => {
       listing_id: "l1",
       scope: "payments.confirmListingPayment.recordPayment",
       kind: "exception",
+      environment: "production",
     });
   });
 
@@ -172,6 +175,7 @@ describe("captureServerError", () => {
     expect(captureExceptionImmediate.mock.calls[0][2]).toEqual({
       scope: "contact.notify.config",
       kind: "config",
+      environment: "production",
     });
   });
 
@@ -235,7 +239,7 @@ describe("captureServerEvent", () => {
 
     expect(captureImmediate).toHaveBeenCalledWith({
       event: "payment_confirmed",
-      properties: { listing_id: "l1", fee_cents: 500 },
+      properties: { listing_id: "l1", fee_cents: 500, environment: "production" },
     });
     expect(shutdown).toHaveBeenCalledTimes(1);
   });
@@ -277,8 +281,64 @@ describe("captureServerEvent", () => {
     await scheduled!();
     expect(captureImmediate).toHaveBeenCalledWith({
       event: "checkout_started",
-      properties: { listing_id: "l1", fee_cents: 500 },
+      properties: { listing_id: "l1", fee_cents: 500, environment: "production" },
     });
     expect(shutdown).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("environment tag", () => {
+  const LOCAL = { ...CONFIGURED, NEXT_PUBLIC_SITE_URL: "http://localhost:3000" };
+
+  it("tags an event from a local site as development", async () => {
+    const { captureServerEvent } = await importFresh(LOCAL);
+    await captureServerEvent("register_completed", { method: "email" });
+
+    expect(captureImmediate).toHaveBeenCalledWith({
+      event: "register_completed",
+      properties: { method: "email", environment: "development" },
+    });
+  });
+
+  it("tags an event with no properties of its own", async () => {
+    const { captureServerEvent } = await importFresh(LOCAL);
+    await captureServerEvent("listing_submitted");
+
+    expect(captureImmediate.mock.calls[0][0].properties).toEqual({
+      environment: "development",
+    });
+  });
+
+  it("tags an exception on both the direct and the logged path", async () => {
+    const { captureServerError, captureServerException } = await importFresh(LOCAL);
+    await captureServerException(new Error("a"));
+    await captureServerError({ scope: "test" }, new Error("b"));
+
+    expect(captureExceptionImmediate.mock.calls[0][2]).toEqual({
+      environment: "development",
+    });
+    expect(captureExceptionImmediate.mock.calls[1][2]).toMatchObject({
+      environment: "development",
+    });
+  });
+
+  it("cannot be dropped or overridden by a caller", async () => {
+    const { captureServerError, captureServerEvent, captureServerException } =
+      await importFresh(LOCAL);
+    await captureServerEvent("payment_confirmed", {
+      listing_id: "l1",
+      environment: "production",
+    });
+    await captureServerEvent("payment_confirmed", { environment: undefined });
+    await captureServerException(new Error("x"), { environment: null });
+    await captureServerError(
+      { scope: "test", properties: { environment: "production" } },
+      new Error("y"),
+    );
+
+    expect(captureImmediate.mock.calls[0][0].properties.environment).toBe("development");
+    expect(captureImmediate.mock.calls[1][0].properties.environment).toBe("development");
+    expect(captureExceptionImmediate.mock.calls[0][2].environment).toBe("development");
+    expect(captureExceptionImmediate.mock.calls[1][2].environment).toBe("development");
   });
 });

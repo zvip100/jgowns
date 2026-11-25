@@ -1,3 +1,4 @@
+import { STAT_CLUSTER_SURFACE_CLASS } from "@/lib/styles";
 import { cn } from "@/lib/utils";
 
 import type { LucideIcon } from "lucide-react";
@@ -27,6 +28,22 @@ const TONE_CLASS: Record<StatClusterTone, string> = {
 };
 
 /**
+ * The cell grid for `count` stats, shared with loading skeletons so a fallback
+ * takes the same shape as the cluster it stands in for.
+ */
+export function statClusterCellsClass(count: number): string {
+  return cn(
+    "grid flex-1 grid-cols-1 gap-x-6 gap-y-4 px-4 py-3.5",
+    // The two-column step only runs for even counts: three cells in two
+    // columns would strand an empty half, which is the thing this layout
+    // exists to avoid.
+    count % 2 === 0 && "@min-[15rem]:grid-cols-2",
+    count > 1 &&
+      "@min-[24rem]:auto-cols-fr @min-[24rem]:grid-flow-col @min-[24rem]:grid-cols-none",
+  );
+}
+
+/**
  * A named group of related numbers. Category comes from the header glyph and
  * the group itself, so the accent stays rare instead of repeating on every
  * number. Cells lay themselves out from the cluster's own width (`@container`)
@@ -43,10 +60,7 @@ export function StatCluster({
   return (
     <section
       aria-label={label}
-      className={cn(
-        "stat-surface @container flex flex-col overflow-hidden rounded-2xl",
-        className,
-      )}
+      className={cn(STAT_CLUSTER_SURFACE_CLASS, className)}
     >
       <div
         className={cn(
@@ -60,17 +74,7 @@ export function StatCluster({
         </h3>
       </div>
 
-      <dl
-        className={cn(
-          "grid flex-1 grid-cols-1 gap-x-6 gap-y-4 px-4 py-3.5",
-          // The two-column step only runs for even counts: three cells in two
-          // columns would strand an empty half, which is the thing this layout
-          // exists to avoid.
-          items.length % 2 === 0 && "@min-[15rem]:grid-cols-2",
-          items.length > 1 &&
-            "@min-[24rem]:auto-cols-fr @min-[24rem]:grid-flow-col @min-[24rem]:grid-cols-none",
-        )}
-      >
+      <dl className={statClusterCellsClass(items.length)}>
         {items.map((item) => (
           <div key={item.label} className="min-w-0">
             <dt className="text-[0.62rem] font-semibold tracking-[0.18em] text-(--muted-ink) uppercase">

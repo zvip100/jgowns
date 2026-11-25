@@ -7,6 +7,7 @@ const posthogMock = {
   capture: vi.fn(),
   captureException: vi.fn(),
   init: vi.fn(),
+  register: vi.fn(),
   startSessionRecording: vi.fn(),
   stopSessionRecording: vi.fn(),
 };
@@ -48,6 +49,7 @@ beforeEach(() => {
   posthogMock.capture.mockClear();
   posthogMock.captureException.mockClear();
   posthogMock.init.mockClear();
+  posthogMock.register.mockClear();
   posthogMock.startSessionRecording.mockClear();
   posthogMock.stopSessionRecording.mockClear();
   stubWindow("http://localhost:3000/browse");
@@ -181,6 +183,27 @@ describe("initAnalytics", () => {
       disable_session_recording: false,
       before_send: filterOutgoingEvent,
     });
+  });
+
+  it("registers the environment so every browser event carries it", async () => {
+    const live = await importFresh({ ...CONFIGURED, NEXT_PUBLIC_SITE_URL: "https://jgowns.com" });
+    live.initAnalytics();
+    expect(posthogMock.register).toHaveBeenCalledWith({ environment: "production" });
+
+    posthogMock.register.mockClear();
+    const local = await importFresh({ ...CONFIGURED, NEXT_PUBLIC_SITE_URL: "http://localhost:3000" });
+    local.initAnalytics();
+    expect(posthogMock.register).toHaveBeenCalledWith({ environment: "development" });
+  });
+
+  it("registers nothing when PostHog does not initialize", async () => {
+    const { initAnalytics } = await importFresh({
+      ...CONFIGURED,
+      NEXT_PUBLIC_POSTHOG_PROJECT_TOKEN: undefined,
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    initAnalytics();
+    expect(posthogMock.register).not.toHaveBeenCalled();
   });
 
   it("starts with session recording off when the first page is an admin page", async () => {

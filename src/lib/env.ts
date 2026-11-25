@@ -26,7 +26,7 @@ const URL_SERVER_ENV = [
   "NEXT_PUBLIC_SITE_URL",
 ] as const satisfies readonly RequiredServerEnvVar[];
 
-type EnvRecord = Record<string, string | undefined>;
+export type EnvRecord = Record<string, string | undefined>;
 
 function isAbsoluteHttpUrl(value: string): boolean {
   try {

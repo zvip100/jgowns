@@ -1,7 +1,7 @@
 import { unstable_rethrow } from "next/navigation";
 import posthog from "posthog-js";
 
-import { POSTHOG_UI_HOST } from "@/lib/site";
+import { APP_ENVIRONMENT, POSTHOG_UI_HOST } from "@/lib/site";
 
 import type { AnalyticsEventName, AnalyticsProperties } from "./events";
 import type { BeforeSendFn } from "posthog-js";
@@ -109,6 +109,8 @@ export function initAnalytics(): void {
       disable_session_recording: isAdminAnalyticsUrl(window.location.href),
       before_send: filterOutgoingEvent,
     });
+    // The same tag the server events carry, so one PostHog rule covers both.
+    posthog.register({ environment: APP_ENVIRONMENT });
   } catch (error) {
     console.error("[analytics] PostHog failed to initialize:", error);
   }

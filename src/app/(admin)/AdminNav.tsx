@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  Activity,
   CreditCard,
   LayoutDashboard,
   LineChart,
@@ -32,6 +33,7 @@ const NAV: AdminNavItem[] = [
   { href: "/admin/payments", label: "Payments", icon: CreditCard },
   { href: "/admin/logs", label: "Logs", icon: ScrollText },
   { href: "/admin/metrics", label: "Metrics", icon: LineChart },
+  { href: "/admin/traffic", label: "Traffic", icon: Activity },
 ];
 
 /** The only part of the sidebar that needs the client: `usePathname` for the active link. */

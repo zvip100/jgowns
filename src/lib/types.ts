@@ -12,6 +12,9 @@ export const LISTING_STATUSES = [
 
 export type ListingStatus = (typeof LISTING_STATUSES)[number];
 
+/** Where the app is running, as tagged on every analytics event. */
+export type AppEnvironment = 'production' | 'development';
+
 export type Listing = {
   id: string;
   user_id: string;

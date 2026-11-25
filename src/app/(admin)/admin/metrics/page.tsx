@@ -3,7 +3,7 @@ import { CreditCard, Shirt, TrendingUp } from "lucide-react";
 
 import { ADMIN_EMPTY_VALUE } from "@/lib/admin/constants";
 import { getAdminMetrics } from "@/lib/queries/admin/metrics";
-import { POSTHOG_PROJECT_URL } from "@/lib/site";
+import { ADMIN_STAT_GRID_CLASS } from "@/lib/styles";
 
 import { GOWN_CONDITIONS, SELL_MODES } from "@/lib/types";
 
@@ -13,7 +13,6 @@ import {
   adminLocationShareLabel,
   adminPriceBandLabel,
 } from "../../admin-audit-labels";
-import { AdminExternalLink } from "../../AdminExternalLink";
 import { AdminFact } from "../../AdminFact";
 import { AdminPageHeader } from "../../AdminPageHeader";
 import { AdminSectionHeading } from "../../AdminSectionHeading";
@@ -98,16 +97,11 @@ export default async function AdminMetricsPage() {
         eyebrow="Admin"
         title="Metrics"
         description="Marketplace aggregates computed from the database."
-        action={
-          <AdminExternalLink href={POSTHOG_PROJECT_URL}>
-            Open PostHog
-          </AdminExternalLink>
-        }
       />
 
       <section
         aria-label="Summary"
-        className="grid grid-cols-2 gap-3 lg:grid-cols-12"
+        className={ADMIN_STAT_GRID_CLASS}
       >
         <StatCluster
           label="Listings"

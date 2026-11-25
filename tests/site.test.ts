@@ -93,3 +93,54 @@ describe("POSTHOG_PROJECT_URL", () => {
     expect(console.error).not.toHaveBeenCalled();
   });
 });
+
+describe("appEnvironmentFor", () => {
+  it("reads local and private-network hosts as development", async () => {
+    const { appEnvironmentFor } = await importFresh();
+    for (const url of [
+      "http://localhost:3000",
+      "http://jgowns.localhost:3000",
+      "http://127.0.0.1:3000",
+      "http://0.0.0.0:3000",
+      "http://[::1]:3000",
+      "http://10.0.0.5:3000",
+      "http://192.168.1.4:3000",
+      "http://172.16.0.2:3000",
+      "http://172.31.255.1:3000",
+      "http://localhost.:3000",
+      "http://jgowns.localhost.:3000",
+    ]) {
+      expect(appEnvironmentFor(url)).toBe("development");
+    }
+  });
+
+  it("reads every other host as production, whatever its port or scheme", async () => {
+    const { appEnvironmentFor } = await importFresh();
+    for (const url of [
+      "https://jgowns.com",
+      "https://www.jgowns.com",
+      "https://jgowns.up.railway.app",
+      "http://172.32.0.1",
+      "http://11.0.0.1",
+      "https://localhost.example.com",
+    ]) {
+      expect(appEnvironmentFor(url)).toBe("production");
+    }
+  });
+});
+
+describe("APP_ENVIRONMENT", () => {
+  it("follows NEXT_PUBLIC_SITE_URL, not NODE_ENV", async () => {
+    const local = await importFresh({
+      NODE_ENV: "production",
+      NEXT_PUBLIC_SITE_URL: "http://localhost:3000",
+    });
+    expect(local.APP_ENVIRONMENT).toBe("development");
+
+    const live = await importFresh({
+      NODE_ENV: "development",
+      NEXT_PUBLIC_SITE_URL: "https://jgowns.com",
+    });
+    expect(live.APP_ENVIRONMENT).toBe("production");
+  });
+});
