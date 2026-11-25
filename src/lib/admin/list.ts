@@ -117,6 +117,21 @@ export function queueCutoffDate(days: number, asOf: string): string {
 
 export const DAY_MS = 24 * 60 * 60 * 1000;
 
+/**
+ * Pinned to UTC on purpose: a bare yyyy-mm-dd parses as UTC midnight, so a
+ * negative-offset zone would label it with the previous day.
+ */
+const DAY_LABEL_FORMAT = new Intl.DateTimeFormat("en-US", {
+  month: "short",
+  day: "numeric",
+  timeZone: "UTC",
+});
+
+/** "Nov 20" for a bare yyyy-mm-dd (Metrics week buckets, Traffic days). */
+export function formatDayLabel(day: string): string {
+  return DAY_LABEL_FORMAT.format(new Date(day));
+}
+
 const ZONE_OFFSET_FORMAT = new Intl.DateTimeFormat("en-US", {
   timeZone: APP_TIME_ZONE,
   timeZoneName: "longOffset",

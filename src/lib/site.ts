@@ -1,3 +1,5 @@
+import type { AppEnvironment } from "@/lib/types";
+
 const FALLBACK_SITE_URL = "https://jgowns.com";
 const FALLBACK_POSTHOG_PROJECT_URL = "https://us.posthog.com";
 
@@ -40,6 +42,24 @@ function resolvePostHogProjectUrl(): URL {
 /** Canonical origin (no trailing slash), e.g. `https://jgowns.com`. */
 export const SITE_URL = resolveSiteUrl();
 
+/** Loopback, `*.localhost` and private-network IPv4 hosts, where a dev server runs. */
+const LOCAL_HOST_PATTERN =
+  /^(localhost|.+\.localhost|0\.0\.0\.0|\[::1\]|127(\.\d{1,3}){3}|10(\.\d{1,3}){3}|192\.168(\.\d{1,3}){2}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2})$/;
+
+/** "development" for a site on a local or private address, "production" for any other host. */
+export function appEnvironmentFor(siteUrl: string): AppEnvironment {
+  // A trailing dot is still the same host (`localhost.` is localhost).
+  const hostname = new URL(siteUrl).hostname.replace(/\.$/, "");
+  return LOCAL_HOST_PATTERN.test(hostname) ? "development" : "production";
+}
+
+/**
+ * Tags every analytics event so PostHog can filter out local traffic. Taken
+ * from the site URL, not NODE_ENV, because `next start` on a laptop reports
+ * "production".
+ */
+export const APP_ENVIRONMENT = appEnvironmentFor(SITE_URL);
+
 /**
  * Placeholder support address — swap for the real mailbox in one line.
  * Referenced by the footer, contact page, and legal documents.
@@ -49,7 +69,7 @@ export const CONTACT_EMAIL = "info@jgowns.com";
 const posthogProjectUrl = resolvePostHogProjectUrl();
 
 /**
- * Validated PostHog project link target for /admin/metrics. Optional like the
+ * Validated PostHog project link target for /admin/traffic. Optional like the
  * rest of the analytics config, so an unset or unusable value falls back to the
  * PostHog app rather than rendering an href the browser resolves relatively.
  */

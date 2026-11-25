@@ -134,6 +134,28 @@ export const NAV_LINK_MOBILE_CLASS =
 export const NAV_ADMIN_CHIP_CLASS =
   "inline-flex items-center gap-1.5 rounded-full border border-(--line) bg-(--accent)/8 px-2.5 py-1 text-[0.72rem] font-semibold tracking-[0.11em] uppercase text-(--accent-deep) transition-colors hover:bg-(--accent)/16 hover:text-(--ink)";
 
+/** The admin stat grid: two columns on phones, twelve from lg (Metrics, Traffic). */
+export const ADMIN_STAT_GRID_CLASS = "grid grid-cols-2 gap-3 lg:grid-cols-12";
+
+/** StatCluster's recessed card, shared with its loading skeleton. */
+export const STAT_CLUSTER_SURFACE_CLASS =
+  "stat-surface @container flex flex-col overflow-hidden rounded-2xl";
+
+/** The titled admin chart card, shared with its loading skeleton. */
+export const ADMIN_CHART_PANEL_CLASS =
+  "surface-panel hairline rounded-2xl p-4 sm:p-5";
+
+/** One /admin/traffic chart panel's box, shared with its loading skeleton. */
+export const TRAFFIC_CHART_ASPECT_CLASS =
+  "aspect-[2/1] w-full sm:aspect-[7/2] lg:aspect-[5/1]";
+
+/** /admin/traffic block spans, shared by each block and its fallback so nothing shifts on load. */
+export const TRAFFIC_BLOCK_SPAN = {
+  full: "col-span-2 lg:col-span-12",
+  intent: "col-span-2 lg:col-span-7",
+  engagement: "col-span-2 lg:col-span-5",
+} as const;
+
 /** Circular heart-icon button shared by the wishlist heart toggle and navbar trigger. */
 export const WISHLIST_HEART_BUTTON_CLASS =
   "inline-flex size-11 shrink-0 items-center justify-center rounded-full border transition-colors";

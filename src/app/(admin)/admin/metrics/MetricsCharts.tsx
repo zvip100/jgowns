@@ -13,7 +13,7 @@ import {
 
 import { cn } from "@/lib/utils";
 
-import { AdminSectionHeading } from "../../AdminSectionHeading";
+import { AdminChartPanel } from "../../AdminChartPanel";
 import { formatCents } from "../../admin-url";
 
 import type { ComponentProps } from "react";
@@ -25,12 +25,12 @@ const trendConfig = {
     color: "#b3854c",
   },
   listings_sold: {
+    // The sold token, so the series matches Sold pills.
     label: "Sold",
-    color: "#6f7a4a",
+    color: "var(--sold)",
   },
   new_users: {
-    // Slate, not a third brown: gold vs olive vs #8e6330 read as one hue at
-    // stroke width and made the three series impossible to tell apart.
+    // Slate: a cool hue that stays apart from the warm gold and crimson.
     label: "Users",
     color: "#5b6b78",
   },
@@ -72,15 +72,11 @@ function ChartPanel({
   children,
 }: ChartPanelProps) {
   return (
-    <div
-      className={cn("surface-panel hairline rounded-2xl p-4 sm:p-5", className)}
-    >
-      <AdminSectionHeading>{title}</AdminSectionHeading>
-      <p className="mt-1 text-xs text-(--muted-ink)">{subtitle}</p>
+    <AdminChartPanel title={title} subtitle={subtitle} className={className}>
       <ChartContainer config={config} className={cn("mt-4 w-full", aspectClass)}>
         {children}
       </ChartContainer>
-    </div>
+    </AdminChartPanel>
   );
 }
 

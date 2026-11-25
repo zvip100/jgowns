@@ -400,6 +400,7 @@ export async function confirmListingPayment(
     await captureServerEvent(SERVER_EVENTS.paymentConfirmed, {
       listing_id: listingId,
       fee_cents: session.amount_total,
+      livemode: session.livemode,
     });
   }
 

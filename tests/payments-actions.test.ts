@@ -128,6 +128,7 @@ const FEE_CENTS = 500;
 /** A session Stripe reports as settled, and the row it must agree with. */
 const PAID_SESSION = {
   payment_status: "paid",
+  livemode: false,
   amount_total: FEE_CENTS,
   currency: "usd",
   metadata: { listing_id: LISTING_ID, user_id: USER_ID },
@@ -1127,7 +1128,19 @@ describe("payment_confirmed", () => {
     expect(mockCaptureServerEvent).toHaveBeenCalledWith("payment_confirmed", {
       listing_id: LISTING_ID,
       fee_cents: 500,
+      livemode: false,
     });
+    // Present, not merely undefined: toHaveBeenCalledWith ignores undefined keys.
+    expect(mockCaptureServerEvent.mock.calls[0][1]).toHaveProperty("livemode", false);
+  });
+
+  it("reports the session's own livemode, so a live payment reads true", async () => {
+    mockCheckoutSessionsRetrieve.mockResolvedValue({ ...PAID_SESSION, livemode: true });
+    mockRpc.mockResolvedValue({ data: true, error: null });
+
+    await confirmListingPayment("cs_live_1");
+
+    expect(mockCaptureServerEvent.mock.calls[0][1]).toHaveProperty("livemode", true);
   });
 
   // The webhook and the Checkout-success route both call this and both report

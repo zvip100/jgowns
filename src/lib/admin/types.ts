@@ -198,6 +198,53 @@ export type AdminMetrics = {
   summary: AdminMetricsSummary;
 };
 
+/** One week's counts from the `admin_traffic_weekly` PostHog endpoint. */
+export type TrafficWeekCounts = {
+  visitors: number;
+  pageviews: number;
+  sessions: number;
+  sell_clicks: number;
+  registrations: number;
+  drafts_started: number;
+  listings_submitted: number;
+  checkouts_started: number;
+  paid_listings: number;
+  listing_views: number;
+  contact_actions: number;
+  wishlist_adds: number;
+};
+
+export type TrafficWeekly = {
+  thisWeek: TrafficWeekCounts;
+  lastWeek: TrafficWeekCounts;
+};
+
+export type TrafficDay = {
+  /** New York calendar day, yyyy-mm-dd. */
+  day: string;
+  visitors: number;
+  pageviews: number;
+  /** The as-of day, still in progress. */
+  isPartial: boolean;
+};
+
+export type TrafficEngagementWeek = {
+  sessions: number;
+  /** 0..1 fraction; null when the week has no sessions. */
+  bounce_rate: number | null;
+  avg_session_seconds: number | null;
+};
+
+export type TrafficEngagement = {
+  thisWeek: TrafficEngagementWeek;
+  lastWeek: TrafficEngagementWeek;
+};
+
+/** A PostHog read never throws to the page: a failed block renders its own notice. */
+export type TrafficResult<T> =
+  | { status: "ok"; data: T; refreshedAt: string | null }
+  | { status: "unavailable" };
+
 /** Drops the two admin-only decorations; every other field already matches. */
 export function toListingWithSizes(listing: AdminListing): ListingWithSizes {
   const { saved_count: _saved, seller_email: _email, ...rest } = listing;
